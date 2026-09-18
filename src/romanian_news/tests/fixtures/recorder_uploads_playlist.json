@@ -1,0 +1,34 @@
+{
+  "etag": "D_dSxt-R6OEav8RJUJdGm7ivqVg",
+  "items": [
+    {
+      "contentDetails": {
+        "videoId": "rYzsi1A-aYc",
+        "videoPublishedAt": "2026-07-14T09:25:08Z"
+      },
+      "etag": "PUWCRhnzX1wqz7Azx0KcH2TzZq4",
+      "id": "VVVoRFE2bllONlh5UlUtOElFZ2J5bTFnLnJZenNpMUEtYVlj",
+      "kind": "youtube#playlistItem",
+      "snippet": {
+        "channelId": "UChDQ6nYN6XyRU-8IEgbym1g",
+        "channelTitle": "Recorder",
+        "description": "România are milioane de bolnavi cronici, iar acești oameni sunt țintiți constant cu reclame mincinoase.",
+        "playlistId": "UUhDQ6nYN6XyRU-8IEgbym1g",
+        "position": 0,
+        "publishedAt": "2026-07-14T09:25:08Z",
+        "resourceId": {
+          "kind": "youtube#video",
+          "videoId": "rYzsi1A-aYc"
+        },
+        "title": "Ne-am infiltrat în rețeaua criminală a pastilelor-minune #shorts",
+        "videoOwnerChannelId": "UChDQ6nYN6XyRU-8IEgbym1g",
+        "videoOwnerChannelTitle": "Recorder"
+      }
+    }
+  ],
+  "kind": "youtube#playlistItemListResponse",
+  "pageInfo": {
+    "resultsPerPage": 1,
+    "totalResults": 1
+  }
+}

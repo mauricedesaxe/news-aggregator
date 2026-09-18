@@ -1,0 +1,40 @@
+from pathlib import Path
+
+ROOT = Path(__file__).parents[1]
+
+
+def test_runtime_configuration_has_no_owner_infrastructure_defaults() -> None:
+    config = (ROOT / "src/romanian_news/config.py").read_text()
+    workflows = "\n".join(path.read_text() for path in (ROOT / ".github/workflows").glob("*.yml"))
+
+    assert "leetsoftware" not in config
+    assert "chartly-research" not in config
+    assert "leetsoftware" not in workflows
+    assert "mauricedesaxe" not in workflows
+    assert 'os.getenv("NEWS_R2_BUCKET", "")' in config
+    assert 'os.getenv("DAGSTER_CLOUD_GRAPHQL_URL")' in config
+
+
+def test_deployment_workflows_require_operator_owned_configuration() -> None:
+    deployment = (ROOT / ".github/workflows/dagster-plus-deploy.yml").read_text()
+    production = (ROOT / ".github/workflows/romanian-news-production.yml").read_text()
+
+    for variable in (
+        "DAGSTER_CLOUD_ORGANIZATION",
+        "DAGSTER_CLOUD_URL",
+        "DAGSTER_CLOUD_ENV",
+        "DAGSTER_CLOUD_DEPLOYMENT",
+    ):
+        assert f"vars.{variable}" in deployment or f"vars.{variable}" in production
+    assert "vars.DAGSTER_CLOUD_GRAPHQL_URL" in production
+    assert "vars.DAGSTER_CLOUD_LOCATION" in production
+    assert "secrets.NEWS_POSTGRES_DSN" in production
+
+
+def test_pull_request_validation_receives_no_deployment_tokens() -> None:
+    workflow = (ROOT / ".github/workflows/dagster-plus-deploy.yml").read_text()
+    validation, deploy = workflow.split("\n  deploy:", maxsplit=1)
+
+    assert "DAGSTER_CLOUD_API_TOKEN" not in validation
+    assert "GITHUB_TOKEN" not in validation
+    assert "if: github.event_name == 'push'" in deploy

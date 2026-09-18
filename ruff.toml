@@ -1,0 +1,26 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort (import sorting)
+    "UP",   # pyupgrade (modernize syntax)
+    "B",    # flake8-bugbear
+    "SIM102",
+    "SIM300",
+    "RET504",
+    "S110",
+    "S113",
+    "RUF005",
+    "RUF007",
+    "RUF100",
+]
+ignore = [
+    "E501", # line length — ruff format handles this; let linter be lenient on long string literals
+    "UP040", # runtime type aliases can change Pydantic schema generation
+]
+
+[format]
+quote-style = "double"

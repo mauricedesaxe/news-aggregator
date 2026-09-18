@@ -1,0 +1,14 @@
+.git/
+.github/
+.venv/
+.ruff_cache/
+__pycache__/
+**/__pycache__/
+# Local dev / editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+*.log
+
+.pre-commit-config.yaml
+ruff.toml

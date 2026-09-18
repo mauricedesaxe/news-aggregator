@@ -1,0 +1,10 @@
+__pycache__
+.env
+.venv/
+.ruff_cache/
+data/
+
+.sesskey
+.playwright-mcp/
+
+dist/
