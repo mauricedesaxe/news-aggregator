@@ -15,7 +15,7 @@ def test_runtime_configuration_has_no_owner_infrastructure_defaults() -> None:
     assert 'os.getenv("DAGSTER_CLOUD_GRAPHQL_URL")' in config
 
 
-def test_deployment_workflows_require_operator_owned_configuration() -> None:
+def test_deployment_workflows_require_operator_owned_secrets() -> None:
     deployment = (ROOT / ".github/workflows/dagster-plus-deploy.yml").read_text()
     production = (ROOT / ".github/workflows/romanian-news-production.yml").read_text()
 
@@ -25,18 +25,18 @@ def test_deployment_workflows_require_operator_owned_configuration() -> None:
         "DAGSTER_CLOUD_ENV",
         "DAGSTER_CLOUD_DEPLOYMENT",
     ):
-        assert f"vars.{variable}" in deployment or f"vars.{variable}" in production
-    assert "vars.DAGSTER_CLOUD_GRAPHQL_URL" in production
-    assert "vars.DAGSTER_CLOUD_LOCATION" in production
+        assert f"secrets.{variable}" in deployment or f"secrets.{variable}" in production
+    assert "secrets.DAGSTER_CLOUD_GRAPHQL_URL" in production
+    assert "secrets.DAGSTER_CLOUD_LOCATION" in production
     assert "secrets.NEWS_POSTGRES_DSN" in production
 
 
-def test_deploy_requires_push_and_operator_configuration() -> None:
+def test_deploy_requires_push_and_operator_secrets() -> None:
     workflow = (ROOT / ".github/workflows/dagster-plus-deploy.yml").read_text()
     validation, deploy = workflow.split("\n  deploy:", maxsplit=1)
 
     assert "DAGSTER_CLOUD_API_TOKEN" not in validation
     assert "GITHUB_TOKEN" not in validation
     assert "github.event_name == 'push'" in deploy
-    assert "vars.DAGSTER_CLOUD_ORGANIZATION != ''" in deploy
-    assert "vars.DAGSTER_CLOUD_DEPLOYMENT != ''" in deploy
+    assert "secrets.DAGSTER_CLOUD_API_TOKEN" in deploy
+    assert "secrets.DAGSTER_CLOUD_DEPLOYMENT" in deploy

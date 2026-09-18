@@ -33,8 +33,8 @@ The reader requires `APP_PASSWORD` and `SESSION_SECRET`. Production deployments
 should also set `COOKIE_SECURE=true` and `TRUST_PROXY_HEADERS=true`.
 
 GitHub deployment workflows read Dagster organization, URL, environment,
-deployment, GraphQL URL, and location from repository variables. They read the
-Dagster API token and PostgreSQL DSN from repository secrets.
+deployment, GraphQL URL, location, API token, and PostgreSQL DSN from repository
+secrets so deployment configuration remains outside the public source tree.
 
 ## License
 

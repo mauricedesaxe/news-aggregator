@@ -45,19 +45,16 @@ jobs:
 
   deploy:
     name: Deploy Romanian news
-    if: >-
-      github.event_name == 'push' &&
-      vars.DAGSTER_CLOUD_ORGANIZATION != '' &&
-      vars.DAGSTER_CLOUD_DEPLOYMENT != ''
+    if: github.event_name == 'push'
     needs: definitions
     runs-on: ubuntu-22.04
     permissions:
       contents: read
     env:
       DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
-      DAGSTER_CLOUD_ORGANIZATION: ${{ vars.DAGSTER_CLOUD_ORGANIZATION }}
-      DAGSTER_CLOUD_URL: ${{ vars.DAGSTER_CLOUD_URL }}
-      DAGSTER_CLOUD_ENV: ${{ vars.DAGSTER_CLOUD_ENV }}
+      DAGSTER_CLOUD_ORGANIZATION: ${{ secrets.DAGSTER_CLOUD_ORGANIZATION }}
+      DAGSTER_CLOUD_URL: ${{ secrets.DAGSTER_CLOUD_URL }}
+      DAGSTER_CLOUD_ENV: ${{ secrets.DAGSTER_CLOUD_ENV }}
       DAGSTER_CLOUD_YAML_PATH: .
       DAGSTER_CLOUD_FILE: dagster_cloud.yaml
       ENABLE_FAST_DEPLOYS: "true"
@@ -84,7 +81,7 @@ jobs:
         with:
           project_dir: .
           dagster_cloud_yaml_path: dagster_cloud.yaml
-          deployment: ${{ vars.DAGSTER_CLOUD_DEPLOYMENT }}
+          deployment: ${{ secrets.DAGSTER_CLOUD_DEPLOYMENT }}
 
       - name: Set up Python
         id: python
