@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "news_aggregator",
+  "project_id": "b4513273-16da-4330-8120-fce641742016"
+}
