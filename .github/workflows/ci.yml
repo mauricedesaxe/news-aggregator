@@ -106,4 +106,4 @@ jobs:
             --env SESSION_SECRET=standalone-test-session-secret-0001 \
             romanian-news-reader
           trap 'docker logs romanian-news-reader; docker rm --force romanian-news-reader' EXIT
-          curl --fail --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/livez
+          curl --fail --retry 20 --retry-delay 1 --retry-all-errors http://127.0.0.1:8080/livez

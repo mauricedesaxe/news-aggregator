@@ -45,7 +45,10 @@ jobs:
 
   deploy:
     name: Deploy Romanian news
-    if: github.event_name == 'push'
+    if: >-
+      github.event_name == 'push' &&
+      vars.DAGSTER_CLOUD_ORGANIZATION != '' &&
+      vars.DAGSTER_CLOUD_DEPLOYMENT != ''
     needs: definitions
     runs-on: ubuntu-22.04
     permissions:
