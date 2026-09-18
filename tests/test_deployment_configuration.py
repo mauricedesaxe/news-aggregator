@@ -31,10 +31,12 @@ def test_deployment_workflows_require_operator_owned_configuration() -> None:
     assert "secrets.NEWS_POSTGRES_DSN" in production
 
 
-def test_pull_request_validation_receives_no_deployment_tokens() -> None:
+def test_deploy_requires_push_and_operator_configuration() -> None:
     workflow = (ROOT / ".github/workflows/dagster-plus-deploy.yml").read_text()
     validation, deploy = workflow.split("\n  deploy:", maxsplit=1)
 
     assert "DAGSTER_CLOUD_API_TOKEN" not in validation
     assert "GITHUB_TOKEN" not in validation
-    assert "if: github.event_name == 'push'" in deploy
+    assert "github.event_name == 'push'" in deploy
+    assert "vars.DAGSTER_CLOUD_ORGANIZATION != ''" in deploy
+    assert "vars.DAGSTER_CLOUD_DEPLOYMENT != ''" in deploy
