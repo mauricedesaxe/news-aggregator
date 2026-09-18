@@ -44,6 +44,7 @@ from romanian_news.worker.feedback_sync import (
     news_feedback_sync,
     quarter_hourly_news_feedback_sync,
 )
+from romanian_news.worker.jev_relevance_evaluation import jev_relevance_evaluation
 from romanian_news.worker.morning_report import (
     daily_morning_report_check,
     morning_report_check,
@@ -461,6 +462,7 @@ defs = dg.Definitions(
         fresh_relevance_comparison,
         fresh_theme_comparison,
         relevance_v3_evaluation,
+        jev_relevance_evaluation,
     ],
     schedules=[
         hourly_registered_feed_poll,
