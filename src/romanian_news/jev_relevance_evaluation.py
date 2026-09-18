@@ -1,0 +1,203 @@
+from __future__ import annotations
+
+import math
+from typing import Annotated
+
+from pydantic import Field, model_validator
+
+from romanian_news import NewsModel, Sha256
+from romanian_news.analysis.jev_relevance import (
+    JEV_RELEVANCE_POLICY,
+    JevRelevancePolicy,
+    evaluate_jev_relevance,
+    jev_relevance_policy_digest,
+)
+from romanian_news.analysis.relevance import ArticleAnalysisInput
+from romanian_news.articles.models import ExtractedArticle
+from romanian_news.catalog.evaluations import LoadedNewsEvaluationRelease
+from romanian_news.evaluation_projection import FreshEvaluationPlan
+from romanian_news.storage import read_verified_r2_object
+
+
+class JevRelevanceCaseResult(NewsModel):
+    case_id: str
+    article_version_id: Sha256
+    execution_ref: str
+    expected_accepted: bool
+    predicted_accepted: bool
+    pass_probability: Annotated[float, Field(ge=0, le=1)]
+    control: bool
+    passed: bool
+    model: str
+    request_id: Sha256
+    provider_request_id: str | None
+    input_tokens: Annotated[int, Field(ge=0)]
+    output_tokens: Annotated[int, Field(ge=0)]
+    latency_ms: Annotated[int, Field(ge=0)]
+    estimated_cost_usd: Annotated[float, Field(ge=0)]
+
+    @model_validator(mode="after")
+    def require_consistent_verdict(self) -> JevRelevanceCaseResult:
+        if self.passed != (self.predicted_accepted == self.expected_accepted):
+            raise ValueError("Jev case pass result conflicts with its prediction")
+        return self
+
+
+class JevRelevanceRunMetrics(NewsModel):
+    passed_cases: Annotated[int, Field(ge=0)]
+    total_cases: Annotated[int, Field(ge=0)]
+    precision: Annotated[float, Field(ge=0, le=1)]
+    recall: Annotated[float, Field(ge=0, le=1)]
+    positive_control_preservation: Annotated[float, Field(ge=0, le=1)]
+    false_negative_ids: tuple[str, ...]
+    input_tokens: Annotated[int, Field(ge=0)]
+    output_tokens: Annotated[int, Field(ge=0)]
+    estimated_cost_usd: Annotated[float, Field(ge=0)]
+    p50_latency_ms: Annotated[float, Field(ge=0)]
+    p95_latency_ms: Annotated[float, Field(ge=0)]
+
+
+class JevRelevanceRunResult(NewsModel):
+    manifest_artifact_version_id: Sha256
+    execution_ref: str
+    policy_id: str
+    policy_digest: Sha256
+    case_results: tuple[JevRelevanceCaseResult, ...]
+    metrics: JevRelevanceRunMetrics
+
+    @model_validator(mode="after")
+    def require_consistent_execution(self) -> JevRelevanceRunResult:
+        if any(result.execution_ref != self.execution_ref for result in self.case_results):
+            raise ValueError("Jev case results must use the run execution reference")
+        if self.metrics != jev_relevance_metrics(self.case_results):
+            raise ValueError("Jev run metrics do not match its case results")
+        return self
+
+
+class JevRelevanceEvaluationResult(NewsModel):
+    manifest_artifact_version_id: Sha256
+    plan: FreshEvaluationPlan
+    runs: tuple[JevRelevanceRunResult, ...]
+
+    @model_validator(mode="after")
+    def require_complete_trials(self) -> JevRelevanceEvaluationResult:
+        if tuple(run.execution_ref for run in self.runs) != self.plan.implementation_refs:
+            raise ValueError("Jev runs must have exact FreshEvaluationPlan reference coverage")
+        if any(
+            run.manifest_artifact_version_id != self.manifest_artifact_version_id
+            for run in self.runs
+        ):
+            raise ValueError("Jev run manifests must match the grouped result")
+        if len({(run.policy_id, run.policy_digest) for run in self.runs}) > 1:
+            raise ValueError("Jev runs must use one frozen policy")
+        return self
+
+
+def run_jev_relevance_evaluation(
+    release: LoadedNewsEvaluationRelease,
+    plan: FreshEvaluationPlan,
+    policy: JevRelevancePolicy = JEV_RELEVANCE_POLICY,
+) -> JevRelevanceEvaluationResult:
+    runs = tuple(
+        _run_jev_relevance_trial(release, execution_ref, policy)
+        for execution_ref in plan.implementation_refs
+    )
+    return JevRelevanceEvaluationResult(
+        manifest_artifact_version_id=release.manifest_reference.version_id,
+        plan=plan,
+        runs=runs,
+    )
+
+
+def jev_relevance_metrics(
+    results: tuple[JevRelevanceCaseResult, ...],
+) -> JevRelevanceRunMetrics:
+    true_positives = sum(item.expected_accepted and item.predicted_accepted for item in results)
+    false_positives = sum(
+        not item.expected_accepted and item.predicted_accepted for item in results
+    )
+    false_negatives = tuple(
+        item.case_id for item in results if item.expected_accepted and not item.predicted_accepted
+    )
+    controls = tuple(item for item in results if item.control and item.expected_accepted)
+    latencies = tuple(item.latency_ms for item in results)
+    return JevRelevanceRunMetrics(
+        passed_cases=sum(item.passed for item in results),
+        total_cases=len(results),
+        precision=_ratio(true_positives, true_positives + false_positives),
+        recall=_ratio(true_positives, true_positives + len(false_negatives)),
+        positive_control_preservation=_ratio(
+            sum(item.predicted_accepted for item in controls), len(controls)
+        ),
+        false_negative_ids=false_negatives,
+        input_tokens=sum(item.input_tokens for item in results),
+        output_tokens=sum(item.output_tokens for item in results),
+        estimated_cost_usd=sum(item.estimated_cost_usd for item in results),
+        p50_latency_ms=_percentile(latencies, 0.50),
+        p95_latency_ms=_percentile(latencies, 0.95),
+    )
+
+
+def _run_jev_relevance_trial(
+    release: LoadedNewsEvaluationRelease,
+    execution_ref: str,
+    policy: JevRelevancePolicy,
+) -> JevRelevanceRunResult:
+    specs = tuple(case for case in release.manifest.cases if case.concern == "relevance")
+    results: list[JevRelevanceCaseResult] = []
+    for case in specs:
+        content = read_verified_r2_object(case.article.r2_key, case.article.content_digest)
+        article = ExtractedArticle.model_validate_json(content, strict=True)
+        observation = evaluate_jev_relevance(
+            ArticleAnalysisInput(reference=case.article, article=article),
+            execution_ref=execution_ref,
+            policy=policy,
+        )
+        results.append(
+            JevRelevanceCaseResult(
+                case_id=case.case_id,
+                article_version_id=case.article.version_id,
+                execution_ref=execution_ref,
+                expected_accepted=case.expected_accepted,
+                predicted_accepted=observation.predicted_accepted,
+                pass_probability=(
+                    observation.probability
+                    if case.expected_accepted
+                    else 1 - observation.probability
+                ),
+                control=case.control,
+                passed=observation.predicted_accepted == case.expected_accepted,
+                model=observation.model,
+                request_id=observation.request_id,
+                provider_request_id=observation.provider_request_id,
+                input_tokens=observation.input_tokens,
+                output_tokens=observation.output_tokens,
+                latency_ms=observation.latency_ms,
+                estimated_cost_usd=observation.estimated_cost_usd,
+            )
+        )
+    case_results = tuple(results)
+    return JevRelevanceRunResult(
+        manifest_artifact_version_id=release.manifest_reference.version_id,
+        execution_ref=execution_ref,
+        policy_id=policy.policy_id,
+        policy_digest=jev_relevance_policy_digest(policy),
+        case_results=case_results,
+        metrics=jev_relevance_metrics(case_results),
+    )
+
+
+def _ratio(numerator: int, denominator: int) -> float:
+    return numerator / denominator if denominator else 0.0
+
+
+def _percentile(values: tuple[int, ...], quantile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * quantile
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return float(ordered[lower])
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
