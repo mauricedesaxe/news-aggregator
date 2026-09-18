@@ -651,7 +651,10 @@ def _run_gate(
     started = time.monotonic()
     messages: list[ChatCompletionMessageParam] = [
         {"role": "system", "content": policy.prompt},
-        {"role": "user", "content": _article_text(value, policy.max_body_characters)},
+        {
+            "role": "user",
+            "content": relevance_v3_article_text(value, policy.max_body_characters),
+        },
     ]
     responses: list[ChatCompletion] = []
     traces: list[GateTraceReference] = []
@@ -811,7 +814,7 @@ def _create_completion(
     )
 
 
-def _article_text(value: ArticleAnalysisInput, max_body_characters: int) -> str:
+def relevance_v3_article_text(value: ArticleAnalysisInput, max_body_characters: int) -> str:
     return (
         f"Publicat: {value.article.published_at.isoformat()}\n"
         f"Titlu: {value.article.title}\n\n"
