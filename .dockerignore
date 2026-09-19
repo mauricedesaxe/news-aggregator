@@ -1,0 +1,21 @@
+.git/
+.github/
+.env
+.env.*
+.venv/
+.ruff_cache/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+data/
+dist/
+tests/
+src/**/tests/
+# Local dev / editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+*.log
+
+.pre-commit-config.yaml
+ruff.toml

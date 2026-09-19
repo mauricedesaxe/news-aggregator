@@ -1,0 +1,6 @@
+locations:
+  - build:
+      directory: .
+    code_source:
+      package_name: romanian_news.worker.definitions
+    location_name: romanian-news

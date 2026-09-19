@@ -1,0 +1,34 @@
+{
+  "etag": "synthetic-response-etag",
+  "items": [
+    {
+      "contentDetails": {
+        "videoId": "abcdefghijk",
+        "videoPublishedAt": "2026-07-14T09:25:08Z"
+      },
+      "etag": "synthetic-item-etag",
+      "id": "synthetic-playlist-item",
+      "kind": "youtube#playlistItem",
+      "snippet": {
+        "channelId": "UChDQ6nYN6XyRU-8IEgbym1g",
+        "channelTitle": "Synthetic publisher",
+        "description": "Synthetic description used to test the YouTube response boundary.",
+        "playlistId": "UUhDQ6nYN6XyRU-8IEgbym1g",
+        "position": 0,
+        "publishedAt": "2026-07-14T09:25:08Z",
+        "resourceId": {
+          "kind": "youtube#video",
+          "videoId": "abcdefghijk"
+        },
+        "title": "Synthetic public-interest report",
+        "videoOwnerChannelId": "UChDQ6nYN6XyRU-8IEgbym1g",
+        "videoOwnerChannelTitle": "Synthetic publisher"
+      }
+    }
+  ],
+  "kind": "youtube#playlistItemListResponse",
+  "pageInfo": {
+    "resultsPerPage": 1,
+    "totalResults": 1
+  }
+}

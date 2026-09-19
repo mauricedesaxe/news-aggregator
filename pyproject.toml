@@ -1,0 +1,82 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "romanian-news-aggregator"
+version = "0.1.0"
+description = "A research-driven Romanian news pipeline and reader."
+authors = [{ name = "Maurice de Saxe" }]
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "boto3==1.43.56",
+    "botocore==1.43.56",
+    "dagster==1.13.19",
+    "dagster-cloud==1.13.19",
+    "dlt[duckdb,filesystem,parquet]==1.30.0",
+    "duckdb==1.5.5",
+    "feedparser==6.0.12",
+    "langfuse==4.15.1",
+    "lxml==6.1.2",
+    "numpy==1.26.4",
+    "openai==2.48.0",
+    "opentelemetry-exporter-otlp-proto-http==1.44.0",
+    "opentelemetry-sdk==1.44.0",
+    "psycopg[binary]==3.3.5",
+    "pydantic==2.13.4",
+    "python-dotenv==1.0.1",
+    "python-fasthtml==0.14.12",
+    "requests==2.32.3",
+    "starlette==1.6.0",
+    "trafilatura==2.2.0",
+    "urllib3==2.7.0",
+    "uvicorn[standard]==0.47.0",
+]
+
+[dependency-groups]
+dev = [
+    "basedpyright==1.39.10",
+    "dagster-dg-cli==1.13.19",
+    "hatchling==1.27.0",
+    "pre-commit==4.5.1",
+    "ruff==0.6.9",
+    "vulture==2.16",
+    "xenon==0.9.3",
+]
+test = [
+    "httpx==0.28.1",
+    "pytest==9.0.3",
+]
+
+[tool.uv]
+required-version = ">=0.12.5"
+
+[tool.hatch.build]
+exclude = ["tests/**", "src/romanian_news/**/tests/**"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/romanian_news"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests", "src/romanian_news"]
+
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "romanian_news"
+defs_module = "romanian_news.worker.defs"
+code_location_target_module = "romanian_news.worker.definitions"
+
+[tool.basedpyright]
+failOnWarnings = false
+include = ["src/romanian_news", "tests"]
+pythonVersion = "3.12"
+
+[tool.vulture]
+paths = ["src/romanian_news"]
+min_confidence = 80
+ignore_names = ["artifact_path"]

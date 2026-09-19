@@ -1,0 +1,107 @@
+{
+  "theme_set": {
+    "schema_version": 1,
+    "day": "2026-08-31",
+    "request_id": "cc3bd1fc4d4282330d9c2a9dabd5c42e1c6ecc39acb9bb9ca1330686f79293c3",
+    "policy": {
+      "policy_id": "daily-reader-themes-v1",
+      "model": "openai/gpt-4.1-mini",
+      "prompt_digest": "dd5c9f182b43c64c7437b079783b83260343642e3213b4c48819e4d92451b3e7",
+      "input_policy": "ordered-group-summaries-and-article-ids-v1",
+      "assignment_policy": "exact-partition-ordered-v1",
+      "correction_policy": "complete-json-once-v1",
+      "temperature": 0,
+      "max_tokens": 4000
+    },
+    "policy_digest": "8fc1a2ba1353be0220e2c306dd1bf2de9846f9c4f24a16bcedb06aa1867f45f8",
+    "cluster_set": {
+      "artifact_id": "news:clusters:2026-08-31",
+      "version_id": "beda48f4e77ac050f1490ed5a86f5cf41ae8da9bd76f893d5dc78a25e431d707",
+      "content_digest": "d4b32f73dd40c43050ee16fe19abc84b17f60ad86f6925259768d02ea20febee",
+      "r2_key": "news/clusters/2026-08-31/d4b32f73dd40c43050ee16fe19abc84b17f60ad86f6925259768d02ea20febee.json"
+    },
+    "groups": [
+      {
+        "id": "7d6a094e75d0efaf371fb60ba31eb86fa7a758bee4f6a10d915abe784bf0d358",
+        "article_version_ids": [
+          "0024681e7b635dab3e967324e493c2ebc198fbcbf7d94e38582000c4a19f37ab",
+          "351fc59c12f86faab83d38511cc50b53b175235dd4ef9c29342e6d5d6b70eed3",
+          "e855a74101ce9bc0b57ee8746e95331f99dd896a16d9afc1588795f76eb6ddb3"
+        ]
+      }
+    ],
+    "summary_inputs": [
+      {
+        "artifact_id": "news:summary:4183ccc942094a41ae4e60b9274519eb1386f39b8acd549ea9544e964745f56b",
+        "version_id": "ecaabe3be111bc01f90c773f867a75f38ad5faa6d0783622a159ee4cb4a88ef1",
+        "content_digest": "3b31a3b916b3d4a07898f1fd66524f853511d40e1a7ca54435400e9e13afbafc",
+        "r2_key": "news/derived/summaries/4183ccc942094a41ae4e60b9274519eb1386f39b8acd549ea9544e964745f56b/3b31a3b916b3d4a07898f1fd66524f853511d40e1a7ca54435400e9e13afbafc.json"
+      }
+    ],
+    "construction": {
+      "kind": "model",
+      "messages": [
+        {
+          "role": "system",
+          "content": "Recorded theme request."
+        },
+        {
+          "role": "user",
+          "content": "Recorded complete day input."
+        }
+      ],
+      "input_digest": "579e9885ba2ee9ffb22a0c14fe0bec8447c1b56950409eacc6e186e6b66a1f9c",
+      "response_schema_digest": "59583a0a98aaaadf312e25a4aac6cb0a5cf09e70bf91ff1e65fab7db16e06096",
+      "call": {
+        "response_id": "recorded-response",
+        "model": "recorded/model",
+        "input_tokens": 1,
+        "output_tokens": 1,
+        "latency_ms": 1
+      },
+      "attempts": [
+        {
+          "attempt_id": "6666666666666666666666666666666666666666666666666666666666666666",
+          "response_id": "recorded-response",
+          "status": "accepted",
+          "error": null,
+          "response_content": "{\"themes\":[{\"group_ids\":[\"7d6a094e75d0efaf371fb60ba31eb86fa7a758bee4f6a10d915abe784bf0d358\"],\"summary\":\"A synthetic transport operator proposes new rail vehicles, depot upgrades, and a local maintenance partnership.\",\"title\":\"Synthetic regional transport investment\"}]}",
+          "response_content_digest": "970c1c619e0650bd2aafe64756ec8e801a81b2910fa15cf0871d818dd78f1b9c",
+          "provider_response": {
+            "id": "recorded-response",
+            "model": "recorded/model",
+            "usage": {
+              "prompt_tokens": 1,
+              "completion_tokens": 1,
+              "cost": 0
+            },
+            "choices": [
+              {
+                "message": {
+                  "content": "{\"themes\":[{\"group_ids\":[\"7d6a094e75d0efaf371fb60ba31eb86fa7a758bee4f6a10d915abe784bf0d358\"],\"summary\":\"A synthetic transport operator proposes new rail vehicles, depot upgrades, and a local maintenance partnership.\",\"title\":\"Synthetic regional transport investment\"}]}"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "themes": [
+      {
+        "id": "75ce46c6d93039efa231cd2ebed213f08a5f63367550449212ec52973cf3d235",
+        "title": "Synthetic regional transport investment",
+        "summary": "A synthetic transport operator proposes new rail vehicles, depot upgrades, and a local maintenance partnership.",
+        "group_ids": [
+          "7d6a094e75d0efaf371fb60ba31eb86fa7a758bee4f6a10d915abe784bf0d358"
+        ],
+        "article_version_ids": [
+          "0024681e7b635dab3e967324e493c2ebc198fbcbf7d94e38582000c4a19f37ab",
+          "351fc59c12f86faab83d38511cc50b53b175235dd4ef9c29342e6d5d6b70eed3",
+          "e855a74101ce9bc0b57ee8746e95331f99dd896a16d9afc1588795f76eb6ddb3"
+        ]
+      }
+    ]
+  },
+  "content_digest": "1b152590101580ce910a953047833bb092cf6799272e43605ab75c2af885214b",
+  "content": "{\"cluster_set\":{\"artifact_id\":\"news:clusters:2026-08-31\",\"content_digest\":\"d4b32f73dd40c43050ee16fe19abc84b17f60ad86f6925259768d02ea20febee\",\"r2_key\":\"news/clusters/2026-08-31/d4b32f73dd40c43050ee16fe19abc84b17f60ad86f6925259768d02ea20febee.json\",\"version_id\":\"beda48f4e77ac050f1490ed5a86f5cf41ae8da9bd76f893d5dc78a25e431d707\"},\"construction\":{\"attempts\":[{\"attempt_id\":\"6666666666666666666666666666666666666666666666666666666666666666\",\"error\":null,\"provider_response\":{\"choices\":[{\"message\":{\"content\":\"{\\\"themes\\\":[{\\\"group_ids\\\":[\\\"7d6a094e75d0efaf371fb60ba31eb86fa7a758bee4f6a10d915abe784bf0d358\\\"],\\\"summary\\\":\\\"A synthetic transport operator proposes new rail vehicles, depot upgrades, and a local maintenance partnership.\\\",\\\"title\\\":\\\"Synthetic regional transport investment\\\"}]}\"}}],\"id\":\"recorded-response\",\"model\":\"recorded/model\",\"usage\":{\"completion_tokens\":1,\"cost\":0,\"prompt_tokens\":1}},\"response_content\":\"{\\\"themes\\\":[{\\\"group_ids\\\":[\\\"7d6a094e75d0efaf371fb60ba31eb86fa7a758bee4f6a10d915abe784bf0d358\\\"],\\\"summary\\\":\\\"A synthetic transport operator proposes new rail vehicles, depot upgrades, and a local maintenance partnership.\\\",\\\"title\\\":\\\"Synthetic regional transport investment\\\"}]}\",\"response_content_digest\":\"970c1c619e0650bd2aafe64756ec8e801a81b2910fa15cf0871d818dd78f1b9c\",\"response_id\":\"recorded-response\",\"status\":\"accepted\"}],\"call\":{\"input_tokens\":1,\"latency_ms\":1,\"model\":\"recorded/model\",\"output_tokens\":1,\"response_id\":\"recorded-response\"},\"input_digest\":\"579e9885ba2ee9ffb22a0c14fe0bec8447c1b56950409eacc6e186e6b66a1f9c\",\"kind\":\"model\",\"messages\":[{\"content\":\"Recorded theme request.\",\"role\":\"system\"},{\"content\":\"Recorded complete day input.\",\"role\":\"user\"}],\"response_schema_digest\":\"59583a0a98aaaadf312e25a4aac6cb0a5cf09e70bf91ff1e65fab7db16e06096\"},\"day\":\"2026-08-31\",\"groups\":[{\"article_version_ids\":[\"0024681e7b635dab3e967324e493c2ebc198fbcbf7d94e38582000c4a19f37ab\",\"351fc59c12f86faab83d38511cc50b53b175235dd4ef9c29342e6d5d6b70eed3\",\"e855a74101ce9bc0b57ee8746e95331f99dd896a16d9afc1588795f76eb6ddb3\"],\"id\":\"7d6a094e75d0efaf371fb60ba31eb86fa7a758bee4f6a10d915abe784bf0d358\"}],\"policy\":{\"assignment_policy\":\"exact-partition-ordered-v1\",\"correction_policy\":\"complete-json-once-v1\",\"input_policy\":\"ordered-group-summaries-and-article-ids-v1\",\"max_tokens\":4000,\"model\":\"openai/gpt-4.1-mini\",\"policy_id\":\"daily-reader-themes-v1\",\"prompt_digest\":\"dd5c9f182b43c64c7437b079783b83260343642e3213b4c48819e4d92451b3e7\",\"temperature\":0},\"policy_digest\":\"8fc1a2ba1353be0220e2c306dd1bf2de9846f9c4f24a16bcedb06aa1867f45f8\",\"request_id\":\"cc3bd1fc4d4282330d9c2a9dabd5c42e1c6ecc39acb9bb9ca1330686f79293c3\",\"schema_version\":1,\"summary_inputs\":[{\"artifact_id\":\"news:summary:4183ccc942094a41ae4e60b9274519eb1386f39b8acd549ea9544e964745f56b\",\"content_digest\":\"3b31a3b916b3d4a07898f1fd66524f853511d40e1a7ca54435400e9e13afbafc\",\"r2_key\":\"news/derived/summaries/4183ccc942094a41ae4e60b9274519eb1386f39b8acd549ea9544e964745f56b/3b31a3b916b3d4a07898f1fd66524f853511d40e1a7ca54435400e9e13afbafc.json\",\"version_id\":\"ecaabe3be111bc01f90c773f867a75f38ad5faa6d0783622a159ee4cb4a88ef1\"}],\"themes\":[{\"article_version_ids\":[\"0024681e7b635dab3e967324e493c2ebc198fbcbf7d94e38582000c4a19f37ab\",\"351fc59c12f86faab83d38511cc50b53b175235dd4ef9c29342e6d5d6b70eed3\",\"e855a74101ce9bc0b57ee8746e95331f99dd896a16d9afc1588795f76eb6ddb3\"],\"group_ids\":[\"7d6a094e75d0efaf371fb60ba31eb86fa7a758bee4f6a10d915abe784bf0d358\"],\"id\":\"75ce46c6d93039efa231cd2ebed213f08a5f63367550449212ec52973cf3d235\",\"summary\":\"A synthetic transport operator proposes new rail vehicles, depot upgrades, and a local maintenance partnership.\",\"title\":\"Synthetic regional transport investment\"}]}"
+}
