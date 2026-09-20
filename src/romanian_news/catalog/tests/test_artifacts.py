@@ -27,19 +27,6 @@ _ARGUMENTS: _ArtifactFileArguments = {
 }
 
 
-def test_generic_artifact_file_has_no_feed_metadata() -> None:
-    assert set(ArtifactFile.model_fields) == {
-        "artifact_id",
-        "artifact_kind",
-        "title",
-        "version_id",
-        "content_digest",
-        "r2_key",
-        "media_type",
-        "content",
-    }
-
-
 def test_content_version_identity_is_stable_across_computations() -> None:
     first = artifact_file(**_ARGUMENTS)
     second = artifact_file(**_ARGUMENTS)

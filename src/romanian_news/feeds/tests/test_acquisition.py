@@ -5,6 +5,7 @@ import threading
 from datetime import datetime
 from types import SimpleNamespace
 
+import requests
 from pydantic import HttpUrl
 
 from romanian_news.feeds.acquisition import (
@@ -12,6 +13,7 @@ from romanian_news.feeds.acquisition import (
     _poll_feeds,
     acquire_feeds,
     feed_entry_event_from_payload,
+    fetch_feed,
 )
 from romanian_news.feeds.models import (
     FeedAcquisitionRequest,
@@ -169,6 +171,96 @@ def test_changed_feed_writes_one_snapshot_event_without_duplicating_entry_bytes(
     assert base64.b64decode(snapshot_payload["content_base64"]) == content
     assert snapshot_payload["content_digest"] == capture.content_digest
     assert "content_base64" not in json.loads(entry_rows[0]["payload_json"])
+
+
+def test_fetch_feed_records_digest_and_stores_conditional_get_validators(monkeypatch) -> None:
+    feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
+    observed_at = datetime.fromisoformat("2026-09-01T12:00:00+03:00")
+    content = b"""<?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0"><channel><title>HotNews</title>
+      <item>
+        <guid>article-1</guid><title>Guvernul anunta masuri economice</title>
+        <link>https://www.hotnews.ro/stiri/article-1</link>
+        <pubDate>Mon, 31 Aug 2026 12:13:04 +0300</pubDate>
+        <description><![CDATA[Un rezumat.]]></description>
+      </item>
+    </channel></rss>"""
+    requests_seen = []
+
+    def get(_session, _url, *, headers, timeout):
+        requests_seen.append(headers)
+        return SimpleNamespace(
+            status_code=200,
+            headers={"ETag": '"etag-1"', "Last-Modified": "Mon, 31 Aug 2026 09:00:00 GMT"},
+            content=content,
+            raise_for_status=lambda: None,
+        )
+
+    monkeypatch.setattr("romanian_news.feeds.acquisition.get_with_validated_redirects", get)
+
+    capture = fetch_feed(requests.Session(), feed, observed_at, FeedValidator())
+
+    assert capture.status == "ok"
+    assert capture.http_status == 200
+    assert capture.content == content
+    assert capture.content_digest == hashlib.sha256(content).hexdigest()
+    assert [entry.source_id for entry in capture.entries] == ["article-1"]
+    assert capture.rejected_entries == 0
+    assert capture.validator == FeedValidator(
+        etag='"etag-1"',
+        last_modified="Mon, 31 Aug 2026 09:00:00 GMT",
+    )
+    assert "If-None-Match" not in requests_seen[0]
+    assert "If-Modified-Since" not in requests_seen[0]
+
+
+def test_fetch_feed_sends_stored_validators_and_caps_304_without_entry_bytes(monkeypatch) -> None:
+    feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
+    observed_at = datetime.fromisoformat("2026-09-01T12:15:00+03:00")
+    validator = FeedValidator(
+        etag='"etag-1"',
+        last_modified="Mon, 31 Aug 2026 09:00:00 GMT",
+    )
+    requests_seen = []
+
+    def get(_session, _url, *, headers, timeout):
+        requests_seen.append(headers)
+        return SimpleNamespace(status_code=304, headers={}, content=b"")
+
+    monkeypatch.setattr("romanian_news.feeds.acquisition.get_with_validated_redirects", get)
+
+    capture = fetch_feed(requests.Session(), feed, observed_at, validator)
+
+    assert requests_seen[0]["If-None-Match"] == '"etag-1"'
+    assert requests_seen[0]["If-Modified-Since"] == "Mon, 31 Aug 2026 09:00:00 GMT"
+    assert capture.status == "not_modified"
+    assert capture.http_status == 304
+    assert capture.content is None
+    assert capture.content_digest is None
+    assert capture.entries == ()
+    assert capture.rejected_entries == 0
+    assert capture.validator == validator
+
+
+def test_fetch_feed_captures_network_failure_with_the_error_classified(monkeypatch) -> None:
+    feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
+    observed_at = datetime.fromisoformat("2026-09-01T12:30:00+03:00")
+    validator = FeedValidator(etag='"etag-1"')
+
+    def get(_session, _url, **_kwargs):
+        raise requests.ConnectionError("connection refused")
+
+    monkeypatch.setattr("romanian_news.feeds.acquisition.get_with_validated_redirects", get)
+
+    capture = fetch_feed(requests.Session(), feed, observed_at, validator)
+
+    assert capture.status == "failed"
+    assert capture.http_status is None
+    assert capture.content is None
+    assert capture.content_digest is None
+    assert capture.entries == ()
+    assert capture.validator == validator
+    assert capture.error == "connection refused"
 
 
 def test_feed_poll_fetches_outlets_concurrently(monkeypatch) -> None:

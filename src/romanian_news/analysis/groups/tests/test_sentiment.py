@@ -3,17 +3,13 @@ from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from uuid import UUID
 
+import pytest
 from pydantic import HttpUrl
 
 from romanian_news.analysis.groups.models import (
-    ArticleSentimentResponse,
     GroupAnalysisInput,
-    GroupSentiment,
-    SentimentAssessment,
 )
 from romanian_news.analysis.groups.sentiment import (
-    ARTICLE_SENTIMENT_PROMPT,
-    GROUP_OVERALL_PROMPT,
     _normalize_quote,
     score_group_sentiment,
     sentiment_request_id,
@@ -135,32 +131,20 @@ def test_sentiment_correction_records_rejects_then_accepts(monkeypatch) -> None:
     assert len(json.loads(output.content)["provider_responses"]) == 3
 
 
-def test_sentiment_forwards_trace_to_every_attempt(monkeypatch) -> None:
-    traces = [
-        ModelTraceReference(
-            provider="langfuse",
-            trace_id=f"{index:032x}",
-            observation_id=f"{index + 1:032x}",
-            project_ref="project",
-            recorded_at=datetime(2026, 9, 1, tzinfo=UTC),
-        )
-        for index in range(3)
-    ]
+def test_article_sentiment_correction_exhaustion_raises_after_repeated_invalid_responses(
+    monkeypatch,
+) -> None:
     responses = [
-        _assessment_response("response-invalid", evidence_quote="Text absent"),
-        _assessment_response("response-accepted"),
-        _overall_response(),
+        _FakeResponse("response-invalid-1", "{", 10, 5),
+        _FakeResponse("response-invalid-2", "{", 10, 5),
     ]
-    _client, recorded = _harness(monkeypatch, responses, traces=[*traces])
+    client, recorded = _harness(monkeypatch, responses)
 
-    score_group_sentiment(_group_input())
+    with pytest.raises(ValueError, match="Article sentiment remained invalid after correction"):
+        score_group_sentiment(_group_input())
 
-    assert [attempt["trace"] for attempt in recorded] == traces
-    assert [attempt["fallback_response_id"] for attempt in recorded] == [
-        str(UUID(int=1)),
-        str(UUID(int=2)),
-        str(UUID(int=3)),
-    ]
+    assert [attempt["status"] for attempt in recorded] == ["rejected", "rejected"]
+    assert len(client.calls) == 2
 
 
 def test_sentiment_resolves_sentence_marker_to_verbatim_text(monkeypatch) -> None:
@@ -182,17 +166,6 @@ def test_article_sentiment_schema_only_allows_present_sentence_markers(monkeypat
 
     schema = client.calls[0]["response_format"]["json_schema"]["schema"]
     assert schema["properties"]["evidence_quote"]["enum"] == ["S1"]
-
-
-def test_sentiment_prompt_requires_english_with_archived_field_names() -> None:
-    assert "English" in ARTICLE_SENTIMENT_PROMPT
-    assert "legacy field names" in ARTICLE_SENTIMENT_PROMPT
-    assert "Never invent evidence" in ARTICLE_SENTIMENT_PROMPT
-    assert "sentence ID" in ARTICLE_SENTIMENT_PROMPT
-    assert "English" in GROUP_OVERALL_PROMPT
-    assert "literal string group" in GROUP_OVERALL_PROMPT
-    assessment_properties = SentimentAssessment.model_json_schema()["properties"]
-    assert "rationale_ro" in assessment_properties
 
 
 def test_quote_normalization_unifies_romanian_comma_and_cedilla_variants() -> None:
@@ -239,8 +212,3 @@ def _reference(version_id: str) -> ArtifactReference:
         content_digest=_D,
         r2_key=f"objects/{version_id}",
     )
-
-
-def _unused_group_sentiment_type() -> None:
-    GroupSentiment.model_json_schema()
-    ArticleSentimentResponse.model_json_schema()

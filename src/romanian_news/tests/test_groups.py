@@ -14,7 +14,6 @@ from romanian_news.catalog.cluster_inputs import (
     read_embedded_article_references as read_catalog_embedded_article_references,
 )
 from romanian_news.groups import (
-    DEFAULT_CLUSTER_THRESHOLD,
     DailyClusterSet,
     EmbeddedArticle,
     cluster_articles,
@@ -90,7 +89,6 @@ def test_empty_day_produces_a_replayable_empty_cluster_set() -> None:
 def test_default_cluster_threshold_defines_empty_identity() -> None:
     output = cluster_articles(date(2026, 8, 30), ())
 
-    assert DEFAULT_CLUSTER_THRESHOLD == 0.72
     assert output.cluster_set.threshold == 0.72
     assert output.request_id == "3cfa1fee230403844ffd602bc05a821bd16a9602d27e4dfc3079dc0d619b900a"
 

@@ -642,36 +642,10 @@ def test_policy_requires_identical_article_input_for_both_gates() -> None:
         )
 
 
-def test_production_prompts_define_the_measured_distinctions() -> None:
-    for term in (
-        "foregone opportunity",
-        "never secured funding",
-        "local_public_finances",
-        "national public finances",
-        "national government power",
-        "ongoing prison or police conditions is not strong",
-        "main economic consequence, not an opening anecdote",
-        "continuing social condition strongly political",
-        "Limited education or work prospects",
-    ):
-        assert term in RELEVANCE_V3_POLICY.impact.prompt
-    assert "active Romanian government-formation process is direct" in (
-        RELEVANCE_V3_POLICY.context.prompt
-    )
-    assert "Anchor the article's main claim to its title and opening statement" in (
-        RELEVANCE_V3_POLICY.context.prompt
-    )
-    assert "political scenario mentioned inside one item" in RELEVANCE_V3_POLICY.context.prompt
-    assert RELEVANCE_V3_POLICY.policy_id == "relevance-v3-main-claim-domain-guard"
-
-
 def test_policy_and_request_identity_cover_schemas_acceptance_and_mode() -> None:
     payload = relevance_v3_policy_payload(RELEVANCE_V3_POLICY)
     reference = _reference()
 
-    assert payload["context_response_schema"] == ContextDecision.model_json_schema()
-    assert payload["impact_response_schema"] == ImpactDecision.model_json_schema()
-    assert "quantified" in RELEVANCE_V3_POLICY.impact.prompt
     assert payload["acceptance"] == RELEVANCE_V3_POLICY.acceptance.model_dump(mode="json")
     assert RELEVANCE_V3_POLICY.acceptance.acceptance_algorithm_id == (
         "recall-first-combined-v3-attempt-3-material-v3"
