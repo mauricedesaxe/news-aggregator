@@ -1,0 +1,85 @@
+{
+  "schema_version": "split-subject-assessment-experiment/v1",
+  "frozen_at": "2026-09-20",
+  "purpose": "Test whether Jev tier classification followed by Gemini ranking preserves final subject-assessment quality while improving complete-run latency or cost.",
+  "hypothesis": "A two-stage Jev-tier and Gemini-rank assessment is non-inferior to the incumbent single Gemini 3.8 Flash assessment on the frozen tier and ranking evaluations, with lower complete-run provider cost or latency.",
+  "source": {
+    "declared_manifest_version": "news-evaluation-2026-09-11-v11",
+    "manifest_version_id": "083d5ae5ba73686511f5eb01ce770dc2e5826de22cf27df76e205bd9b946216a",
+    "baseline_version_id": "78f4738f918280d467b7cba6f5e64f09f76cf5f710817640a06f7ae879cea77d",
+    "report_version_ids": [
+      "c1369f9a24202a111dfc07e29a7194c73cb22dd491958093932a5d3b9b270d72"
+    ],
+    "tier_case_count": 25,
+    "ranking_case_count": 28,
+    "ground_truth": "Existing immutable human-reviewed v11 labels only."
+  },
+  "arms": {
+    "incumbent": {
+      "model": "google/gemini-3.8-flash",
+      "operation": "One production subject-assessment call that jointly assigns tiers, ranks each tier, and returns rationales and evidence citations."
+    },
+    "candidate": {
+      "tier_model": "jev-1.13.0",
+      "tier_operation": "One batched two-question request per subject using the unchanged full-day state and fixed 0.5 composition thresholds.",
+      "ranking_model": "google/gemini-3.8-flash",
+      "ranking_operation": "One fixed-tier call per day that may order subjects and generate rationales and evidence citations but may not change tier membership."
+    }
+  },
+  "tier_contract": {
+    "question_digests": [
+      "4bf690e96e2db1b8da87528ebc9c63d471c9d9708ba20c6ccd1917589cb41c4d",
+      "684e1b83fb7d192dfb9c41323be5c2e117e76387362c88cc86a1cd706dfab5b7"
+    ],
+    "composition_digest": "46cd7152b68f4867f7e125c1d471fa0d8dd76f70c79e327f97ce1026ca12a7b4",
+    "context_guard_characters": 70000,
+    "context_policy": "Refuse an over-guard candidate arm. Never clip, summarize, chunk, or silently substitute the incumbent.",
+    "failure_policy": "Any missing or failed subject judgment makes the candidate arm unavailable and counts as the worst paired quality outcome."
+  },
+  "ranking_contract": {
+    "tier_membership": "The response schema restricts each tier array to the Jev-composed subjects assigned to that tier.",
+    "coverage": "Every supplied subject appears exactly once and retains its fixed tier.",
+    "ordering": "Array position is a contiguous one-based semantic rank within the fixed tier.",
+    "evidence": "Every rationale is non-empty and every cited article belongs to the assessed subject and immutable input evidence.",
+    "correction": "At most one complete-response correction is allowed; both attempts remain in accounting."
+  },
+  "execution": {
+    "trial_count": 3,
+    "trial_refs": [
+      "split-assessment-v1:trial-001",
+      "split-assessment-v1:trial-002",
+      "split-assessment-v1:trial-003"
+    ],
+    "arm_order": [
+      ["incumbent", "candidate"],
+      ["candidate", "incumbent"],
+      ["incumbent", "candidate"]
+    ],
+    "provider_reuse": "Historical Jev results may be reported as context but are forbidden in measured latency and cost trials. Resume may reuse only exact terminal results from this experiment identity.",
+    "checkpoint": "Persist an in-flight marker before each provider dispatch and atomically record each attempt and terminal arm outcome.",
+    "spend_ceiling_usd": "5.00",
+    "cost_policy": "Include every accepted, rejected, corrected, retried, and failed provider attempt. Missing usage makes cost a lower bound, never zero.",
+    "latency_policy": "Measure wall time from arm entry through validated assessment output. Report summed provider-attempt latency separately for diagnosis."
+  },
+  "quality": {
+    "primary_unit": "Complete validated day-level subject assessment.",
+    "required_metrics": [
+      "completed, unavailable, and failed arm counts",
+      "tier exact accuracy and per-tier recall",
+      "ranking accuracy and inversion count",
+      "paired candidate-versus-incumbent case outcomes",
+      "control regressions",
+      "merged anchors and semantic ties",
+      "complete subject coverage and contiguous tier ranks",
+      "valid rationale and evidence ownership"
+    ],
+    "promotion_gate": [
+      "Zero invalid or incomplete candidate assessments.",
+      "Zero control-case regressions against the incumbent.",
+      "Candidate passes at least as many frozen tier and ranking cases as the incumbent.",
+      "No provider attempt or accounting gap is omitted from the report.",
+      "Complete-run latency and cost are reported without excluding failed or unavailable arms."
+    ],
+    "interpretation": "Passing permits a separate guarded rollout proposal. It does not change production by itself."
+  }
+}

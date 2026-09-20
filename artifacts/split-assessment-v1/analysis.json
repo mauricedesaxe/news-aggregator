@@ -1,0 +1,1003 @@
+{
+  "accounting": {
+    "cost_statement": "lower bound; accounting is incomplete",
+    "runner_accounting_complete": false,
+    "runner_known_spend_usd": "0.183258138",
+    "unknown_in_flight_accounting": true,
+    "unknown_in_flight_count": 1
+  },
+  "architectures": [
+    {
+      "architecture": "incumbent",
+      "completed_arms": 3,
+      "cost": {
+        "accounting_complete": true,
+        "known_cost_by_stage_usd": {
+          "incumbent": "0",
+          "ranking": "0.066349500",
+          "tier": "0"
+        },
+        "known_cost_usd": "0.066349500",
+        "unknown_in_flight_count": 0,
+        "wording": "complete known provider cost"
+      },
+      "diagnostics": {
+        "merged_pair_count": 0,
+        "merged_tier_resolution_count": 0,
+        "per_tier_recall": {
+          "excluded": {
+            "passes": 7,
+            "recall": 0.7777777777777778,
+            "total": 9
+          },
+          "main": {
+            "passes": 29,
+            "recall": 0.7435897435897436,
+            "total": 39
+          },
+          "worth_knowing": {
+            "passes": 20,
+            "recall": 0.7407407407407407,
+            "total": 27
+          }
+        },
+        "ranking_inversion_count": 0,
+        "ranking_unavailable_count": 0,
+        "scored_completed_arms": 3,
+        "semantic_tie_count": 0
+      },
+      "failed_arms": 0,
+      "missing_arms": 0,
+      "quality": {
+        "control_passes": 29,
+        "control_regressions_against_incumbent": 0,
+        "control_total": 39,
+        "passes": 95,
+        "ranking_passes": 39,
+        "ranking_total": 39,
+        "regressions_against_incumbent": 0,
+        "tier_passes": 56,
+        "tier_total": 75,
+        "total": 114
+      },
+      "requests": {
+        "attempt_count": 5,
+        "by_stage_status": {
+          "incumbent": {
+            "accepted": 0,
+            "rejected": 0,
+            "retryable_error": 0,
+            "terminal_error": 0
+          },
+          "ranking": {
+            "accepted": 3,
+            "rejected": 2,
+            "retryable_error": 0,
+            "terminal_error": 0
+          },
+          "tier": {
+            "accepted": 0,
+            "rejected": 0,
+            "retryable_error": 0,
+            "terminal_error": 0
+          }
+        },
+        "correction_count": 2,
+        "failure_count": 2,
+        "provider_attempt_latency_ms": 29200,
+        "request_count": 3,
+        "request_count_by_stage_status": {
+          "incumbent": {
+            "accepted": 0,
+            "rejected": 0,
+            "retryable_error": 0,
+            "terminal_error": 0
+          },
+          "ranking": {
+            "accepted": 1,
+            "rejected": 2,
+            "retryable_error": 0,
+            "terminal_error": 0
+          },
+          "tier": {
+            "accepted": 0,
+            "rejected": 0,
+            "retryable_error": 0,
+            "terminal_error": 0
+          }
+        },
+        "retry_count": 0
+      },
+      "structural_validity": {
+        "completed_typed_outputs": 3,
+        "inconclusive_outputs": 0,
+        "invalid_completed_outputs": 0,
+        "per_trial": [
+          {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          },
+          {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          },
+          {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          }
+        ],
+        "valid_completed_outputs": 3
+      },
+      "terminal_arms": 3,
+      "unavailable_arms": 0,
+      "wall_latency": {
+        "complete": true,
+        "observed_arms": 3,
+        "p50_ms": 11065.0,
+        "p95_ms": 11594.2,
+        "per_trial_ms": [
+          {
+            "trial_ref": "split-assessment-v1:trial-001",
+            "value": 11065
+          },
+          {
+            "trial_ref": "split-assessment-v1:trial-002",
+            "value": 6527
+          },
+          {
+            "trial_ref": "split-assessment-v1:trial-003",
+            "value": 11653
+          }
+        ],
+        "total_ms": 29245
+      }
+    },
+    {
+      "architecture": "candidate",
+      "completed_arms": 3,
+      "cost": {
+        "accounting_complete": false,
+        "known_cost_by_stage_usd": {
+          "incumbent": "0",
+          "ranking": "0.04645515",
+          "tier": "0.070453488"
+        },
+        "known_cost_usd": "0.116908638",
+        "unknown_in_flight_count": 1,
+        "wording": "lower bound; accounting is incomplete"
+      },
+      "diagnostics": {
+        "merged_pair_count": 0,
+        "merged_tier_resolution_count": 0,
+        "per_tier_recall": {
+          "excluded": {
+            "passes": 3,
+            "recall": 0.3333333333333333,
+            "total": 9
+          },
+          "main": {
+            "passes": 15,
+            "recall": 0.38461538461538464,
+            "total": 39
+          },
+          "worth_knowing": {
+            "passes": 21,
+            "recall": 0.7777777777777778,
+            "total": 27
+          }
+        },
+        "ranking_inversion_count": 6,
+        "ranking_unavailable_count": 0,
+        "scored_completed_arms": 3,
+        "semantic_tie_count": 0
+      },
+      "failed_arms": 0,
+      "missing_arms": 0,
+      "quality": {
+        "control_passes": 15,
+        "control_regressions_against_incumbent": 17,
+        "control_total": 39,
+        "passes": 72,
+        "ranking_passes": 33,
+        "ranking_total": 39,
+        "regressions_against_incumbent": 32,
+        "tier_passes": 39,
+        "tier_total": 75,
+        "total": 114
+      },
+      "requests": {
+        "attempt_count": 120,
+        "by_stage_status": {
+          "incumbent": {
+            "accepted": 0,
+            "rejected": 0,
+            "retryable_error": 0,
+            "terminal_error": 0
+          },
+          "ranking": {
+            "accepted": 4,
+            "rejected": 0,
+            "retryable_error": 0,
+            "terminal_error": 0
+          },
+          "tier": {
+            "accepted": 116,
+            "rejected": 0,
+            "retryable_error": 0,
+            "terminal_error": 0
+          }
+        },
+        "correction_count": 0,
+        "failure_count": 0,
+        "provider_attempt_latency_ms": 143931,
+        "request_count": 120,
+        "request_count_by_stage_status": {
+          "incumbent": {
+            "accepted": 0,
+            "rejected": 0,
+            "retryable_error": 0,
+            "terminal_error": 0
+          },
+          "ranking": {
+            "accepted": 4,
+            "rejected": 0,
+            "retryable_error": 0,
+            "terminal_error": 0
+          },
+          "tier": {
+            "accepted": 116,
+            "rejected": 0,
+            "retryable_error": 0,
+            "terminal_error": 0
+          }
+        },
+        "retry_count": 0
+      },
+      "structural_validity": {
+        "completed_typed_outputs": 3,
+        "inconclusive_outputs": 0,
+        "invalid_completed_outputs": 0,
+        "per_trial": [
+          {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          },
+          {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          },
+          {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          }
+        ],
+        "valid_completed_outputs": 3
+      },
+      "terminal_arms": 3,
+      "unavailable_arms": 0,
+      "wall_latency": {
+        "complete": false,
+        "observed_arms": 3,
+        "p50_ms": 35923.0,
+        "p95_ms": 36487.3,
+        "per_trial_ms": [
+          {
+            "trial_ref": "split-assessment-v1:trial-001",
+            "value": 35754
+          },
+          {
+            "trial_ref": "split-assessment-v1:trial-002",
+            "value": 35923
+          },
+          {
+            "trial_ref": "split-assessment-v1:trial-003",
+            "value": 36550
+          }
+        ],
+        "total_ms": 108227
+      }
+    }
+  ],
+  "execution_complete": true,
+  "identity": {
+    "arm_order": [
+      [
+        "incumbent",
+        "candidate"
+      ],
+      [
+        "candidate",
+        "incumbent"
+      ],
+      [
+        "incumbent",
+        "candidate"
+      ]
+    ],
+    "execution_ref": "split-assessment-v1",
+    "identity_digest": "66d68602c8ab05d1cc3d23e9149be6ac054eeb9a106a463d57d953e9ea6b97f8",
+    "manifest_version_id": "083d5ae5ba73686511f5eb01ce770dc2e5826de22cf27df76e205bd9b946216a",
+    "mode": "live",
+    "report_version_ids": [
+      "c1369f9a24202a111dfc07e29a7194c73cb22dd491958093932a5d3b9b270d72"
+    ],
+    "trial_refs": [
+      "split-assessment-v1:trial-001",
+      "split-assessment-v1:trial-002",
+      "split-assessment-v1:trial-003"
+    ]
+  },
+  "promotion": {
+    "gates": [
+      {
+        "detail": "candidate completed and structurally valid in 3/3 trials",
+        "gate": "zero_invalid_or_incomplete_candidate_assessments",
+        "status": "pass"
+      },
+      {
+        "detail": "candidate control regressions: 17",
+        "gate": "zero_control_case_regressions",
+        "status": "fail"
+      },
+      {
+        "detail": "candidate versus incumbent aggregate tier/ranking passes: 39/56 and 33/39",
+        "gate": "candidate_tier_and_ranking_passes_at_least_incumbent",
+        "status": "fail"
+      },
+      {
+        "detail": "lower bound; accounting is incomplete",
+        "gate": "no_omitted_provider_attempt_or_accounting_gap",
+        "status": "fail"
+      },
+      {
+        "detail": "execution or in-flight latency evidence is incomplete",
+        "gate": "complete_run_latency_and_cost_include_failed_and_unavailable_arms",
+        "status": "fail"
+      }
+    ],
+    "interpretation": "Passing permits a separate guarded rollout proposal; it does not change production.",
+    "promotion_permitted": false,
+    "status": "fail"
+  },
+  "protocol": {
+    "path": "/tmp/opencode/news-jev/src/romanian_news/split_assessment_experiment_protocol.json",
+    "schema_version": "split-subject-assessment-experiment/v1",
+    "sha256": "652f1e2325e3d7a8ea9f9c4fe21b3ab7f804008f6681a52b6ea61d0c63a6488f"
+  },
+  "schema_version": "split-subject-assessment-analysis-v1",
+  "source": {
+    "path": "/tmp/opencode/news-jev/artifacts/split-assessment-v1/live-v1.json",
+    "sha256": "699e936b22d2511ab32947fa34aad1fa1ea896b96036654eea63c053c6cc0c01"
+  },
+  "trials": [
+    {
+      "arms": {
+        "candidate": {
+          "attempts": {
+            "attempt_count": 30,
+            "by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 1,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 29,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "correction_count": 0,
+            "failure_count": 0,
+            "provider_attempt_latency_ms": 35473,
+            "request_count": 30,
+            "request_count_by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 1,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 29,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "retry_count": 0
+          },
+          "cost_wording": "complete known provider cost",
+          "known_cost_usd": "0.027701922",
+          "quality": {
+            "control_passes": 5,
+            "control_total": 13,
+            "passes": 23,
+            "ranking_passes": 10,
+            "ranking_total": 13,
+            "tier_passes": 13,
+            "tier_total": 25,
+            "total": 38
+          },
+          "status": "completed",
+          "structural_validity": {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          },
+          "wall_latency_ms": 35754
+        },
+        "incumbent": {
+          "attempts": {
+            "attempt_count": 2,
+            "by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 1,
+                "rejected": 1,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "correction_count": 1,
+            "failure_count": 1,
+            "provider_attempt_latency_ms": 11049,
+            "request_count": 1,
+            "request_count_by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 0,
+                "rejected": 1,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "retry_count": 0
+          },
+          "cost_wording": "complete known provider cost",
+          "known_cost_usd": "0.0303615",
+          "quality": {
+            "control_passes": 10,
+            "control_total": 13,
+            "passes": 32,
+            "ranking_passes": 13,
+            "ranking_total": 13,
+            "tier_passes": 19,
+            "tier_total": 25,
+            "total": 38
+          },
+          "status": "completed",
+          "structural_validity": {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          },
+          "wall_latency_ms": 11065
+        }
+      },
+      "paired_delta": {
+        "control_passes": -5,
+        "control_regression_case_ids": [
+          "sep10-subject-07-tier",
+          "sep10-subject-24-tier",
+          "sep10-subject-25-tier",
+          "sep10-subject-26-tier",
+          "sep10-subject-28-tier",
+          "sep10-subject-29-tier"
+        ],
+        "control_regression_count": 6,
+        "improvement_case_ids": [
+          "sep10-subject-02-tier",
+          "sep10-subject-04-tier"
+        ],
+        "passes": -9,
+        "ranking_passes": -3,
+        "regression_case_ids": [
+          "sep10-pnrr-ranks-above-research-funding",
+          "sep10-pnrr-ranks-above-metrorex",
+          "sep10-pnrr-ranks-above-hydropower-law",
+          "sep10-subject-07-tier",
+          "sep10-subject-22-tier",
+          "sep10-subject-24-tier",
+          "sep10-subject-25-tier",
+          "sep10-subject-26-tier",
+          "sep10-subject-27-tier",
+          "sep10-subject-28-tier",
+          "sep10-subject-29-tier"
+        ],
+        "status": "paired",
+        "tier_passes": -6
+      },
+      "trial_ref": "split-assessment-v1:trial-001"
+    },
+    {
+      "arms": {
+        "candidate": {
+          "attempts": {
+            "attempt_count": 30,
+            "by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 1,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 29,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "correction_count": 0,
+            "failure_count": 0,
+            "provider_attempt_latency_ms": 35740,
+            "request_count": 30,
+            "request_count_by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 1,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 29,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "retry_count": 0
+          },
+          "cost_wording": "complete known provider cost",
+          "known_cost_usd": "0.027818172",
+          "quality": {
+            "control_passes": 5,
+            "control_total": 13,
+            "passes": 26,
+            "ranking_passes": 13,
+            "ranking_total": 13,
+            "tier_passes": 13,
+            "tier_total": 25,
+            "total": 38
+          },
+          "status": "completed",
+          "structural_validity": {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          },
+          "wall_latency_ms": 35923
+        },
+        "incumbent": {
+          "attempts": {
+            "attempt_count": 1,
+            "by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 1,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "correction_count": 0,
+            "failure_count": 0,
+            "provider_attempt_latency_ms": 6516,
+            "request_count": 1,
+            "request_count_by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 1,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "retry_count": 0
+          },
+          "cost_wording": "complete known provider cost",
+          "known_cost_usd": "0.010291875",
+          "quality": {
+            "control_passes": 10,
+            "control_total": 13,
+            "passes": 31,
+            "ranking_passes": 13,
+            "ranking_total": 13,
+            "tier_passes": 18,
+            "tier_total": 25,
+            "total": 38
+          },
+          "status": "completed",
+          "structural_validity": {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          },
+          "wall_latency_ms": 6527
+        }
+      },
+      "paired_delta": {
+        "control_passes": -5,
+        "control_regression_case_ids": [
+          "sep10-subject-07-tier",
+          "sep10-subject-24-tier",
+          "sep10-subject-25-tier",
+          "sep10-subject-26-tier",
+          "sep10-subject-28-tier",
+          "sep10-subject-29-tier"
+        ],
+        "control_regression_count": 6,
+        "improvement_case_ids": [
+          "sep10-subject-02-tier",
+          "sep10-subject-04-tier",
+          "sep10-subject-12-tier",
+          "sep10-subject-23-tier"
+        ],
+        "passes": -5,
+        "ranking_passes": 0,
+        "regression_case_ids": [
+          "sep10-subject-07-tier",
+          "sep10-subject-16-tier",
+          "sep10-subject-22-tier",
+          "sep10-subject-24-tier",
+          "sep10-subject-25-tier",
+          "sep10-subject-26-tier",
+          "sep10-subject-27-tier",
+          "sep10-subject-28-tier",
+          "sep10-subject-29-tier"
+        ],
+        "status": "paired",
+        "tier_passes": -5
+      },
+      "trial_ref": "split-assessment-v1:trial-002"
+    },
+    {
+      "arms": {
+        "candidate": {
+          "attempts": {
+            "attempt_count": 30,
+            "by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 1,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 29,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "correction_count": 0,
+            "failure_count": 0,
+            "provider_attempt_latency_ms": 36189,
+            "request_count": 30,
+            "request_count_by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 1,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 29,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "retry_count": 0
+          },
+          "cost_wording": "complete known provider cost",
+          "known_cost_usd": "0.027889422",
+          "quality": {
+            "control_passes": 5,
+            "control_total": 13,
+            "passes": 23,
+            "ranking_passes": 10,
+            "ranking_total": 13,
+            "tier_passes": 13,
+            "tier_total": 25,
+            "total": 38
+          },
+          "status": "completed",
+          "structural_validity": {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          },
+          "wall_latency_ms": 36550
+        },
+        "incumbent": {
+          "attempts": {
+            "attempt_count": 2,
+            "by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 1,
+                "rejected": 1,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "correction_count": 1,
+            "failure_count": 1,
+            "provider_attempt_latency_ms": 11635,
+            "request_count": 1,
+            "request_count_by_stage_status": {
+              "incumbent": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "ranking": {
+                "accepted": 0,
+                "rejected": 1,
+                "retryable_error": 0,
+                "terminal_error": 0
+              },
+              "tier": {
+                "accepted": 0,
+                "rejected": 0,
+                "retryable_error": 0,
+                "terminal_error": 0
+              }
+            },
+            "retry_count": 0
+          },
+          "cost_wording": "complete known provider cost",
+          "known_cost_usd": "0.025696125",
+          "quality": {
+            "control_passes": 9,
+            "control_total": 13,
+            "passes": 32,
+            "ranking_passes": 13,
+            "ranking_total": 13,
+            "tier_passes": 19,
+            "tier_total": 25,
+            "total": 38
+          },
+          "status": "completed",
+          "structural_validity": {
+            "contiguous_tier_ranks": true,
+            "exact_subject_coverage": true,
+            "reason": "completed typed output has unique exact subject coverage, contiguous tier ranks, valid rationales, and owned evidence",
+            "status": "pass",
+            "subject_count": 29,
+            "unique_subjects": true,
+            "valid_evidence_ownership": true,
+            "valid_rationales": true
+          },
+          "wall_latency_ms": 11653
+        }
+      },
+      "paired_delta": {
+        "control_passes": -4,
+        "control_regression_case_ids": [
+          "sep10-subject-24-tier",
+          "sep10-subject-25-tier",
+          "sep10-subject-26-tier",
+          "sep10-subject-28-tier",
+          "sep10-subject-29-tier"
+        ],
+        "control_regression_count": 5,
+        "improvement_case_ids": [
+          "sep10-subject-02-tier",
+          "sep10-subject-04-tier",
+          "sep10-subject-12-tier"
+        ],
+        "passes": -9,
+        "ranking_passes": -3,
+        "regression_case_ids": [
+          "sep10-pnrr-ranks-above-research-funding",
+          "sep10-pnrr-ranks-above-metrorex",
+          "sep10-pnrr-ranks-above-hydropower-law",
+          "sep10-subject-01-tier",
+          "sep10-subject-16-tier",
+          "sep10-subject-22-tier",
+          "sep10-subject-24-tier",
+          "sep10-subject-25-tier",
+          "sep10-subject-26-tier",
+          "sep10-subject-27-tier",
+          "sep10-subject-28-tier",
+          "sep10-subject-29-tier"
+        ],
+        "status": "paired",
+        "tier_passes": -6
+      },
+      "trial_ref": "split-assessment-v1:trial-003"
+    }
+  ],
+  "uncertainty": {
+    "confidence_level": 0.95,
+    "interpretation": "Intervals describe run-to-run uncertainty across only three frozen pairs; they are not evidence of population-level statistical power. Negative latency and cost deltas favor the candidate.",
+    "intervals": {
+      "known_cost_delta_usd_per_trial": {
+        "lower": -0.00160812175,
+        "mean": 0.005686672,
+        "upper": 0.014204147
+      },
+      "quality_pass_delta_per_trial": {
+        "lower": -9.0,
+        "mean": -7.666666666667,
+        "upper": -5.866666666667
+      },
+      "ranking_pass_delta_per_trial": {
+        "lower": -3.0,
+        "mean": -2.0,
+        "upper": -0.65
+      },
+      "tier_pass_delta_per_trial": {
+        "lower": -6.0,
+        "mean": -5.666666666667,
+        "upper": -5.216666666667
+      },
+      "wall_latency_delta_ms_per_trial": {
+        "lower": 24734.066666666666,
+        "mean": 26327.333333333332,
+        "upper": 28421.216666666664
+      }
+    },
+    "method": "exact ordered nonparametric bootstrap of the three frozen paired trials",
+    "resample_count": 27,
+    "status": "descriptive"
+  }
+}
