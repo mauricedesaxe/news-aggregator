@@ -1,9 +1,9 @@
 from datetime import date
 from types import SimpleNamespace
 
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.attempts import ModelCall
 from romanian_news.analysis.relevance import RelevanceOutput
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog import analysis, clusters, reports
 from romanian_news.catalog_transport import advance_artifact_current_version_from_run_statement
 from romanian_news.groups import DailyClusterOutput, DailyClusterSet

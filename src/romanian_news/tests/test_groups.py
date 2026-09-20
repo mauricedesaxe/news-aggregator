@@ -6,10 +6,10 @@ import pytest
 from pydantic import HttpUrl
 
 from romanian_news import EMBEDDING_DIMENSIONS
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.embeddings import embedding_request_id
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.cluster_inputs import (
     read_embedded_article_references as read_catalog_embedded_article_references,
 )

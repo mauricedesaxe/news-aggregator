@@ -8,7 +8,6 @@ import pytest
 
 from romanian_news import reports as reports_module
 from romanian_news import themes as themes_module
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.attempts import ModelCall
 from romanian_news.analysis.groups.models import (
     ArticleSentiment,
@@ -16,6 +15,7 @@ from romanian_news.analysis.groups.models import (
     GroupSummary,
     SentimentAssessment,
 )
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.reports import _report_run_statements
 from romanian_news.groups import DailyClusterSet, NewsGroup
 from romanian_news.reports import (

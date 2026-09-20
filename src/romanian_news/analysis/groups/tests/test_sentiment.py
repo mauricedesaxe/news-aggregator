@@ -5,7 +5,6 @@ from uuid import UUID
 
 from pydantic import HttpUrl
 
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.groups.models import (
     ArticleSentimentResponse,
     GroupAnalysisInput,
@@ -21,6 +20,7 @@ from romanian_news.analysis.groups.sentiment import (
 )
 from romanian_news.analysis.tracing import ModelTraceReference, ProviderCallResult
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup
 
 _A = "a" * 64

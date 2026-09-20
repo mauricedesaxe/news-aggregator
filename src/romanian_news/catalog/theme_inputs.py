@@ -1,10 +1,10 @@
 from datetime import date
 
-from romanian_news.catalog.artifacts import CatalogArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog_transport import catalog_query
 
 
-def read_recorded_daily_theme_references(day: date) -> tuple[CatalogArtifactReference, ...]:
+def read_recorded_daily_theme_references(day: date) -> tuple[ArtifactReference, ...]:
     rows = catalog_query(
         """SELECT input.position, input.role, version.artifact_id, version.id AS version_id,
                   file.content_digest, file.r2_key FROM artifacts theme
@@ -19,7 +19,7 @@ def read_recorded_daily_theme_references(day: date) -> tuple[CatalogArtifactRefe
     if any(row["role"] != "summary" for row in rows[1:]):
         raise ValueError("Daily theme run recorded an unexpected input role")
     return tuple(
-        CatalogArtifactReference(
+        ArtifactReference(
             artifact_id=str(row["artifact_id"]),
             version_id=str(row["version_id"]),
             content_digest=str(row["content_digest"]),

@@ -1,7 +1,7 @@
 from datetime import date
 
 from romanian_news import Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog_transport import catalog_query
 
 

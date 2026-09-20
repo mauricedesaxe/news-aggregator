@@ -10,10 +10,10 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.attempts import ModelCall, record_model_attempt
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.reports import ArchivedDailyReport, parse_daily_report
 from romanian_news.storage import read_verified_r2_object
 

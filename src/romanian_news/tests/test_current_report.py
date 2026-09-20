@@ -8,7 +8,7 @@ import pytest
 
 from romanian_news import current_report as current_report_module
 from romanian_news import reports as reports_module
-from romanian_news.analysis.artifacts import ArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.current_report import (
     CurrentDailyReport,
     CurrentDailyReportHead,

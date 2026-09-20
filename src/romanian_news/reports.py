@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING, Annotated, Literal
 from pydantic import Field, TypeAdapter
 
 from romanian_news import BUCHAREST, NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.groups.models import GroupSentiment, GroupSummary
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import DailyClusterSet
 from romanian_news.storage import read_verified_r2_object
 from romanian_news.subject_assessments import (
@@ -330,11 +330,11 @@ def read_recorded_daily_report_input(day: date) -> DailyReportInput:
         raise ValueError("Daily report run parameters do not match the requested day")
     return DailyReportInput(
         day=value.day,
-        themes=_catalog_reference(value.themes),
-        assessments=_catalog_reference(value.assessments),
-        cluster_set=_catalog_reference(value.cluster_set),
-        summaries=tuple(_catalog_reference(item) for item in value.summaries),
-        sentiments=tuple(_catalog_reference(item) for item in value.sentiments),
+        themes=value.themes,
+        assessments=value.assessments,
+        cluster_set=value.cluster_set,
+        summaries=value.summaries,
+        sentiments=value.sentiments,
     )
 
 
@@ -730,8 +730,7 @@ def _read_cluster_set(day: date) -> tuple[ArtifactReference, DailyClusterSet]:
     reference = current_artifact_reference(f"news:clusters:{day.isoformat()}", "news_clusters")
     if reference is None:
         raise ReportInputsUnavailable(f"No current cluster set exists for {day.isoformat()}")
-    value = _catalog_reference(reference)
-    return value, _load_cluster_set(value)
+    return reference, _load_cluster_set(reference)
 
 
 def _read_daily_report_reference(day: date) -> ArtifactReference:
@@ -740,7 +739,7 @@ def _read_daily_report_reference(day: date) -> ArtifactReference:
     reference = current_artifact_reference(f"news:daily:{day.isoformat()}", "news_daily_report")
     if reference is None:
         raise ReportInputsUnavailable(f"No current daily report exists for {day.isoformat()}")
-    return _catalog_reference(reference)
+    return reference
 
 
 def parse_daily_report(content: bytes) -> DailyReportDocument:
@@ -828,7 +827,7 @@ def _read_analysis_artifact_reference(artifact_id: str, kind: str) -> ArtifactRe
     reference = current_artifact_reference(artifact_id, kind)
     if reference is None:
         raise ReportInputsUnavailable(f"Required analysis artifact is unavailable: {artifact_id}")
-    return _catalog_reference(reference)
+    return reference
 
 
 def _load_analysis_artifact(reference: ArtifactReference) -> dict[str, object]:
@@ -853,10 +852,6 @@ def _read_report_articles(
     if set(result) != set(version_ids):
         raise ValueError("Daily report references unknown article versions")
     return result
-
-
-def _catalog_reference(value) -> ArtifactReference:
-    return ArtifactReference.model_validate(value.model_dump(), strict=True)
 
 
 def _canonical_json(value: object) -> bytes:

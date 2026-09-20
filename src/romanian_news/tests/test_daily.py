@@ -1,9 +1,9 @@
 from datetime import date
 
 from romanian_news import daily
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.embeddings import embedding_request_id
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog import artifacts as catalog_artifacts
 from romanian_news.catalog import daily as catalog_daily
 from romanian_news.daily import DailyArtifactReferences

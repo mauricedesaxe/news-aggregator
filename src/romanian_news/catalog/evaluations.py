@@ -11,10 +11,10 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from pydantic import Field, StringConstraints, TypeAdapter
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.relevance import RelevanceDecision
 from romanian_news.analysis.relevance_v3 import ContextDecision, ImpactDecision
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import (
     ArtifactFile,
     artifact_file,

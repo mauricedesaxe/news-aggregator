@@ -18,7 +18,6 @@ from pydantic import (
 )
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.relevance import (
     PRODUCTION_RELEVANCE_POLICY,
     RelevanceDecision,
@@ -30,6 +29,7 @@ from romanian_news.analysis.relevance_v3 import (
     ImpactDecision,
     relevance_v3_is_accepted,
 )
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.feedback import NewsFeedbackTarget, ThemeFeedbackTarget
 from romanian_news.groups import (
     EmbeddedArticle,

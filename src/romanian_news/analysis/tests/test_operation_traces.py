@@ -6,13 +6,13 @@ from uuid import UUID
 from pydantic import HttpUrl
 
 from romanian_news import EMBEDDING_DIMENSIONS
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.embeddings import EmbeddingInput, embed_article
 from romanian_news.analysis.groups.models import GroupAnalysisInput
 from romanian_news.analysis.groups.summary import summarize_group
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.analysis.tracing import ModelTraceReference, ProviderCallResult
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup
 
 _A = "a" * 64

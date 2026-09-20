@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.catalog.artifacts import CatalogArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog_transport import catalog_query
 
 
@@ -11,11 +11,11 @@ class DailyReportParameters(NewsModel):
 
 class RecordedDailyReportCatalogInput(NewsModel):
     day: date
-    themes: CatalogArtifactReference
-    assessments: CatalogArtifactReference
-    cluster_set: CatalogArtifactReference
-    summaries: tuple[CatalogArtifactReference, ...]
-    sentiments: tuple[CatalogArtifactReference, ...]
+    themes: ArtifactReference
+    assessments: ArtifactReference
+    cluster_set: ArtifactReference
+    summaries: tuple[ArtifactReference, ...]
+    sentiments: tuple[ArtifactReference, ...]
 
 
 class ReportDayHead(NewsModel):
@@ -29,7 +29,7 @@ class WeeklyReportHead(NewsModel):
 
 
 class ReportArticleCatalogRecord(NewsModel):
-    reference: CatalogArtifactReference
+    reference: ArtifactReference
     outlet_id: str
     canonical_url: str
 
@@ -187,7 +187,7 @@ def read_recorded_daily_report_input(day: date) -> RecordedDailyReportCatalogInp
         return None
     parameters = DailyReportParameters.model_validate(rows[0]["parameters_json"], strict=False)
     recorded_day = parameters.day
-    references: dict[str, list[CatalogArtifactReference]] = {
+    references: dict[str, list[ArtifactReference]] = {
         "themes": [],
         "assessments": [],
         "cluster_set": [],
@@ -282,8 +282,8 @@ def read_report_articles(
     return result
 
 
-def _reference(row: dict[str, object]) -> CatalogArtifactReference:
-    return CatalogArtifactReference(
+def _reference(row: dict[str, object]) -> ArtifactReference:
+    return ArtifactReference(
         artifact_id=str(row["artifact_id"]),
         version_id=str(row["version_id"]),
         content_digest=str(row["content_digest"]),

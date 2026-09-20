@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import pytest
 from pydantic import HttpUrl, ValidationError
 
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.groups import summary as summary_module
 from romanian_news.analysis.groups.models import GroupAnalysisInput, GroupSummary
 from romanian_news.analysis.groups.summary import (
@@ -17,6 +16,7 @@ from romanian_news.analysis.groups.summary import (
     summary_request_id,
 )
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup
 from romanian_news.reports import ReportArticle
 

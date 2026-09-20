@@ -1,18 +1,18 @@
 from datetime import date, datetime
 
 from romanian_news import NewsModel
-from romanian_news.catalog.artifacts import CatalogArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog_transport import catalog_query
 
 
 class ArticleAnalysisCatalogReference(NewsModel):
-    reference: CatalogArtifactReference
+    reference: ArtifactReference
     bucharest_day: date
 
 
 class EmbeddingCatalogCandidate(NewsModel):
     article: ArticleAnalysisCatalogReference
-    relevance: CatalogArtifactReference
+    relevance: ArtifactReference
 
 
 def read_current_article_analysis_references(
@@ -89,8 +89,8 @@ def _day_filter(through_day: date | None, day: date | None) -> tuple[str, list[o
     return "", []
 
 
-def _reference(row: dict[str, object]) -> CatalogArtifactReference:
-    return CatalogArtifactReference(
+def _reference(row: dict[str, object]) -> ArtifactReference:
+    return ArtifactReference(
         artifact_id=str(row["artifact_id"]),
         version_id=str(row["version_id"]),
         content_digest=str(row["content_digest"]),
@@ -98,8 +98,8 @@ def _reference(row: dict[str, object]) -> CatalogArtifactReference:
     )
 
 
-def _prefixed_reference(row: dict[str, object], prefix: str) -> CatalogArtifactReference:
-    return CatalogArtifactReference(
+def _prefixed_reference(row: dict[str, object], prefix: str) -> ArtifactReference:
+    return ArtifactReference(
         artifact_id=str(row[f"{prefix}_artifact_id"]),
         version_id=str(row[f"{prefix}_version_id"]),
         content_digest=str(row[f"{prefix}_digest"]),

@@ -9,10 +9,10 @@ import numpy as np
 from pydantic import Field, model_validator
 
 from romanian_news import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.embeddings import embedding_request_id
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.storage import read_verified_r2_object
 
 CLUSTER_ALGORITHM = "average-link-cosine-v1"
@@ -262,9 +262,9 @@ def pairwise_similarities(
 
 def _embedded_reference(value) -> EmbeddedArticleReference:
     return EmbeddedArticleReference(
-        article=ArtifactReference.model_validate(value.article.model_dump(), strict=True),
-        relevance=ArtifactReference.model_validate(value.relevance.model_dump(), strict=True),
-        embedding=ArtifactReference.model_validate(value.embedding.model_dump(), strict=True),
+        article=value.article,
+        relevance=value.relevance,
+        embedding=value.embedding,
     )
 
 

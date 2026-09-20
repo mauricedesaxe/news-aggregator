@@ -13,7 +13,7 @@ from starlette.requests import Request
 from starlette.testclient import TestClient
 
 from romanian_news import BUCHAREST
-from romanian_news.analysis.artifacts import ArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog_transport import ResearchCatalogError
 from romanian_news.current_report import (
     CurrentDailyReport,
