@@ -3,7 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, LiteralString, TypeVar, cast
+from typing import Any, Literal, LiteralString, TypeVar, cast
+from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
@@ -21,12 +22,15 @@ from romanian_news.video_digest.errors import (
     VideoDigestLeaseLostError,
 )
 from romanian_news.video_digest.models import (
+    AssembledVideo,
+    AvailableSubtitles,
     ClaimedSlot,
     ClaimResult,
     DigestPlan,
     EditionId,
     EditionIdentity,
     EstimatedAttemptCost,
+    FailedSubtitles,
     GenerationRequestId,
     GenerationRequestIdentity,
     GenerationRequestState,
@@ -35,6 +39,18 @@ from romanian_news.video_digest.models import (
     MeasuredAttemptCost,
     PendingAttemptCost,
     PlannedStory,
+    PublicationId,
+    PublicationIntent,
+    PublicationProgress,
+    PublicationState,
+    PublicationStatus,
+    PublishedEdition,
+    PublishedEditionSummary,
+    PublishedMedia,
+    PublishedPublication,
+    PublishedStory,
+    PublishedSubtitleAvailable,
+    PublishedSubtitleFailed,
     ScheduledSlot,
     SkippedSlot,
     SlotId,
@@ -43,9 +59,13 @@ from romanian_news.video_digest.models import (
     SlotSkipReason,
     SlotStage,
     StoryId,
+    SubtitleOutcome,
     TerminalSlot,
     TerminalSlotState,
     UnknownAttemptCost,
+    UploadedPublication,
+    UploadingPublication,
+    VerifiedPublication,
 )
 
 _ACTIVE_STAGES = frozenset(
@@ -963,6 +983,1011 @@ def read_generation_spend(edition_id: EditionId) -> GenerationSpend:
     if len(rows) != 1:
         raise ResearchCatalogError("PostgreSQL did not return video digest spend")
     return GenerationSpend.model_validate(rows[0])
+
+
+def checkpoint_assembled_video(
+    lease: SlotLease,
+    *,
+    video_file: ArtifactFile,
+    recorded_at: datetime,
+) -> AssembledVideo:
+    _utc(recorded_at, "recorded_at")
+    if (
+        video_file.artifact_id != f"{lease.edition_id}:assembled-video"
+        or video_file.artifact_kind != "video_digest_assembled_video"
+    ):
+        raise ValueError("Assembled video artifact identity is invalid")
+
+    def checkpoint(connection: CatalogConnection) -> AssembledVideo:
+        slot_row, current = _lock_slot_for_lease(connection, lease)
+        edition_row = _lock_edition_outputs(connection, lease.edition_id)
+        stored_version = edition_row["assembled_video_artifact_version_id"]
+        if stored_version is not None:
+            if stored_version == video_file.version_id and _stored_artifact_matches(
+                connection, video_file
+            ):
+                return AssembledVideo(
+                    edition_id=lease.edition_id,
+                    artifact_version_id=video_file.version_id,
+                )
+            raise VideoDigestCheckpointConflictError(
+                "Stored assembled video conflicts with the request"
+            )
+        if str(slot_row["stage"]) != SlotStage.ASSEMBLING.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with assembly completion"
+            )
+        incomplete = connection.execute(
+            """
+            SELECT story_id
+            FROM video_digest_stories
+            WHERE edition_id = %s
+              AND (stage <> 'accepted' OR accepted_clip_artifact_version_id IS NULL)
+            LIMIT 1
+            """,
+            (lease.edition_id,),
+        ).fetchone()
+        if incomplete is not None:
+            raise VideoDigestCheckpointConflictError(
+                "Video digest edition has incomplete mandatory stories"
+            )
+
+        _register_artifact(connection, video_file, current)
+        _execute_returning(
+            connection,
+            """
+            UPDATE video_digest_editions
+            SET assembled_video_artifact_version_id = %s, updated_at = %s
+            WHERE edition_id = %s AND assembled_video_artifact_version_id IS NULL
+            RETURNING edition_id
+            """,
+            (video_file.version_id, current, lease.edition_id),
+            VideoDigestCheckpointConflictError(
+                "Stored video digest edition conflicts with assembly completion"
+            ),
+        )
+        _advance_slot(
+            connection,
+            lease,
+            current,
+            from_stage=SlotStage.ASSEMBLING,
+            to_stage=SlotStage.SUBTITLING,
+        )
+        return AssembledVideo(
+            edition_id=lease.edition_id,
+            artifact_version_id=video_file.version_id,
+        )
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def checkpoint_subtitles(
+    lease: SlotLease,
+    outcome: SubtitleOutcome,
+    *,
+    artifact_file: ArtifactFile,
+    recorded_at: datetime,
+) -> SubtitleOutcome:
+    _utc(recorded_at, "recorded_at")
+    expected_id = (
+        f"{lease.edition_id}:subtitles"
+        if isinstance(outcome, AvailableSubtitles)
+        else f"{lease.edition_id}:subtitle-failure"
+    )
+    expected_kind = (
+        "video_digest_subtitles"
+        if isinstance(outcome, AvailableSubtitles)
+        else "video_digest_subtitle_failure"
+    )
+    outcome_version = (
+        outcome.artifact_version_id
+        if isinstance(outcome, AvailableSubtitles)
+        else outcome.evidence_artifact_version_id
+    )
+    if (
+        artifact_file.artifact_id != expected_id
+        or artifact_file.artifact_kind != expected_kind
+        or artifact_file.version_id != outcome_version
+    ):
+        raise ValueError("Subtitle artifact identity is invalid")
+
+    def checkpoint(connection: CatalogConnection) -> SubtitleOutcome:
+        slot_row, current = _lock_slot_for_lease(connection, lease)
+        edition_row = _lock_edition_outputs(connection, lease.edition_id)
+        stored = _subtitle_outcome_from_row(edition_row)
+        if stored is not None:
+            if stored == outcome and _stored_artifact_matches(connection, artifact_file):
+                return stored
+            raise VideoDigestCheckpointConflictError(
+                "Stored subtitle outcome conflicts with the request"
+            )
+        if str(slot_row["stage"]) != SlotStage.SUBTITLING.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with subtitle completion"
+            )
+
+        _register_artifact(connection, artifact_file, current)
+        if isinstance(outcome, AvailableSubtitles):
+            subtitle_state = "available"
+            subtitle_version = outcome.artifact_version_id
+            failure_version = None
+        else:
+            subtitle_state = "failed"
+            subtitle_version = None
+            failure_version = outcome.evidence_artifact_version_id
+        _execute_returning(
+            connection,
+            """
+            UPDATE video_digest_editions
+            SET subtitle_state = %s, subtitle_artifact_version_id = %s,
+                subtitle_failure_evidence_artifact_version_id = %s, updated_at = %s
+            WHERE edition_id = %s AND subtitle_state = 'pending'
+              AND subtitle_artifact_version_id IS NULL
+              AND subtitle_failure_evidence_artifact_version_id IS NULL
+            RETURNING edition_id
+            """,
+            (
+                subtitle_state,
+                subtitle_version,
+                failure_version,
+                current,
+                lease.edition_id,
+            ),
+            VideoDigestCheckpointConflictError(
+                "Stored video digest edition conflicts with subtitle completion"
+            ),
+        )
+        _advance_slot(
+            connection,
+            lease,
+            current,
+            from_stage=SlotStage.SUBTITLING,
+            to_stage=SlotStage.PUBLISHING,
+        )
+        return outcome
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def record_publication_intent(
+    lease: SlotLease,
+    intent: PublicationIntent,
+    *,
+    recorded_at: datetime,
+) -> PublicationStatus:
+    _utc(recorded_at, "recorded_at")
+    if intent.edition_id != lease.edition_id:
+        raise ValueError("Publication intent edition does not match the slot lease")
+
+    def checkpoint(connection: CatalogConnection) -> PublicationStatus:
+        slot_row = _lock_slot(connection, lease.slot_id)
+        terminal = str(slot_row["stage"]) in {
+            SlotStage.FAILED.value,
+            SlotStage.PUBLISHED.value,
+        }
+        if terminal:
+            if not _terminal_fence_matches(slot_row, lease):
+                raise VideoDigestLeaseLostError("Video digest slot lease was lost")
+            current = _utc(recorded_at, "recorded_at")
+        else:
+            current = _validate_locked_lease(connection, slot_row, lease)
+            if str(slot_row["stage"]) != SlotStage.PUBLISHING.value:
+                raise VideoDigestCheckpointConflictError(
+                    "Stored video digest slot conflicts with the publication intent"
+                )
+
+        edition_row = _lock_edition_outputs(connection, lease.edition_id)
+        _validate_intent_sources(connection, intent, edition_row)
+        if not terminal:
+            subtitle = intent.subtitle
+            connection.execute(
+                """
+                INSERT INTO video_digest_publication_intents
+                    (publication_id, edition_id, expected_video_key, video_digest,
+                     video_byte_size, video_media_type, subtitle_expected_key,
+                     subtitle_digest, subtitle_byte_size, subtitle_media_type,
+                     source_video_artifact_version_id,
+                     source_subtitle_artifact_version_id, stage, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        'pending', %s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (
+                    intent.publication_id,
+                    intent.edition_id,
+                    intent.expected_video_key,
+                    intent.video_digest,
+                    intent.video_byte_size,
+                    intent.video_media_type,
+                    subtitle.expected_key if subtitle is not None else None,
+                    subtitle.content_digest if subtitle is not None else None,
+                    subtitle.byte_size if subtitle is not None else None,
+                    subtitle.media_type if subtitle is not None else None,
+                    intent.source_video_version_id,
+                    intent.source_subtitle_version_id,
+                    current,
+                    current,
+                ),
+            )
+        row = _lock_publication_for_edition(connection, lease.edition_id)
+        if row is None or not _publication_intent_matches(row, intent):
+            raise VideoDigestCheckpointConflictError(
+                "Stored publication intent conflicts with the request"
+            )
+        return _publication_status(row)
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def checkpoint_publication_progress(
+    lease: SlotLease,
+    publication_id: PublicationId,
+    progress: PublicationProgress,
+    *,
+    evidence_file: ArtifactFile | None = None,
+    recorded_at: datetime,
+) -> PublicationStatus:
+    _utc(recorded_at, "recorded_at")
+    target = PublicationState(progress.kind)
+    if isinstance(progress, UploadingPublication):
+        if evidence_file is not None:
+            raise ValueError("Uploading publication progress cannot include evidence")
+    else:
+        expected_kind = (
+            "video_digest_publication_upload"
+            if isinstance(progress, UploadedPublication)
+            else "video_digest_publication_verification"
+        )
+        expected_suffix = "upload" if isinstance(progress, UploadedPublication) else "verification"
+        if (
+            evidence_file is None
+            or evidence_file.artifact_id != f"{publication_id}:{expected_suffix}"
+            or evidence_file.artifact_kind != expected_kind
+            or evidence_file.version_id != progress.evidence_artifact_version_id
+        ):
+            raise ValueError("Publication progress evidence identity is invalid")
+
+    def checkpoint(connection: CatalogConnection) -> PublicationStatus:
+        slot_row, current = _lock_slot_for_lease(connection, lease)
+        if str(slot_row["stage"]) != SlotStage.PUBLISHING.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with publication progress"
+            )
+        row = _required_publication(connection, publication_id, lease.edition_id)
+        if isinstance(progress, VerifiedPublication):
+            _validate_verified_publication(progress, row)
+        current_stage = PublicationState(str(row["stage"]))
+        ranks = {
+            PublicationState.PENDING: 0,
+            PublicationState.UPLOADING: 1,
+            PublicationState.UPLOADED: 2,
+            PublicationState.VERIFIED: 3,
+        }
+        if current_stage not in ranks or target not in ranks:
+            raise VideoDigestCheckpointConflictError(
+                "Stored publication is terminal or incompatible with progress"
+            )
+        if ranks[current_stage] >= ranks[target]:
+            _require_progress_evidence(connection, row, progress, evidence_file)
+            return _publication_status(row)
+        if ranks[target] != ranks[current_stage] + 1:
+            raise VideoDigestCheckpointConflictError(
+                "Publication progress cannot skip a checkpoint"
+            )
+
+        if evidence_file is not None:
+            _register_artifact(connection, evidence_file, current)
+        upload_version = (
+            progress.evidence_artifact_version_id
+            if isinstance(progress, UploadedPublication)
+            else None
+        )
+        verification_version = (
+            progress.evidence_artifact_version_id
+            if isinstance(progress, VerifiedPublication)
+            else None
+        )
+        _execute_returning(
+            connection,
+            """
+            UPDATE video_digest_publication_intents
+            SET stage = %s,
+                upload_evidence_artifact_version_id = COALESCE(%s, upload_evidence_artifact_version_id),
+                verification_evidence_artifact_version_id = COALESCE(
+                    %s, verification_evidence_artifact_version_id
+                ),
+                updated_at = %s
+            WHERE publication_id = %s AND edition_id = %s AND stage = %s
+            RETURNING publication_id
+            """,
+            (
+                target.value,
+                upload_version,
+                verification_version,
+                current,
+                publication_id,
+                lease.edition_id,
+                current_stage.value,
+            ),
+            VideoDigestCheckpointConflictError("Stored publication conflicts with progress"),
+        )
+        return PublicationStatus(
+            publication_id=publication_id,
+            edition_id=lease.edition_id,
+            stage=target,
+        )
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def complete_publication(
+    lease: SlotLease,
+    publication_id: PublicationId,
+    *,
+    recorded_at: datetime,
+) -> PublishedPublication:
+    _utc(recorded_at, "recorded_at")
+
+    def checkpoint(connection: CatalogConnection) -> PublishedPublication:
+        slot_row = _lock_slot(connection, lease.slot_id)
+        if str(slot_row["stage"]) == SlotStage.PUBLISHED.value:
+            if not _terminal_fence_matches(slot_row, lease):
+                raise VideoDigestLeaseLostError("Video digest slot lease was lost")
+            row = _required_publication(connection, publication_id, lease.edition_id)
+            if str(row["stage"]) != PublicationState.PUBLISHED.value or row["published_at"] is None:
+                raise VideoDigestCheckpointConflictError(
+                    "Stored publication completion conflicts with the request"
+                )
+            return PublishedPublication(
+                publication_id=publication_id,
+                edition_id=lease.edition_id,
+                published_at=_datetime(row["published_at"]),
+            )
+
+        current = _validate_locked_lease(connection, slot_row, lease)
+        if str(slot_row["stage"]) != SlotStage.PUBLISHING.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with publication completion"
+            )
+        row = _required_publication(connection, publication_id, lease.edition_id)
+        if str(row["stage"]) != PublicationState.VERIFIED.value or (
+            bool(row["evidence_required"])
+            and (
+                row["upload_evidence_artifact_version_id"] is None
+                or row["verification_evidence_artifact_version_id"] is None
+            )
+        ):
+            raise VideoDigestCheckpointConflictError("Stored publication is not verified")
+        _execute_returning(
+            connection,
+            """
+            UPDATE video_digest_publication_intents
+            SET stage = 'published', published_at = %s, updated_at = %s
+            WHERE publication_id = %s AND edition_id = %s AND stage = 'verified'
+              AND (
+                  NOT evidence_required
+                  OR (upload_evidence_artifact_version_id IS NOT NULL
+                      AND verification_evidence_artifact_version_id IS NOT NULL)
+              )
+            RETURNING publication_id
+            """,
+            (current, current, publication_id, lease.edition_id),
+            VideoDigestCheckpointConflictError("Stored publication conflicts with completion"),
+        )
+        _terminalize_slot(
+            connection,
+            lease,
+            current,
+            stage=SlotStage.PUBLISHED,
+            failure_version=None,
+        )
+        return PublishedPublication(
+            publication_id=publication_id,
+            edition_id=lease.edition_id,
+            published_at=current,
+        )
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def fail_slot(
+    lease: SlotLease,
+    *,
+    evidence_file: ArtifactFile,
+    recorded_at: datetime,
+) -> TerminalSlot:
+    _validate_failure_file(lease.slot_id, evidence_file)
+    _utc(recorded_at, "recorded_at")
+
+    def checkpoint(connection: CatalogConnection) -> TerminalSlot:
+        slot_row = _lock_slot(connection, lease.slot_id)
+        if str(slot_row["stage"]) == SlotStage.FAILED.value:
+            _require_terminal_failure_replay(connection, slot_row, lease, evidence_file)
+            if _lock_publication_for_edition(connection, lease.edition_id) is not None:
+                raise VideoDigestCheckpointConflictError(
+                    "A publication intent requires publication failure"
+                )
+            return TerminalSlot(state=TerminalSlotState.FAILED)
+        current = _validate_locked_lease(connection, slot_row, lease)
+        if _lock_publication_for_edition(connection, lease.edition_id) is not None:
+            raise VideoDigestCheckpointConflictError(
+                "A publication intent requires publication failure"
+            )
+        active_request = connection.execute(
+            """
+            SELECT request_id
+            FROM video_digest_generation_requests
+            WHERE edition_id = %s AND stage IN ('pending', 'submitted', 'processing')
+            LIMIT 1
+            FOR UPDATE
+            """,
+            (lease.edition_id,),
+        ).fetchone()
+        if active_request is not None:
+            raise VideoDigestCheckpointConflictError(
+                "Active generation must be failed through its request checkpoint"
+            )
+        _register_artifact(connection, evidence_file, current)
+        connection.execute(
+            """
+            UPDATE video_digest_stories
+            SET stage = 'failed', failure_evidence_artifact_version_id = %s,
+                updated_at = %s
+            WHERE edition_id = %s
+              AND stage IN ('planned', 'verifying', 'verified', 'generating')
+              AND accepted_clip_artifact_version_id IS NULL
+              AND failure_evidence_artifact_version_id IS NULL
+            """,
+            (evidence_file.version_id, current, lease.edition_id),
+        )
+        _terminalize_slot(
+            connection,
+            lease,
+            current,
+            stage=SlotStage.FAILED,
+            failure_version=evidence_file.version_id,
+        )
+        return TerminalSlot(state=TerminalSlotState.FAILED)
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def fail_publication(
+    lease: SlotLease,
+    publication_id: PublicationId,
+    *,
+    state: Literal[PublicationState.CONFLICT, PublicationState.FAILED],
+    evidence_file: ArtifactFile,
+    recorded_at: datetime,
+) -> TerminalSlot:
+    _utc(recorded_at, "recorded_at")
+    if (
+        evidence_file.artifact_id != f"{publication_id}:failure"
+        or evidence_file.artifact_kind != "video_digest_publication_failure"
+    ):
+        raise ValueError("Publication failure artifact identity is invalid")
+
+    def checkpoint(connection: CatalogConnection) -> TerminalSlot:
+        slot_row = _lock_slot(connection, lease.slot_id)
+        if str(slot_row["stage"]) == SlotStage.FAILED.value:
+            _require_terminal_failure_replay(connection, slot_row, lease, evidence_file)
+            row = _required_publication(connection, publication_id, lease.edition_id)
+            if (
+                str(row["stage"]) != state.value
+                or row["failure_evidence_artifact_version_id"] != evidence_file.version_id
+            ):
+                raise VideoDigestCheckpointConflictError(
+                    "Stored publication failure conflicts with the request"
+                )
+            return TerminalSlot(state=TerminalSlotState.FAILED)
+
+        current = _validate_locked_lease(connection, slot_row, lease)
+        if str(slot_row["stage"]) != SlotStage.PUBLISHING.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with publication failure"
+            )
+        row = _required_publication(connection, publication_id, lease.edition_id)
+        if str(row["stage"]) not in {
+            PublicationState.PENDING.value,
+            PublicationState.UPLOADING.value,
+            PublicationState.UPLOADED.value,
+            PublicationState.VERIFIED.value,
+        }:
+            raise VideoDigestCheckpointConflictError("Stored publication conflicts with failure")
+        _register_artifact(connection, evidence_file, current)
+        _execute_returning(
+            connection,
+            """
+            UPDATE video_digest_publication_intents
+            SET stage = %s, failure_evidence_artifact_version_id = %s, updated_at = %s
+            WHERE publication_id = %s AND edition_id = %s
+              AND stage IN ('pending', 'uploading', 'uploaded', 'verified')
+            RETURNING publication_id
+            """,
+            (
+                state.value,
+                evidence_file.version_id,
+                current,
+                publication_id,
+                lease.edition_id,
+            ),
+            VideoDigestCheckpointConflictError("Stored publication conflicts with failure"),
+        )
+        _terminalize_slot(
+            connection,
+            lease,
+            current,
+            stage=SlotStage.FAILED,
+            failure_version=evidence_file.version_id,
+        )
+        return TerminalSlot(state=TerminalSlotState.FAILED)
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def list_published_editions(
+    day: date,
+    *,
+    public_media_base_url: str,
+    limit: int = 20,
+) -> tuple[PublishedEditionSummary, ...]:
+    base_url = _public_media_origin(public_media_base_url)
+    if limit < 1 or limit > 100:
+        raise ValueError("limit must be between 1 and 100")
+    rows = catalog_query(
+        """
+        SELECT publication.publication_id, publication.edition_id,
+               publication.expected_video_key, publication.video_digest,
+               publication.video_byte_size, publication.video_media_type,
+               publication.subtitle_expected_key, publication.subtitle_digest,
+               publication.subtitle_byte_size, publication.subtitle_media_type,
+               publication.published_at, edition.daily_report_version_id,
+               edition.subtitle_state, slot.name AS slot_name,
+               slot.scheduled_at, slot.bucharest_day AS day
+        FROM video_digest_publication_intents AS publication
+        JOIN video_digest_editions AS edition ON edition.edition_id = publication.edition_id
+        JOIN video_digest_slots AS slot ON slot.edition_id = publication.edition_id
+        WHERE publication.stage = 'published' AND slot.stage = 'published'
+          AND slot.bucharest_day = %s
+        ORDER BY publication.published_at DESC, publication.publication_id DESC
+        LIMIT %s
+        """,
+        [day, limit],
+    )
+    return tuple(_published_summary(row, base_url) for row in rows)
+
+
+def read_published_edition(
+    edition_id: EditionId,
+    *,
+    public_media_base_url: str,
+) -> PublishedEdition | None:
+    base_url = _public_media_origin(public_media_base_url)
+    rows = catalog_query(
+        """
+        SELECT publication.publication_id, publication.edition_id,
+               publication.expected_video_key, publication.video_digest,
+               publication.video_byte_size, publication.video_media_type,
+               publication.subtitle_expected_key, publication.subtitle_digest,
+               publication.subtitle_byte_size, publication.subtitle_media_type,
+               publication.published_at, edition.daily_report_version_id,
+               edition.subtitle_state, slot.name AS slot_name,
+               slot.scheduled_at, slot.bucharest_day AS day
+        FROM video_digest_publication_intents AS publication
+        JOIN video_digest_editions AS edition ON edition.edition_id = publication.edition_id
+        JOIN video_digest_slots AS slot ON slot.edition_id = publication.edition_id
+        WHERE publication.edition_id = %s
+          AND publication.stage = 'published' AND slot.stage = 'published'
+        """,
+        [edition_id],
+    )
+    if not rows:
+        return None
+    if len(rows) != 1:
+        raise ResearchCatalogError("PostgreSQL returned duplicate published video digests")
+    story_rows = catalog_query(
+        """
+        SELECT story_id, position, report_subject_id, title, requested_duration_ms
+        FROM video_digest_stories
+        WHERE edition_id = %s
+        ORDER BY position ASC, story_id ASC
+        """,
+        [edition_id],
+    )
+    summary = _published_summary(rows[0], base_url)
+    return PublishedEdition(
+        **summary.model_dump(),
+        stories=tuple(PublishedStory.model_validate(row) for row in story_rows),
+    )
+
+
+def _lock_edition_outputs(
+    connection: CatalogConnection,
+    edition_id: EditionId,
+) -> Mapping[str, Any]:
+    row = connection.execute(
+        """
+        SELECT edition_id, assembled_video_artifact_version_id, subtitle_state,
+               subtitle_artifact_version_id,
+               subtitle_failure_evidence_artifact_version_id
+        FROM video_digest_editions
+        WHERE edition_id = %s
+        FOR UPDATE
+        """,
+        (edition_id,),
+    ).fetchone()
+    if row is None:
+        raise VideoDigestCheckpointConflictError("Video digest edition is unavailable")
+    return row
+
+
+def _subtitle_outcome_from_row(row: Mapping[str, Any]) -> SubtitleOutcome | None:
+    state = str(row["subtitle_state"])
+    if state == "pending":
+        return None
+    if state == "available":
+        return AvailableSubtitles(artifact_version_id=row["subtitle_artifact_version_id"])
+    if state == "failed":
+        return FailedSubtitles(
+            evidence_artifact_version_id=row["subtitle_failure_evidence_artifact_version_id"]
+        )
+    raise VideoDigestCheckpointConflictError("Stored subtitle state is invalid")
+
+
+def _advance_slot(
+    connection: CatalogConnection,
+    lease: SlotLease,
+    current: datetime,
+    *,
+    from_stage: SlotStage,
+    to_stage: SlotStage,
+) -> None:
+    _execute_returning(
+        connection,
+        """
+        UPDATE video_digest_slots
+        SET stage = %s, updated_at = %s
+        WHERE slot_id = %s AND edition_id = %s AND lease_owner_token = %s
+          AND lease_expires_at = %s AND claim_count = %s AND stage = %s
+        RETURNING slot_id
+        """,
+        (
+            to_stage.value,
+            current,
+            lease.slot_id,
+            lease.edition_id,
+            lease.owner_token,
+            lease.expires_at,
+            lease.claim_count,
+            from_stage.value,
+        ),
+        VideoDigestLeaseLostError("Video digest slot lease was lost"),
+    )
+
+
+def _lock_publication_for_edition(
+    connection: CatalogConnection,
+    edition_id: EditionId,
+) -> Mapping[str, Any] | None:
+    return connection.execute(
+        """
+        SELECT publication_id, edition_id, expected_video_key, video_digest,
+               video_byte_size, video_media_type, subtitle_expected_key,
+               subtitle_digest, subtitle_byte_size, subtitle_media_type,
+               source_video_artifact_version_id, source_subtitle_artifact_version_id,
+               stage, evidence_required, upload_evidence_artifact_version_id,
+               verification_evidence_artifact_version_id,
+               failure_evidence_artifact_version_id, published_at
+        FROM video_digest_publication_intents
+        WHERE edition_id = %s
+        FOR UPDATE
+        """,
+        (edition_id,),
+    ).fetchone()
+
+
+def _required_publication(
+    connection: CatalogConnection,
+    publication_id: PublicationId,
+    edition_id: EditionId,
+) -> Mapping[str, Any]:
+    row = _lock_publication_for_edition(connection, edition_id)
+    if row is None or str(row["publication_id"]) != publication_id:
+        raise VideoDigestCheckpointConflictError("Video digest publication is unavailable")
+    return row
+
+
+def _publication_status(row: Mapping[str, Any]) -> PublicationStatus:
+    return PublicationStatus(
+        publication_id=PublicationId(str(row["publication_id"])),
+        edition_id=EditionId(str(row["edition_id"])),
+        stage=PublicationState(str(row["stage"])),
+    )
+
+
+def _publication_intent_matches(row: Mapping[str, Any], intent: PublicationIntent) -> bool:
+    subtitle = intent.subtitle
+    return (
+        str(row["publication_id"]),
+        str(row["edition_id"]),
+        str(row["expected_video_key"]),
+        str(row["video_digest"]),
+        int(row["video_byte_size"]),
+        str(row["video_media_type"]),
+        str(row["subtitle_expected_key"]) if row["subtitle_expected_key"] is not None else None,
+        str(row["subtitle_digest"]) if row["subtitle_digest"] is not None else None,
+        int(row["subtitle_byte_size"]) if row["subtitle_byte_size"] is not None else None,
+        str(row["subtitle_media_type"]) if row["subtitle_media_type"] is not None else None,
+        str(row["source_video_artifact_version_id"]),
+        (
+            str(row["source_subtitle_artifact_version_id"])
+            if row["source_subtitle_artifact_version_id"] is not None
+            else None
+        ),
+    ) == (
+        intent.publication_id,
+        intent.edition_id,
+        intent.expected_video_key,
+        intent.video_digest,
+        intent.video_byte_size,
+        intent.video_media_type,
+        subtitle.expected_key if subtitle is not None else None,
+        subtitle.content_digest if subtitle is not None else None,
+        subtitle.byte_size if subtitle is not None else None,
+        subtitle.media_type if subtitle is not None else None,
+        intent.source_video_version_id,
+        intent.source_subtitle_version_id,
+    )
+
+
+def _validate_intent_sources(
+    connection: CatalogConnection,
+    intent: PublicationIntent,
+    edition_row: Mapping[str, Any],
+) -> None:
+    subtitle_state = str(edition_row["subtitle_state"])
+    expected_subtitle = (
+        str(edition_row["subtitle_artifact_version_id"])
+        if edition_row["subtitle_artifact_version_id"] is not None
+        else None
+    )
+    if (
+        str(edition_row["assembled_video_artifact_version_id"]) != intent.source_video_version_id
+        or expected_subtitle != intent.source_subtitle_version_id
+        or (subtitle_state == "available") != (intent.subtitle is not None)
+        or subtitle_state not in {"available", "failed"}
+    ):
+        raise VideoDigestCheckpointConflictError(
+            "Publication intent sources conflict with the edition"
+        )
+    video_metadata = _artifact_metadata(connection, intent.source_video_version_id)
+    if video_metadata != (
+        intent.video_digest,
+        intent.video_byte_size,
+        intent.video_media_type,
+    ):
+        raise VideoDigestCheckpointConflictError(
+            "Publication video metadata conflicts with its source artifact"
+        )
+    if intent.subtitle is not None and intent.source_subtitle_version_id is not None:
+        subtitle_metadata = _artifact_metadata(connection, intent.source_subtitle_version_id)
+        if subtitle_metadata != (
+            intent.subtitle.content_digest,
+            intent.subtitle.byte_size,
+            intent.subtitle.media_type,
+        ):
+            raise VideoDigestCheckpointConflictError(
+                "Publication subtitle metadata conflicts with its source artifact"
+            )
+
+
+def _artifact_metadata(
+    connection: CatalogConnection,
+    version_id: str,
+) -> tuple[str, int, str]:
+    row = connection.execute(
+        """
+        SELECT version.content_digest, file.byte_size, file.media_type
+        FROM artifact_versions AS version
+        JOIN artifact_files AS file ON file.artifact_version_id = version.id
+        WHERE version.id = %s
+        """,
+        (version_id,),
+    ).fetchone()
+    if row is None:
+        raise VideoDigestCheckpointConflictError(
+            "Publication source artifact metadata is unavailable"
+        )
+    return (
+        str(row["content_digest"]),
+        int(row["byte_size"]),
+        str(row["media_type"]),
+    )
+
+
+def _validate_verified_publication(
+    progress: VerifiedPublication,
+    row: Mapping[str, Any],
+) -> None:
+    video = progress.video
+    if (
+        video.content_digest,
+        video.byte_size,
+        video.media_type,
+        video.source_artifact_version_id,
+    ) != (
+        str(row["video_digest"]),
+        int(row["video_byte_size"]),
+        str(row["video_media_type"]),
+        str(row["source_video_artifact_version_id"]),
+    ):
+        raise VideoDigestCheckpointConflictError(
+            "Verified public video conflicts with the publication intent"
+        )
+    subtitle = progress.subtitle
+    if row["subtitle_expected_key"] is None:
+        if subtitle is not None:
+            raise VideoDigestCheckpointConflictError(
+                "Verified subtitle conflicts with the publication intent"
+            )
+        return
+    if subtitle is None or (
+        subtitle.content_digest,
+        subtitle.byte_size,
+        subtitle.media_type,
+        subtitle.source_artifact_version_id,
+    ) != (
+        str(row["subtitle_digest"]),
+        int(row["subtitle_byte_size"]),
+        str(row["subtitle_media_type"]),
+        str(row["source_subtitle_artifact_version_id"]),
+    ):
+        raise VideoDigestCheckpointConflictError(
+            "Verified subtitle conflicts with the publication intent"
+        )
+
+
+def _require_progress_evidence(
+    connection: CatalogConnection,
+    row: Mapping[str, Any],
+    progress: PublicationProgress,
+    evidence_file: ArtifactFile | None,
+) -> None:
+    if not bool(row["evidence_required"]):
+        return
+    if isinstance(progress, UploadingPublication):
+        return
+    field = (
+        "upload_evidence_artifact_version_id"
+        if isinstance(progress, UploadedPublication)
+        else "verification_evidence_artifact_version_id"
+    )
+    if (
+        evidence_file is None
+        or row[field] != progress.evidence_artifact_version_id
+        or not _stored_artifact_matches(connection, evidence_file)
+    ):
+        raise VideoDigestCheckpointConflictError(
+            "Stored publication evidence conflicts with progress"
+        )
+
+
+def _terminalize_slot(
+    connection: CatalogConnection,
+    lease: SlotLease,
+    current: datetime,
+    *,
+    stage: Literal[SlotStage.FAILED, SlotStage.PUBLISHED],
+    failure_version: str | None,
+) -> None:
+    _execute_returning(
+        connection,
+        """
+        UPDATE video_digest_slots
+        SET stage = %s, lease_owner_token = NULL, lease_expires_at = NULL,
+            terminal_lease_owner_token = %s, terminal_lease_expires_at = %s,
+            terminal_claim_count = %s,
+            failure_evidence_artifact_version_id = %s, updated_at = %s
+        WHERE slot_id = %s AND edition_id = %s AND lease_owner_token = %s
+          AND lease_expires_at = %s AND claim_count = %s
+          AND stage IN ('claimed', 'planning', 'generating', 'assembling',
+                        'subtitling', 'publishing')
+        RETURNING slot_id
+        """,
+        (
+            stage.value,
+            lease.owner_token,
+            lease.expires_at,
+            lease.claim_count,
+            failure_version,
+            current,
+            lease.slot_id,
+            lease.edition_id,
+            lease.owner_token,
+            lease.expires_at,
+            lease.claim_count,
+        ),
+        VideoDigestLeaseLostError("Video digest slot lease was lost"),
+    )
+
+
+def _validate_failure_file(slot_id: SlotId, evidence_file: ArtifactFile) -> None:
+    if (
+        evidence_file.artifact_id != f"{slot_id}:failure"
+        or evidence_file.artifact_kind != "video_digest_failure"
+    ):
+        raise ValueError("Video digest failure artifact identity is invalid")
+
+
+def _require_terminal_failure_replay(
+    connection: CatalogConnection,
+    slot_row: Mapping[str, Any],
+    lease: SlotLease,
+    evidence_file: ArtifactFile,
+) -> None:
+    if (
+        not _terminal_fence_matches(slot_row, lease)
+        or slot_row["failure_evidence_artifact_version_id"] != evidence_file.version_id
+    ):
+        raise VideoDigestLeaseLostError("Video digest slot lease was lost")
+    if not _stored_artifact_matches(connection, evidence_file):
+        raise VideoDigestCheckpointConflictError(
+            "Stored video digest failure conflicts with the request"
+        )
+
+
+def _public_media_origin(value: str) -> str:
+    parsed = urlsplit(value.strip())
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("public_media_base_url must be an HTTPS origin")
+    return f"https://{parsed.netloc}"
+
+
+def _published_summary(row: Mapping[str, Any], base_url: str) -> PublishedEditionSummary:
+    video = PublishedMedia.model_validate(
+        {
+            "url": f"{base_url}/{row['expected_video_key']}",
+            "content_digest": row["video_digest"],
+            "byte_size": row["video_byte_size"],
+            "media_type": row["video_media_type"],
+        }
+    )
+    subtitle_state = str(row["subtitle_state"])
+    if subtitle_state == "available":
+        subtitle = PublishedSubtitleAvailable(
+            media=PublishedMedia.model_validate(
+                {
+                    "url": f"{base_url}/{row['subtitle_expected_key']}",
+                    "content_digest": row["subtitle_digest"],
+                    "byte_size": row["subtitle_byte_size"],
+                    "media_type": row["subtitle_media_type"],
+                }
+            )
+        )
+    elif subtitle_state == "failed":
+        subtitle = PublishedSubtitleFailed()
+    else:
+        raise ResearchCatalogError("Published video digest has unresolved subtitles")
+    day_value = row["day"]
+    return PublishedEditionSummary(
+        edition_id=row["edition_id"],
+        publication_id=row["publication_id"],
+        day=day_value if isinstance(day_value, date) else date.fromisoformat(str(day_value)),
+        slot_name=SlotName(str(row["slot_name"])),
+        scheduled_at=_datetime(row["scheduled_at"]),
+        published_at=_datetime(row["published_at"]),
+        daily_report_version_id=row["daily_report_version_id"],
+        video=video,
+        subtitle=subtitle,
+    )
 
 
 def _claim_active_slot(
