@@ -270,6 +270,20 @@ AttemptCost = Annotated[
 ]
 
 
+class GenerationRequestState(NewsModel):
+    request_id: GenerationRequestIdField
+    stage: GenerationStage
+    provider_receipt_id: NonEmptyText | None = None
+    cost: AttemptCost
+
+
+class GenerationSpend(NewsModel):
+    measured_usd: Annotated[Decimal, Field(ge=0)]
+    estimated_usd: Annotated[Decimal, Field(ge=0)]
+    pending_requests: Annotated[int, Field(ge=0)]
+    unknown_requests: Annotated[int, Field(ge=0)]
+
+
 class SlotSkipReason(StrEnum):
     SOURCE_MISSING = "source_missing"
     SOURCE_EMPTY = "source_empty"

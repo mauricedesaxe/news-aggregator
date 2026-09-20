@@ -4,6 +4,7 @@ import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from threading import Barrier
 from typing import Any
 from uuid import uuid4
@@ -17,17 +18,29 @@ import romanian_news.catalog.schema as news_schema
 import romanian_news.catalog.video_digest as video_digest_catalog
 import romanian_news.catalog_transport as catalog_transport
 from romanian_news import BUCHAREST
+from romanian_news.catalog.artifacts import artifact_file
 from romanian_news.catalog.schema import NewsCatalogSchemaError, ensure_news_catalog_schema
-from romanian_news.video_digest.errors import VideoDigestLeaseLostError
+from romanian_news.video_digest.errors import (
+    VideoDigestCheckpointConflictError,
+    VideoDigestLeaseLostError,
+)
 from romanian_news.video_digest.models import (
     ClaimedSlot,
     ClaimResult,
+    DigestPlan,
     EditionIdentity,
+    EstimatedAttemptCost,
+    GenerationRequestIdentity,
+    GenerationStage,
+    MeasuredAttemptCost,
+    PlannedStory,
     ScheduledSlot,
     SkippedSlot,
     SlotName,
     SlotSkipReason,
     edition_id,
+    generation_request_id,
+    planned_story_id,
     scheduled_slot_id,
 )
 
@@ -227,6 +240,11 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
     assert migrations == [
         (1, "initial", news_schema.NEWS_CATALOG_MIGRATIONS[0].sha256),
         (2, "video_digest", news_schema.NEWS_CATALOG_MIGRATIONS[1].sha256),
+        (
+            3,
+            "video_digest_generation_fences",
+            news_schema.NEWS_CATALOG_MIGRATIONS[2].sha256,
+        ),
     ]
 
 
@@ -612,3 +630,219 @@ def test_video_digest_publication_and_slot_complete_together(
                 "lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
                 (slot_id,),
             )
+
+
+def test_video_digest_generation_checkpoints_complete_atomically(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    recorded_at = datetime.now(UTC)
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        report, policy = _record_artifact_versions(connection, 500, 2)
+
+    identity = EditionIdentity(
+        edition_id=edition_id(report, policy),
+        daily_report_version_id=report,
+        policy_bundle_version_id=policy,
+    )
+    slot = ScheduledSlot(
+        slot_id=scheduled_slot_id(SlotName.MORNING, recorded_at),
+        name=SlotName.MORNING,
+        scheduled_at=recorded_at,
+        bucharest_day=recorded_at.astimezone(BUCHAREST).date(),
+    )
+    video_digest_catalog.schedule_slot(slot, recorded_at=recorded_at)
+    claimed = video_digest_catalog.claim_slot(
+        slot.slot_id,
+        identity,
+        owner_token="generation-contract",
+        now=recorded_at,
+        lease_duration=timedelta(hours=1),
+    )
+    assert isinstance(claimed, ClaimedSlot)
+    lease = claimed.lease
+
+    plan_file = artifact_file(
+        artifact_id=identity.edition_id,
+        artifact_kind="video_digest_plan",
+        title="Contract plan",
+        content=b"contract plan",
+        r2_key="contracts/video-digest/plan.json",
+        media_type="application/json",
+    )
+    story = PlannedStory(
+        story_id=planned_story_id(identity.edition_id, 0, _sha256_id(502)),
+        edition_id=identity.edition_id,
+        position=0,
+        report_subject_id=_sha256_id(502),
+        title="Contract story",
+        requested_duration_ms=15_000,
+    )
+    video_digest_catalog.checkpoint_plan(
+        lease,
+        DigestPlan(
+            edition_id=identity.edition_id,
+            artifact_version_id=plan_file.version_id,
+            stories=(story,),
+        ),
+        plan_file=plan_file,
+        recorded_at=recorded_at,
+    )
+    verification_file = artifact_file(
+        artifact_id=story.story_id,
+        artifact_kind="video_digest_story_verification",
+        title="Contract verification",
+        content=b"verified",
+        r2_key="contracts/video-digest/verification.json",
+        media_type="application/json",
+    )
+    video_digest_catalog.checkpoint_story_verification(
+        lease,
+        story.story_id,
+        evidence_file=verification_file,
+        recorded_at=recorded_at,
+    )
+
+    request_file = artifact_file(
+        artifact_id=f"{identity.edition_id}:0:0:generation-request",
+        artifact_kind="video_digest_generation_request",
+        title="Contract generation request",
+        content=b"request",
+        r2_key="contracts/video-digest/request.json",
+        media_type="application/json",
+    )
+    request = GenerationRequestIdentity(
+        request_id=generation_request_id(identity.edition_id, 0, 0, request_file.version_id),
+        edition_id=identity.edition_id,
+        story_position=0,
+        attempt_index=0,
+        request_artifact_version_id=request_file.version_id,
+    )
+    pending = video_digest_catalog.checkpoint_generation_request(
+        lease, request, request_file=request_file, recorded_at=recorded_at
+    )
+    assert pending.stage is GenerationStage.PENDING
+
+    receipt_id = f"fal-{request.request_id}"
+    receipt_file = artifact_file(
+        artifact_id=receipt_id,
+        artifact_kind="video_digest_provider_receipt",
+        title="Contract provider receipt",
+        content=b"receipt",
+        r2_key="contracts/video-digest/receipt.json",
+        media_type="application/json",
+    )
+    submitted = video_digest_catalog.checkpoint_generation_submission(
+        lease,
+        request.request_id,
+        provider_receipt_id=receipt_id,
+        receipt_file=receipt_file,
+        cost=EstimatedAttemptCost(usd=Decimal("1.25")),
+        recorded_at=recorded_at,
+    )
+    assert submitted.provider_receipt_id == receipt_id
+
+    response_file = artifact_file(
+        artifact_id=f"{request.request_id}:response",
+        artifact_kind="video_digest_generation_response",
+        title="Contract generation response",
+        content=b"response",
+        r2_key="contracts/video-digest/response.json",
+        media_type="application/json",
+    )
+    processing = video_digest_catalog.checkpoint_generation_response(
+        lease,
+        request.request_id,
+        response_file=response_file,
+        recorded_at=recorded_at,
+    )
+    assert processing.stage is GenerationStage.PROCESSING
+
+    clip_file = artifact_file(
+        artifact_id=f"{story.story_id}:accepted-clip",
+        artifact_kind="video_digest_accepted_clip",
+        title="Contract accepted clip",
+        content=b"clip",
+        r2_key="contracts/video-digest/clip.mp4",
+        media_type="video/mp4",
+    )
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        connection.execute(
+            "CREATE FUNCTION reject_contract_story_acceptance() RETURNS trigger "
+            "LANGUAGE plpgsql AS $$ BEGIN "
+            "IF NEW.stage = 'accepted' THEN "
+            "RAISE EXCEPTION 'contract rejection' USING ERRCODE = '23000'; "
+            "END IF; RETURN NEW; END; $$"
+        )
+        connection.execute(
+            "CREATE TRIGGER contract_reject_story_acceptance "
+            "BEFORE UPDATE ON video_digest_stories "
+            "FOR EACH ROW EXECUTE FUNCTION reject_contract_story_acceptance()"
+        )
+    with pytest.raises(VideoDigestCheckpointConflictError):
+        video_digest_catalog.checkpoint_generation_acceptance(
+            lease,
+            request.request_id,
+            clip_file=clip_file,
+            cost=MeasuredAttemptCost(usd=Decimal("1.10")),
+            recorded_at=recorded_at,
+        )
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        rolled_back = connection.execute(
+            "SELECT request.stage, artifact.id "
+            "FROM video_digest_generation_requests AS request "
+            "LEFT JOIN artifacts AS artifact ON artifact.id = %s "
+            "WHERE request.request_id = %s",
+            (clip_file.artifact_id, request.request_id),
+        ).fetchone()
+        assert rolled_back == ("processing", None)
+        connection.execute("DROP TRIGGER contract_reject_story_acceptance ON video_digest_stories")
+        connection.execute("DROP FUNCTION reject_contract_story_acceptance()")
+
+    accepted = video_digest_catalog.checkpoint_generation_acceptance(
+        lease,
+        request.request_id,
+        clip_file=clip_file,
+        cost=MeasuredAttemptCost(usd=Decimal("1.10")),
+        recorded_at=recorded_at,
+    )
+    assert accepted.stage is GenerationStage.ACCEPTED
+    video_digest_catalog.checkpoint_assembly_ready(lease, recorded_at=recorded_at)
+
+    spend = video_digest_catalog.read_generation_spend(identity.edition_id)
+    assert spend.measured_usd == Decimal("1.10")
+    assert spend.estimated_usd == Decimal("0")
+    assert spend.pending_requests == 0
+    assert spend.unknown_requests == 0
+
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        row = connection.execute(
+            "SELECT slot.stage, story.stage, request.stage, artifact.current_version_id "
+            "FROM video_digest_slots AS slot "
+            "JOIN video_digest_stories AS story ON story.edition_id = slot.edition_id "
+            "JOIN video_digest_generation_requests AS request "
+            "  ON request.edition_id = story.edition_id "
+            " AND request.story_position = story.position "
+            "JOIN artifacts AS artifact ON artifact.id = %s "
+            "WHERE slot.slot_id = %s",
+            (clip_file.artifact_id, slot.slot_id),
+        ).fetchone()
+        second_request_version = _record_artifact_versions(connection, 503, 1)[0]
+        connection.execute(
+            "INSERT INTO video_digest_generation_requests "
+            "(request_id, edition_id, story_position, attempt_index, "
+            " request_artifact_version_id, stage, cost_kind, created_at, updated_at) "
+            "VALUES (%s, %s, 0, 1, %s, 'pending', 'pending', "
+            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            (_sha256_id(504), identity.edition_id, second_request_version),
+        )
+        with pytest.raises(psycopg.errors.UniqueViolation):
+            connection.execute(
+                "UPDATE video_digest_generation_requests "
+                "SET stage = 'submitted', provider_receipt_id = %s, "
+                "cost_kind = 'estimated', cost_usd = 1, updated_at = CURRENT_TIMESTAMP "
+                "WHERE request_id = %s",
+                (receipt_id, _sha256_id(504)),
+            )
+    assert row == ("assembling", "accepted", "accepted", clip_file.version_id)

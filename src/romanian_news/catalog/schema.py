@@ -34,6 +34,11 @@ class NewsCatalogMigration:
 NEWS_CATALOG_MIGRATIONS = (
     NewsCatalogMigration(1, "initial", MIGRATIONS_PATH / "0001_initial.sql"),
     NewsCatalogMigration(2, "video_digest", MIGRATIONS_PATH / "0002_video_digest.sql"),
+    NewsCatalogMigration(
+        3,
+        "video_digest_generation_fences",
+        MIGRATIONS_PATH / "0003_video_digest_generation_fences.sql",
+    ),
 )
 
 
