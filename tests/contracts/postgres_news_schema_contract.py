@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
+from threading import Barrier
 from typing import Any
 from uuid import uuid4
 
@@ -11,7 +14,22 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
 import romanian_news.catalog.schema as news_schema
+import romanian_news.catalog.video_digest as video_digest_catalog
+import romanian_news.catalog_transport as catalog_transport
+from romanian_news import BUCHAREST
 from romanian_news.catalog.schema import NewsCatalogSchemaError, ensure_news_catalog_schema
+from romanian_news.video_digest.errors import VideoDigestLeaseLostError
+from romanian_news.video_digest.models import (
+    ClaimedSlot,
+    ClaimResult,
+    EditionIdentity,
+    ScheduledSlot,
+    SkippedSlot,
+    SlotName,
+    SlotSkipReason,
+    edition_id,
+    scheduled_slot_id,
+)
 
 TEST_POSTGRES_DSN = os.getenv("NEWS_TEST_POSTGRES_DSN")
 
@@ -177,11 +195,9 @@ def postgres_news_schema(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     schema = f"news_schema_contract_{uuid4().hex}"
     with psycopg.connect(TEST_POSTGRES_DSN, autocommit=True) as connection:
         connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
-    monkeypatch.setattr(
-        news_schema,
-        "NEWS_POSTGRES_DSN",
-        make_conninfo(TEST_POSTGRES_DSN, options=f"-csearch_path={schema}"),
-    )
+    fixture_dsn = make_conninfo(TEST_POSTGRES_DSN, options=f"-csearch_path={schema}")
+    monkeypatch.setattr(news_schema, "NEWS_POSTGRES_DSN", fixture_dsn)
+    monkeypatch.setattr(catalog_transport, "NEWS_POSTGRES_DSN", fixture_dsn)
     try:
         yield schema
     finally:
@@ -409,6 +425,90 @@ def test_video_digest_lease_owner_requires_a_fresh_claim(
             "lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', claim_count = 2, "
             "updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
             (slot_id,),
+        )
+
+
+def test_video_digest_catalog_serializes_claim_race_and_fences_recovery(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert catalog_transport.NEWS_POSTGRES_DSN is not None
+    fixture_dsn = catalog_transport.NEWS_POSTGRES_DSN
+    recorded_at = datetime.now(UTC)
+
+    with psycopg.connect(fixture_dsn, autocommit=True) as connection:
+        report, policy = _record_artifact_versions(connection, 350, 2)
+
+    identity = EditionIdentity(
+        edition_id=edition_id(report, policy),
+        daily_report_version_id=report,
+        policy_bundle_version_id=policy,
+    )
+    slots = tuple(
+        ScheduledSlot(
+            slot_id=scheduled_slot_id(name, scheduled_at),
+            name=name,
+            scheduled_at=scheduled_at,
+            bucharest_day=scheduled_at.astimezone(BUCHAREST).date(),
+        )
+        for name, scheduled_at in (
+            (SlotName.MORNING, datetime(2026, 9, 20, 6, tzinfo=UTC)),
+            (SlotName.MIDDAY, datetime(2026, 9, 20, 9, tzinfo=UTC)),
+        )
+    )
+    for slot in slots:
+        video_digest_catalog.schedule_slot(slot, recorded_at=recorded_at)
+    barrier = Barrier(2)
+
+    def race(arguments: tuple[ScheduledSlot, str]) -> ClaimResult | BaseException:
+        slot, owner_token = arguments
+        try:
+            barrier.wait()
+            return video_digest_catalog.claim_slot(
+                slot.slot_id,
+                identity,
+                owner_token=owner_token,
+                now=recorded_at,
+                lease_duration=timedelta(hours=1),
+            )
+        except BaseException as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(race, zip(slots, ("owner-a", "owner-b"), strict=True)))
+
+    errors = [result for result in results if isinstance(result, BaseException)]
+    assert errors == []
+    claimed = [result for result in results if isinstance(result, ClaimedSlot)]
+    skipped = [result for result in results if isinstance(result, SkippedSlot)]
+    assert len(claimed) == 1
+    assert skipped == [SkippedSlot(reason=SlotSkipReason.ACTIVE_EDITION)]
+    prior_lease = claimed[0].lease
+
+    recovery_time = datetime.now(UTC)
+    with psycopg.connect(fixture_dsn) as connection:
+        connection.execute(
+            "UPDATE video_digest_slots SET lease_expires_at = %s, updated_at = %s "
+            "WHERE slot_id = %s",
+            (recovery_time - timedelta(seconds=1), recovery_time, prior_lease.slot_id),
+        )
+
+    recovered = video_digest_catalog.claim_slot(
+        prior_lease.slot_id,
+        identity,
+        owner_token="owner-c",
+        now=recovery_time,
+        lease_duration=timedelta(hours=1),
+    )
+    assert isinstance(recovered, ClaimedSlot)
+    assert recovered.lease.claim_count == prior_lease.claim_count + 1
+    assert recovered.lease.owner_token == "owner-c"
+
+    with pytest.raises(VideoDigestLeaseLostError):
+        video_digest_catalog.renew_slot(
+            prior_lease,
+            now=recovery_time,
+            lease_duration=timedelta(hours=1),
         )
 
 
