@@ -438,3 +438,14 @@ def test_publication_rejects_invalid_size_and_mismatched_identity() -> None:
         PublicationIntent.model_validate(values | {"video_byte_size": 0})
     with pytest.raises(ValidationError, match="does not match"):
         PublicationIntent.model_validate(values | {"publication_id": PublicationId("0" * 64)})
+
+
+@pytest.mark.parametrize(
+    "key",
+    ("/absolute.mp4", "video-digests//edition.mp4", "../edition.mp4", "video/./edition.mp4"),
+)
+def test_publication_rejects_non_normalized_public_object_keys(key: str) -> None:
+    values = _publication_values()
+
+    with pytest.raises(ValidationError):
+        PublicationIntent.model_validate(values | {"expected_video_key": key})

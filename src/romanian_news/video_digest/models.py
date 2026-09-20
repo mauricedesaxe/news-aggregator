@@ -5,7 +5,14 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal, NewType
 
-from pydantic import AwareDatetime, Field, StringConstraints, model_validator
+from pydantic import (
+    AfterValidator,
+    AwareDatetime,
+    Field,
+    HttpUrl,
+    StringConstraints,
+    model_validator,
+)
 
 from romanian_news import BUCHAREST, NewsModel, Sha256
 from romanian_news.catalog.artifacts import canonical_json, sha256
@@ -332,8 +339,25 @@ SubtitleOutcome = Annotated[
 ]
 
 
+def _normalized_public_object_key(value: str) -> str:
+    if value.startswith("/") or any(part in {"", ".", ".."} for part in value.split("/")):
+        raise ValueError("Public object key must be a normalized relative path")
+    return value
+
+
+PublicObjectKey = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$",
+    ),
+    AfterValidator(_normalized_public_object_key),
+]
+
+
 class SubtitleObjectMetadata(NewsModel):
-    expected_key: NonEmptyText
+    expected_key: PublicObjectKey
     content_digest: Sha256
     byte_size: Annotated[int, Field(gt=0)]
     media_type: NonEmptyText
@@ -371,7 +395,7 @@ def publication_id(
 class PublicationIntent(NewsModel):
     publication_id: PublicationIdField
     edition_id: EditionIdField
-    expected_video_key: NonEmptyText
+    expected_video_key: PublicObjectKey
     video_digest: Sha256
     video_byte_size: Annotated[int, Field(gt=0)]
     video_media_type: NonEmptyText
@@ -397,4 +421,102 @@ class PublicationIntent(NewsModel):
         )
         if self.publication_id != expected:
             raise ValueError("Publication ID does not match its intent")
+        return self
+
+
+class AssembledVideo(NewsModel):
+    edition_id: EditionIdField
+    artifact_version_id: Sha256
+
+
+class PublicationStatus(NewsModel):
+    publication_id: PublicationIdField
+    edition_id: EditionIdField
+    stage: PublicationState
+
+
+class UploadingPublication(NewsModel):
+    kind: Literal["uploading"] = "uploading"
+
+
+class UploadedPublication(NewsModel):
+    kind: Literal["uploaded"] = "uploaded"
+    evidence_artifact_version_id: Sha256
+
+
+class VerifiedPublicObject(NewsModel):
+    content_digest: Sha256
+    byte_size: Annotated[int, Field(gt=0)]
+    media_type: NonEmptyText
+    source_artifact_version_id: Sha256
+
+
+class VerifiedPublication(NewsModel):
+    kind: Literal["verified"] = "verified"
+    evidence_artifact_version_id: Sha256
+    video: VerifiedPublicObject
+    subtitle: VerifiedPublicObject | None = None
+
+
+PublicationProgress = Annotated[
+    UploadingPublication | UploadedPublication | VerifiedPublication,
+    Field(discriminator="kind"),
+]
+
+
+class PublishedPublication(NewsModel):
+    publication_id: PublicationIdField
+    edition_id: EditionIdField
+    published_at: AwareDatetime
+
+
+class PublishedMedia(NewsModel):
+    url: HttpUrl
+    content_digest: Sha256
+    byte_size: Annotated[int, Field(gt=0)]
+    media_type: NonEmptyText
+
+
+class PublishedSubtitleAvailable(NewsModel):
+    kind: Literal["available"] = "available"
+    media: PublishedMedia
+
+
+class PublishedSubtitleFailed(NewsModel):
+    kind: Literal["failed"] = "failed"
+
+
+PublishedSubtitle = Annotated[
+    PublishedSubtitleAvailable | PublishedSubtitleFailed,
+    Field(discriminator="kind"),
+]
+
+
+class PublishedStory(NewsModel):
+    story_id: StoryIdField
+    position: Annotated[int, Field(ge=0)]
+    report_subject_id: Sha256
+    title: NonEmptyText
+    requested_duration_ms: Annotated[int, Field(gt=0)]
+
+
+class PublishedEditionSummary(NewsModel):
+    edition_id: EditionIdField
+    publication_id: PublicationIdField
+    day: date
+    slot_name: SlotName
+    scheduled_at: AwareDatetime
+    published_at: AwareDatetime
+    daily_report_version_id: Sha256
+    video: PublishedMedia
+    subtitle: PublishedSubtitle
+
+
+class PublishedEdition(PublishedEditionSummary):
+    stories: Annotated[tuple[PublishedStory, ...], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def validate_story_order(self) -> PublishedEdition:
+        if tuple(story.position for story in self.stories) != tuple(range(len(self.stories))):
+            raise ValueError("Published stories must be ordered and contiguous from zero")
         return self

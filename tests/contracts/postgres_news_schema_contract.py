@@ -30,17 +30,24 @@ from romanian_news.video_digest.models import (
     DigestPlan,
     EditionIdentity,
     EstimatedAttemptCost,
+    FailedSubtitles,
     GenerationRequestIdentity,
     GenerationStage,
     MeasuredAttemptCost,
     PlannedStory,
+    PublicationIntent,
     ScheduledSlot,
     SkippedSlot,
     SlotName,
     SlotSkipReason,
+    UploadedPublication,
+    UploadingPublication,
+    VerifiedPublication,
+    VerifiedPublicObject,
     edition_id,
     generation_request_id,
     planned_story_id,
+    publication_id,
     scheduled_slot_id,
 )
 
@@ -244,6 +251,11 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
             3,
             "video_digest_generation_fences",
             news_schema.NEWS_CATALOG_MIGRATIONS[2].sha256,
+        ),
+        (
+            4,
+            "video_digest_publication_evidence",
+            news_schema.NEWS_CATALOG_MIGRATIONS[3].sha256,
         ),
     ]
 
@@ -537,9 +549,19 @@ def test_video_digest_publication_and_slot_complete_together(
     assert news_schema.NEWS_POSTGRES_DSN is not None
 
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy, plan, video, subtitles, verification, request_version, response, clip = (
-            _record_artifact_versions(connection, 400, 9)
-        )
+        (
+            report,
+            policy,
+            plan,
+            video,
+            subtitles,
+            verification,
+            request_version,
+            response,
+            clip,
+            upload_evidence,
+            publication_verification,
+        ) = _record_artifact_versions(connection, 400, 11)
         edition_id, slot_id, story_id, request_id, publication_id = (
             _sha256_id(value) for value in range(420, 425)
         )
@@ -578,12 +600,23 @@ def test_video_digest_publication_and_slot_complete_together(
             "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
             (video, edition_id),
         )
-        for stage in ("uploading", "uploaded", "verified"):
-            connection.execute(
-                "UPDATE video_digest_publication_intents SET stage = %s, "
-                "updated_at = CURRENT_TIMESTAMP WHERE publication_id = %s",
-                (stage, publication_id),
-            )
+        connection.execute(
+            "UPDATE video_digest_publication_intents SET stage = 'uploading', "
+            "updated_at = CURRENT_TIMESTAMP WHERE publication_id = %s",
+            (publication_id,),
+        )
+        connection.execute(
+            "UPDATE video_digest_publication_intents SET stage = 'uploaded', "
+            "upload_evidence_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
+            "WHERE publication_id = %s",
+            (upload_evidence, publication_id),
+        )
+        connection.execute(
+            "UPDATE video_digest_publication_intents SET stage = 'verified', "
+            "verification_evidence_artifact_version_id = %s, "
+            "updated_at = CURRENT_TIMESTAMP WHERE publication_id = %s",
+            (publication_verification, publication_id),
+        )
 
         with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
             connection.execute(
@@ -614,7 +647,9 @@ def test_video_digest_publication_and_slot_complete_together(
         with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
             connection.execute(
                 "UPDATE video_digest_slots SET stage = 'published', lease_owner_token = NULL, "
-                "lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+                "lease_expires_at = NULL, terminal_lease_owner_token = lease_owner_token, "
+                "terminal_lease_expires_at = lease_expires_at, terminal_claim_count = claim_count, "
+                "updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
                 (slot_id,),
             )
 
@@ -627,7 +662,9 @@ def test_video_digest_publication_and_slot_complete_together(
             )
             connection.execute(
                 "UPDATE video_digest_slots SET stage = 'published', lease_owner_token = NULL, "
-                "lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+                "lease_expires_at = NULL, terminal_lease_owner_token = lease_owner_token, "
+                "terminal_lease_expires_at = lease_expires_at, terminal_claim_count = claim_count, "
+                "updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
                 (slot_id,),
             )
 
@@ -810,6 +847,136 @@ def test_video_digest_generation_checkpoints_complete_atomically(
     assert accepted.stage is GenerationStage.ACCEPTED
     video_digest_catalog.checkpoint_assembly_ready(lease, recorded_at=recorded_at)
 
+    assembled_file = artifact_file(
+        artifact_id=f"{identity.edition_id}:assembled-video",
+        artifact_kind="video_digest_assembled_video",
+        title="Contract assembled video",
+        content=b"assembled video",
+        r2_key="contracts/video-digest/assembled.mp4",
+        media_type="video/mp4",
+    )
+    video_digest_catalog.checkpoint_assembled_video(
+        lease,
+        video_file=assembled_file,
+        recorded_at=recorded_at,
+    )
+    subtitle_failure_file = artifact_file(
+        artifact_id=f"{identity.edition_id}:subtitle-failure",
+        artifact_kind="video_digest_subtitle_failure",
+        title="Contract subtitle failure",
+        content=b"subtitle failure",
+        r2_key="contracts/video-digest/subtitle-failure.json",
+        media_type="application/json",
+    )
+    video_digest_catalog.checkpoint_subtitles(
+        lease,
+        FailedSubtitles(evidence_artifact_version_id=subtitle_failure_file.version_id),
+        artifact_file=subtitle_failure_file,
+        recorded_at=recorded_at,
+    )
+    publication_id_value = publication_id(
+        edition_id_value=identity.edition_id,
+        expected_video_key="contracts/video-digest/public.mp4",
+        video_digest=assembled_file.content_digest,
+        video_byte_size=len(assembled_file.content),
+        video_media_type=assembled_file.media_type,
+        subtitle=None,
+        source_video_version_id=assembled_file.version_id,
+        source_subtitle_version_id=None,
+    )
+    publication = PublicationIntent(
+        publication_id=publication_id_value,
+        edition_id=identity.edition_id,
+        expected_video_key="contracts/video-digest/public.mp4",
+        video_digest=assembled_file.content_digest,
+        video_byte_size=len(assembled_file.content),
+        video_media_type=assembled_file.media_type,
+        source_video_version_id=assembled_file.version_id,
+    )
+    video_digest_catalog.record_publication_intent(lease, publication, recorded_at=recorded_at)
+    video_digest_catalog.checkpoint_publication_progress(
+        lease,
+        publication_id_value,
+        UploadingPublication(),
+        recorded_at=recorded_at,
+    )
+    upload_file = artifact_file(
+        artifact_id=f"{publication_id_value}:upload",
+        artifact_kind="video_digest_publication_upload",
+        title="Contract upload evidence",
+        content=b"uploaded",
+        r2_key="contracts/video-digest/upload.json",
+        media_type="application/json",
+    )
+    video_digest_catalog.checkpoint_publication_progress(
+        lease,
+        publication_id_value,
+        UploadedPublication(evidence_artifact_version_id=upload_file.version_id),
+        evidence_file=upload_file,
+        recorded_at=recorded_at,
+    )
+    public_verification_file = artifact_file(
+        artifact_id=f"{publication_id_value}:verification",
+        artifact_kind="video_digest_publication_verification",
+        title="Contract public verification",
+        content=b"public object verified",
+        r2_key="contracts/video-digest/public-verification.json",
+        media_type="application/json",
+    )
+    video_digest_catalog.checkpoint_publication_progress(
+        lease,
+        publication_id_value,
+        VerifiedPublication(
+            evidence_artifact_version_id=public_verification_file.version_id,
+            video=VerifiedPublicObject(
+                content_digest=publication.video_digest,
+                byte_size=publication.video_byte_size,
+                media_type=publication.video_media_type,
+                source_artifact_version_id=publication.source_video_version_id,
+            ),
+        ),
+        evidence_file=public_verification_file,
+        recorded_at=recorded_at,
+    )
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        connection.execute(
+            "CREATE FUNCTION reject_contract_slot_publication() RETURNS trigger "
+            "LANGUAGE plpgsql AS $$ BEGIN "
+            "IF NEW.stage = 'published' THEN "
+            "RAISE EXCEPTION 'contract rejection' USING ERRCODE = '23000'; "
+            "END IF; RETURN NEW; END; $$"
+        )
+        connection.execute(
+            "CREATE TRIGGER contract_reject_slot_publication "
+            "BEFORE UPDATE ON video_digest_slots "
+            "FOR EACH ROW EXECUTE FUNCTION reject_contract_slot_publication()"
+        )
+    with pytest.raises(VideoDigestCheckpointConflictError):
+        video_digest_catalog.complete_publication(
+            lease, publication_id_value, recorded_at=recorded_at
+        )
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        assert connection.execute(
+            "SELECT stage FROM video_digest_publication_intents WHERE publication_id = %s",
+            (publication_id_value,),
+        ).fetchone() == ("verified",)
+        connection.execute("DROP TRIGGER contract_reject_slot_publication ON video_digest_slots")
+        connection.execute("DROP FUNCTION reject_contract_slot_publication()")
+
+    published = video_digest_catalog.complete_publication(
+        lease, publication_id_value, recorded_at=recorded_at
+    )
+    assert published == video_digest_catalog.complete_publication(
+        lease, publication_id_value, recorded_at=recorded_at + timedelta(minutes=1)
+    )
+    reader_edition = video_digest_catalog.read_published_edition(
+        identity.edition_id,
+        public_media_base_url="https://media.example.com",
+    )
+    assert reader_edition is not None
+    assert tuple(story.position for story in reader_edition.stories) == (0,)
+    assert reader_edition.subtitle.kind == "failed"
+
     spend = video_digest_catalog.read_generation_spend(identity.edition_id)
     assert spend.measured_usd == Decimal("1.10")
     assert spend.estimated_usd == Decimal("0")
@@ -845,4 +1012,4 @@ def test_video_digest_generation_checkpoints_complete_atomically(
                 "WHERE request_id = %s",
                 (receipt_id, _sha256_id(504)),
             )
-    assert row == ("assembling", "accepted", "accepted", clip_file.version_id)
+    assert row == ("published", "accepted", "accepted", clip_file.version_id)

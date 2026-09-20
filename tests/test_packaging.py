@@ -26,6 +26,7 @@ def test_wheel_contains_runtime_assets_without_tests(tmp_path: Path) -> None:
     assert "romanian_news/catalog/migrations/0001_initial.sql" in names
     assert "romanian_news/catalog/migrations/0002_video_digest.sql" in names
     assert "romanian_news/catalog/migrations/0003_video_digest_generation_fences.sql" in names
+    assert "romanian_news/catalog/migrations/0004_video_digest_publication_evidence.sql" in names
     assert not any("/tests/" in name for name in names)
     assert not any("debt" in name or "budget" in name for name in names)
 
