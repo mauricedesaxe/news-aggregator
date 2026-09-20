@@ -7,8 +7,8 @@ import dagster as dg
 from pydantic import TypeAdapter
 
 from romanian_news import BUCHAREST, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.articles.acquisition import plan_article_work
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.config import IMPLEMENTATION_REF, NEWS_WORKSPACE
 from romanian_news.daily import (
     check_current_artifact_inputs,

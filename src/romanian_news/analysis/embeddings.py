@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 from romanian_news import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference, existing_current_artifact_ids
 from romanian_news.analysis.attempts import ModelCall, record_model_attempt
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.relevance import (
@@ -17,6 +16,8 @@ from romanian_news.analysis.relevance import (
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
 from romanian_news.analysis.tracing import ProviderEmbeddingRequest, trace_provider_call
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
+from romanian_news.catalog.artifacts import existing_current_artifact_ids
 from romanian_news.storage import read_verified_r2_object
 
 EMBEDDING_TEXT_POLICY = "title-body-1000-v1"
@@ -88,12 +89,10 @@ def read_pending_embedding_references(
     candidates = tuple(
         EmbeddingReference(
             article=ArticleAnalysisReference(
-                reference=ArtifactReference.model_validate(
-                    value.article.reference.model_dump(), strict=True
-                ),
+                reference=value.article.reference,
                 bucharest_day=value.article.bucharest_day,
             ),
-            relevance=ArtifactReference.model_validate(value.relevance.model_dump(), strict=True),
+            relevance=value.relevance,
         )
         for value in read_embedding_candidates(through_day, day=day)
     )

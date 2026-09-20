@@ -18,7 +18,6 @@ from langfuse.experiment import Evaluation, EvaluatorFunction
 from pydantic import Field, StringConstraints, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.relevance import (
     RELEVANCE_POLICY_V1,
     RELEVANCE_POLICY_V2,
@@ -42,6 +41,7 @@ from romanian_news.analysis.relevance_v3 import (
     relevance_v3_request_id,
 )
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.evaluations import (
     LoadedNewsEvaluationRelease,
     NewsEvaluationDatasetReceipt,

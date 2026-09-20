@@ -5,12 +5,12 @@ import psycopg.errors
 import pytest
 
 from romanian_news import BUCHAREST
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.articles.models import (
     ArticleAcquisitionFailure,
     ArticleBatchSkip,
     ArticleFailureKind,
 )
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog_transport import ResearchCatalogError
 from romanian_news.daily import DailyArtifactReferences
 from romanian_news.worker import operations

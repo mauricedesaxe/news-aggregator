@@ -6,7 +6,7 @@ from typing import Annotated
 from pydantic import Field
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import (
     CurrentArtifactFile,
     artifact_file,

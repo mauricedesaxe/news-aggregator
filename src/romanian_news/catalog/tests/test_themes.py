@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from romanian_news import themes as construction_module
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.groups.models import GroupSummary
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog import themes
 from romanian_news.groups import NewsGroup
 from romanian_news.themes import (

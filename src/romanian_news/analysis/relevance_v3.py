@@ -16,7 +16,6 @@ from openai.types.shared_params import ResponseFormatJSONSchema
 from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.attempts import ModelCall, ProviderResponse, record_model_attempt
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.relevance import ArticleAnalysisInput
@@ -25,6 +24,7 @@ from romanian_news.analysis.tracing import (
     ProviderCallResult,
     trace_provider_call,
 )
+from romanian_news.artifacts import ArtifactReference
 
 CONTEXT_OPERATION_KEY = "news.relevance.v3.context"
 IMPACT_OPERATION_KEY = "news.relevance.v3.impact"

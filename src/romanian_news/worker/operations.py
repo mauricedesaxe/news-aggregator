@@ -8,7 +8,6 @@ from pathlib import Path
 
 from romanian_news import BUCHAREST, Sha256
 from romanian_news.alerts import ping_heartbeat
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.embeddings import (
     embed_article,
     load_embedding_input,
@@ -46,6 +45,7 @@ from romanian_news.articles.recovery import (
     article_work_generation,
     record_article_failure_attempts,
 )
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.analysis import (
     publish_embedding_outputs,
     publish_group_analysis_outputs,

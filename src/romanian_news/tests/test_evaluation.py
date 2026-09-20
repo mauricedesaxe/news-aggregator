@@ -6,9 +6,9 @@ import pytest
 from pydantic import ValidationError
 
 from romanian_news import evaluation
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.groups.models import GroupSummary
 from romanian_news.analysis.relevance_v3 import ContextDecision, ImpactDecision
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.evaluation import (
     ConfidenceEvaluationCase,
     EvaluationCaseResult,

@@ -5,14 +5,8 @@ import json
 from datetime import datetime
 
 from romanian_news import NewsModel, Sha256
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog_transport import catalog_query
-
-
-class CatalogArtifactReference(NewsModel):
-    artifact_id: str
-    version_id: Sha256
-    content_digest: Sha256
-    r2_key: str
 
 
 class ArtifactFile(NewsModel):
@@ -55,7 +49,7 @@ def artifact_file(
     )
 
 
-def current_artifact_reference(artifact_id: str, kind: str) -> CatalogArtifactReference | None:
+def current_artifact_reference(artifact_id: str, kind: str) -> ArtifactReference | None:
     rows = catalog_query(
         """
         SELECT artifact.id AS artifact_id, artifact.current_version_id AS version_id,
@@ -70,13 +64,13 @@ def current_artifact_reference(artifact_id: str, kind: str) -> CatalogArtifactRe
         return None
     if len(rows) != 1:
         raise ValueError(f"Artifact has more than one current file: {artifact_id}")
-    return CatalogArtifactReference.model_validate(rows[0], strict=True)
+    return ArtifactReference.model_validate(rows[0], strict=True)
 
 
 def artifact_references_by_version_ids(
     version_ids: tuple[Sha256, ...],
-) -> dict[Sha256, CatalogArtifactReference]:
-    references: dict[Sha256, CatalogArtifactReference] = {}
+) -> dict[Sha256, ArtifactReference]:
+    references: dict[Sha256, ArtifactReference] = {}
     for offset in range(0, len(version_ids), 50):
         values = version_ids[offset : offset + 50]
         placeholders = ", ".join("%s" for _ in values)
@@ -92,7 +86,7 @@ def artifact_references_by_version_ids(
         )
         references.update(
             {
-                str(row["version_id"]): CatalogArtifactReference.model_validate(row, strict=True)
+                str(row["version_id"]): ArtifactReference.model_validate(row, strict=True)
                 for row in rows
             }
         )
@@ -101,8 +95,8 @@ def artifact_references_by_version_ids(
 
 def current_artifact_references(
     artifact_ids: tuple[str, ...],
-) -> tuple[CatalogArtifactReference, ...]:
-    found: dict[str, CatalogArtifactReference] = {}
+) -> tuple[ArtifactReference, ...]:
+    found: dict[str, ArtifactReference] = {}
     for offset in range(0, len(artifact_ids), 50):
         values = artifact_ids[offset : offset + 50]
         placeholders = ", ".join("%s" for _ in values)
@@ -116,7 +110,7 @@ def current_artifact_references(
             """,
             list(values),
         )
-        references = (CatalogArtifactReference.model_validate(row, strict=True) for row in rows)
+        references = (ArtifactReference.model_validate(row, strict=True) for row in rows)
         found.update((reference.artifact_id, reference) for reference in references)
     return tuple(found[artifact_id] for artifact_id in sorted(found))
 

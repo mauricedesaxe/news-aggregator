@@ -7,9 +7,9 @@ from typing import Annotated, Literal
 from pydantic import Field, field_validator, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.attempts import ModelCall
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup
 
 

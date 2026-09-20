@@ -14,11 +14,12 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
 from pydantic import Field
 
 from romanian_news import GENERATION_MODEL, NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference, existing_current_artifact_ids
 from romanian_news.analysis.attempts import ModelCall, record_model_attempt
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
+from romanian_news.catalog.artifacts import existing_current_artifact_ids
 from romanian_news.storage import read_verified_r2_object
 
 RELEVANCE_PROMPT = (
@@ -425,7 +426,7 @@ def _current_article_references(
 
     return tuple(
         ArticleAnalysisReference(
-            reference=ArtifactReference.model_validate(value.reference.model_dump(), strict=True),
+            reference=value.reference,
             bucharest_day=value.bucharest_day,
         )
         for value in read_current_article_analysis_references(through_day, day=day)
