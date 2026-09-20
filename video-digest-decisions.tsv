@@ -1,3 +1,4 @@
 ts	phase	decision	why	evidence	result
 2026-09-20T21:30:00Z	frame	Defined done as an immutable report reaching authenticated playback through a retry-safe scheduled workflow	The seven remaining beads need one checkable end-to-end result	GitHub issue #11; beads news-nvs.3 through news-nvs.9	baseline 836 tests passed
 2026-09-20T21:38:00Z	planning-design	Selected convergent preflight with an append-only attempt ledger and one atomic accepted-plan commit	The existing plan checkpoint is immutable and cannot represent rewritable drafts	docs/video-digest-planning.md	design selected after two candidates and independent judge
+2026-09-20T21:46:00Z	planning-domain	Bound policy, screenplay, verification evidence, and generation authorization to immutable edition inputs	Paid generation must depend on the exact report, policy artifact, accepted screenplay, and ordered evidence	src/romanian_news/video_digest/planning.py; 25 focused tests	VERIFIED
