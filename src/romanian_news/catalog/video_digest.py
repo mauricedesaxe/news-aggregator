@@ -219,6 +219,118 @@ def renew_slot(
     return _checkpoint_transaction(renew)
 
 
+def checkpoint_planning_attempt(
+    lease: SlotLease,
+    attempt_index: int,
+    disposition: Literal["rejected", "accepted"],
+    *,
+    evidence_file: ArtifactFile,
+    accepted_plan: DigestPlan | None = None,
+    plan_file: ArtifactFile | None = None,
+    recorded_at: datetime,
+) -> DigestPlan | None:
+    _utc(recorded_at, "recorded_at")
+    if attempt_index not in (0, 1, 2):
+        raise ValueError("Planning attempt index must be 0, 1, or 2")
+    if disposition not in {"rejected", "accepted"}:
+        raise ValueError("Planning attempt disposition must be rejected or accepted")
+    if (
+        evidence_file.artifact_id != f"{lease.edition_id}:{attempt_index}:planning-attempt"
+        or evidence_file.artifact_kind != "video_digest_planning_attempt"
+    ):
+        raise ValueError("Planning attempt evidence artifact identity is invalid")
+    if disposition == "accepted":
+        if accepted_plan is None or plan_file is None:
+            raise ValueError("Accepted planning attempt requires its canonical plan")
+        _validate_plan_checkpoint(lease, accepted_plan, plan_file)
+    elif accepted_plan is not None or plan_file is not None:
+        raise ValueError("Rejected planning attempt cannot register a canonical plan")
+
+    def checkpoint(connection: CatalogConnection) -> DigestPlan | None:
+        slot_row, current = _lock_slot_for_lease(connection, lease)
+        row = connection.execute(
+            """
+            SELECT edition_id, attempt_index, disposition,
+                   attempt_evidence_artifact_version_id,
+                   accepted_plan_artifact_version_id
+            FROM video_digest_planning_attempts
+            WHERE edition_id = %s AND attempt_index = %s
+            FOR UPDATE
+            """,
+            (lease.edition_id, attempt_index),
+        ).fetchone()
+        accepted_version = accepted_plan.artifact_version_id if accepted_plan is not None else None
+        if row is not None:
+            if (
+                str(row["edition_id"]),
+                int(row["attempt_index"]),
+                str(row["disposition"]),
+                str(row["attempt_evidence_artifact_version_id"]),
+                (
+                    str(row["accepted_plan_artifact_version_id"])
+                    if row["accepted_plan_artifact_version_id"] is not None
+                    else None
+                ),
+            ) != (
+                lease.edition_id,
+                attempt_index,
+                disposition,
+                evidence_file.version_id,
+                accepted_version,
+            ) or not _stored_artifact_matches(connection, evidence_file):
+                raise VideoDigestCheckpointConflictError(
+                    "Stored planning attempt conflicts with the request"
+                )
+            if accepted_plan is None or plan_file is None:
+                return None
+            return _checkpoint_plan_locked(
+                connection,
+                lease,
+                accepted_plan,
+                plan_file,
+                slot_row,
+                current,
+            )
+        if str(slot_row["stage"]) != SlotStage.CLAIMED.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with the planning attempt"
+            )
+
+        _register_artifact(connection, evidence_file, current)
+        if plan_file is not None:
+            _register_artifact(connection, plan_file, current)
+        connection.execute(
+            """
+            INSERT INTO video_digest_planning_attempts
+                (edition_id, attempt_index, disposition,
+                 attempt_evidence_artifact_version_id,
+                 accepted_plan_artifact_version_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (
+                lease.edition_id,
+                attempt_index,
+                disposition,
+                evidence_file.version_id,
+                accepted_version,
+                current,
+            ),
+        )
+        if accepted_plan is None or plan_file is None:
+            return None
+        return _checkpoint_plan_locked(
+            connection,
+            lease,
+            accepted_plan,
+            plan_file,
+            slot_row,
+            current,
+            plan_artifact_registered=True,
+        )
+
+    return _checkpoint_transaction(checkpoint)
+
+
 def checkpoint_plan(
     lease: SlotLease,
     plan: DigestPlan,
@@ -227,97 +339,11 @@ def checkpoint_plan(
     recorded_at: datetime,
 ) -> DigestPlan:
     _utc(recorded_at, "recorded_at")
-    if plan.edition_id != lease.edition_id:
-        raise ValueError("Digest plan edition does not match the slot lease")
-    if plan_file.version_id != plan.artifact_version_id:
-        raise ValueError("Digest plan artifact does not match the plan version")
-    if plan_file.artifact_id != plan.edition_id or plan_file.artifact_kind != "video_digest_plan":
-        raise ValueError("Digest plan artifact identity is invalid")
+    _validate_plan_checkpoint(lease, plan, plan_file)
 
     def checkpoint(connection: CatalogConnection) -> DigestPlan:
         row, current = _lock_slot_for_lease(connection, lease)
-        try:
-            stage = SlotStage(str(row["stage"]))
-        except ValueError as error:
-            raise VideoDigestCheckpointConflictError(
-                "Stored video digest slot stage conflicts with the plan request"
-            ) from error
-        if stage in {
-            SlotStage.GENERATING,
-            SlotStage.ASSEMBLING,
-            SlotStage.SUBTITLING,
-            SlotStage.PUBLISHING,
-        }:
-            stored = _stored_plan(connection, lease.edition_id)
-            if stored == plan and _stored_artifact_matches(connection, plan_file):
-                return stored
-            raise VideoDigestCheckpointConflictError(
-                "Stored video digest plan conflicts with the plan request"
-            )
-        if stage != SlotStage.CLAIMED:
-            raise VideoDigestCheckpointConflictError(
-                "Stored video digest slot stage conflicts with the plan request"
-            )
-
-        _register_artifact(connection, plan_file, current)
-        _execute_returning(
-            connection,
-            """
-            UPDATE video_digest_slots
-            SET stage = 'planning', updated_at = %s
-            WHERE slot_id = %s AND lease_owner_token = %s AND claim_count = %s
-              AND stage = 'claimed'
-            RETURNING slot_id
-            """,
-            (current, lease.slot_id, lease.owner_token, lease.claim_count),
-            VideoDigestLeaseLostError("Video digest slot lease was lost"),
-        )
-        for story in plan.stories:
-            connection.execute(
-                """
-                INSERT INTO video_digest_stories
-                    (story_id, edition_id, position, report_subject_id, title,
-                     mandatory, requested_duration_ms, stage, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 'planned', %s, %s)
-                """,
-                (
-                    story.story_id,
-                    story.edition_id,
-                    story.position,
-                    story.report_subject_id,
-                    story.title,
-                    story.mandatory,
-                    story.requested_duration_ms,
-                    current,
-                    current,
-                ),
-            )
-        _execute_returning(
-            connection,
-            """
-            UPDATE video_digest_editions
-            SET plan_artifact_version_id = %s, updated_at = %s
-            WHERE edition_id = %s AND plan_artifact_version_id IS NULL
-            RETURNING edition_id
-            """,
-            (plan.artifact_version_id, current, lease.edition_id),
-            VideoDigestCheckpointConflictError(
-                "Stored video digest edition conflicts with the plan request"
-            ),
-        )
-        _execute_returning(
-            connection,
-            """
-            UPDATE video_digest_slots
-            SET stage = 'generating', updated_at = %s
-            WHERE slot_id = %s AND lease_owner_token = %s AND claim_count = %s
-              AND stage = 'planning'
-            RETURNING slot_id
-            """,
-            (current, lease.slot_id, lease.owner_token, lease.claim_count),
-            VideoDigestLeaseLostError("Video digest slot lease was lost"),
-        )
-        return plan
+        return _checkpoint_plan_locked(connection, lease, plan, plan_file, row, current)
 
     return _checkpoint_transaction(checkpoint)
 
@@ -436,6 +462,85 @@ def checkpoint_story_verification(
     _checkpoint_transaction(checkpoint)
 
 
+def checkpoint_edition_verification(
+    lease: SlotLease,
+    *,
+    manifest_file: ArtifactFile,
+    recorded_at: datetime,
+) -> None:
+    _utc(recorded_at, "recorded_at")
+    if (
+        manifest_file.artifact_id != f"{lease.edition_id}:verification-manifest"
+        or manifest_file.artifact_kind != "video_digest_verification_manifest"
+    ):
+        raise ValueError("Edition verification manifest artifact identity is invalid")
+
+    def checkpoint(connection: CatalogConnection) -> None:
+        slot_row, current = _lock_slot_for_lease(connection, lease)
+        edition_row = connection.execute(
+            """
+            SELECT plan_artifact_version_id, verification_manifest_artifact_version_id
+            FROM video_digest_editions
+            WHERE edition_id = %s
+            FOR UPDATE
+            """,
+            (lease.edition_id,),
+        ).fetchone()
+        if edition_row is None:
+            raise VideoDigestCheckpointConflictError("Video digest edition is unavailable")
+        if edition_row["plan_artifact_version_id"] is None:
+            raise VideoDigestCheckpointConflictError(
+                "Edition verification requires an accepted digest plan"
+            )
+        stored_version = edition_row["verification_manifest_artifact_version_id"]
+        if stored_version is not None:
+            if stored_version == manifest_file.version_id and _stored_artifact_matches(
+                connection, manifest_file
+            ):
+                return
+            raise VideoDigestCheckpointConflictError(
+                "Stored edition verification manifest conflicts with the request"
+            )
+        if str(slot_row["stage"]) != SlotStage.GENERATING.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with edition verification"
+            )
+        incomplete = connection.execute(
+            """
+            SELECT story_id
+            FROM video_digest_stories
+            WHERE edition_id = %s AND mandatory
+              AND (verification_evidence_artifact_version_id IS NULL
+                   OR stage NOT IN ('generating', 'accepted'))
+            LIMIT 1
+            FOR UPDATE
+            """,
+            (lease.edition_id,),
+        ).fetchone()
+        if incomplete is not None:
+            raise VideoDigestCheckpointConflictError(
+                "Edition verification requires every mandatory story to be generation-ready"
+            )
+
+        _register_artifact(connection, manifest_file, current)
+        _execute_returning(
+            connection,
+            """
+            UPDATE video_digest_editions
+            SET verification_manifest_artifact_version_id = %s, updated_at = %s
+            WHERE edition_id = %s
+              AND verification_manifest_artifact_version_id IS NULL
+            RETURNING edition_id
+            """,
+            (manifest_file.version_id, current, lease.edition_id),
+            VideoDigestCheckpointConflictError(
+                "Stored video digest edition conflicts with edition verification"
+            ),
+        )
+
+    _checkpoint_transaction(checkpoint)
+
+
 def checkpoint_generation_request(
     lease: SlotLease,
     request: GenerationRequestIdentity,
@@ -470,6 +575,39 @@ def checkpoint_generation_request(
         if str(slot_row["stage"]) != SlotStage.GENERATING.value:
             raise VideoDigestCheckpointConflictError(
                 "Stored video digest slot conflicts with the generation request"
+            )
+        edition_row = connection.execute(
+            """
+            SELECT plan_artifact_version_id, verification_manifest_artifact_version_id
+            FROM video_digest_editions
+            WHERE edition_id = %s
+            FOR UPDATE
+            """,
+            (request.edition_id,),
+        ).fetchone()
+        if edition_row is None or edition_row["plan_artifact_version_id"] is None:
+            raise VideoDigestCheckpointConflictError(
+                "Generation request requires an accepted digest plan"
+            )
+        if edition_row["verification_manifest_artifact_version_id"] is None:
+            raise VideoDigestCheckpointConflictError(
+                "Generation request requires an edition verification manifest"
+            )
+        incomplete = connection.execute(
+            """
+            SELECT story_id
+            FROM video_digest_stories
+            WHERE edition_id = %s AND mandatory
+              AND (verification_evidence_artifact_version_id IS NULL
+                   OR stage NOT IN ('generating', 'accepted'))
+            LIMIT 1
+            FOR UPDATE
+            """,
+            (request.edition_id,),
+        ).fetchone()
+        if incomplete is not None:
+            raise VideoDigestCheckpointConflictError(
+                "Generation request requires every mandatory story to be generation-ready"
             )
         story_row = _lock_story_at_position(connection, request.edition_id, request.story_position)
         if str(story_row["stage"]) != "generating":
@@ -2281,6 +2419,114 @@ def _scheduled_slot_from_row(row: Mapping[str, Any]) -> ScheduledSlot:
             day_value if isinstance(day_value, date) else date.fromisoformat(str(day_value))
         ),
     )
+
+
+def _validate_plan_checkpoint(
+    lease: SlotLease,
+    plan: DigestPlan,
+    plan_file: ArtifactFile,
+) -> None:
+    if plan.edition_id != lease.edition_id:
+        raise ValueError("Digest plan edition does not match the slot lease")
+    if plan_file.version_id != plan.artifact_version_id:
+        raise ValueError("Digest plan artifact does not match the plan version")
+    if plan_file.artifact_id != plan.edition_id or plan_file.artifact_kind != "video_digest_plan":
+        raise ValueError("Digest plan artifact identity is invalid")
+
+
+def _checkpoint_plan_locked(
+    connection: CatalogConnection,
+    lease: SlotLease,
+    plan: DigestPlan,
+    plan_file: ArtifactFile,
+    slot_row: Mapping[str, Any],
+    current: datetime,
+    *,
+    plan_artifact_registered: bool = False,
+) -> DigestPlan:
+    try:
+        stage = SlotStage(str(slot_row["stage"]))
+    except ValueError as error:
+        raise VideoDigestCheckpointConflictError(
+            "Stored video digest slot stage conflicts with the plan request"
+        ) from error
+    if stage in {
+        SlotStage.GENERATING,
+        SlotStage.ASSEMBLING,
+        SlotStage.SUBTITLING,
+        SlotStage.PUBLISHING,
+    }:
+        stored = _stored_plan(connection, lease.edition_id)
+        if stored == plan and _stored_artifact_matches(connection, plan_file):
+            return stored
+        raise VideoDigestCheckpointConflictError(
+            "Stored video digest plan conflicts with the plan request"
+        )
+    if stage != SlotStage.CLAIMED:
+        raise VideoDigestCheckpointConflictError(
+            "Stored video digest slot stage conflicts with the plan request"
+        )
+
+    if not plan_artifact_registered:
+        _register_artifact(connection, plan_file, current)
+    _execute_returning(
+        connection,
+        """
+        UPDATE video_digest_slots
+        SET stage = 'planning', updated_at = %s
+        WHERE slot_id = %s AND lease_owner_token = %s AND claim_count = %s
+          AND stage = 'claimed'
+        RETURNING slot_id
+        """,
+        (current, lease.slot_id, lease.owner_token, lease.claim_count),
+        VideoDigestLeaseLostError("Video digest slot lease was lost"),
+    )
+    for story in plan.stories:
+        connection.execute(
+            """
+            INSERT INTO video_digest_stories
+                (story_id, edition_id, position, report_subject_id, title,
+                 mandatory, requested_duration_ms, stage, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'planned', %s, %s)
+            """,
+            (
+                story.story_id,
+                story.edition_id,
+                story.position,
+                story.report_subject_id,
+                story.title,
+                story.mandatory,
+                story.requested_duration_ms,
+                current,
+                current,
+            ),
+        )
+    _execute_returning(
+        connection,
+        """
+        UPDATE video_digest_editions
+        SET plan_artifact_version_id = %s, updated_at = %s
+        WHERE edition_id = %s AND plan_artifact_version_id IS NULL
+        RETURNING edition_id
+        """,
+        (plan.artifact_version_id, current, lease.edition_id),
+        VideoDigestCheckpointConflictError(
+            "Stored video digest edition conflicts with the plan request"
+        ),
+    )
+    _execute_returning(
+        connection,
+        """
+        UPDATE video_digest_slots
+        SET stage = 'generating', updated_at = %s
+        WHERE slot_id = %s AND lease_owner_token = %s AND claim_count = %s
+          AND stage = 'planning'
+        RETURNING slot_id
+        """,
+        (current, lease.slot_id, lease.owner_token, lease.claim_count),
+        VideoDigestLeaseLostError("Video digest slot lease was lost"),
+    )
+    return plan
 
 
 def _stored_plan(connection: CatalogConnection, edition_id: EditionId) -> DigestPlan:

@@ -87,12 +87,28 @@ PLAN = DigestPlan(
     artifact_version_id=PLAN_FILE.version_id,
     stories=(STORY,),
 )
+PLANNING_ATTEMPT_FILE = artifact_file(
+    artifact_id=f"{EDITION.edition_id}:0:planning-attempt",
+    artifact_kind="video_digest_planning_attempt",
+    title="Planning attempt",
+    content=b"planning evidence",
+    r2_key="video-digest/planning/attempt-0.json",
+    media_type="application/json",
+)
 EVIDENCE_FILE = artifact_file(
     artifact_id=STORY.story_id,
     artifact_kind="video_digest_story_verification",
     title="Story verification",
     content=b"verified",
     r2_key="video-digest/verification/evidence.json",
+    media_type="application/json",
+)
+MANIFEST_FILE = artifact_file(
+    artifact_id=f"{EDITION.edition_id}:verification-manifest",
+    artifact_kind="video_digest_verification_manifest",
+    title="Edition verification manifest",
+    content=b"manifest",
+    r2_key="video-digest/verification/manifest.json",
     media_type="application/json",
 )
 _request_payload_file = artifact_file(
@@ -312,6 +328,18 @@ def _edition_row(**updates: object) -> dict[str, object]:
         "edition_id": EDITION.edition_id,
         "daily_report_version_id": EDITION.daily_report_version_id,
         "policy_bundle_version_id": EDITION.policy_bundle_version_id,
+    }
+    row.update(updates)
+    return row
+
+
+def _planning_attempt_row(**updates: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "edition_id": EDITION.edition_id,
+        "attempt_index": 0,
+        "disposition": "accepted",
+        "attempt_evidence_artifact_version_id": PLANNING_ATTEMPT_FILE.version_id,
+        "accepted_plan_artifact_version_id": PLAN_FILE.version_id,
     }
     row.update(updates)
     return row
@@ -839,6 +867,168 @@ def test_renew_slot_rejects_stale_or_expired_fence(
     assert connection.transaction_count == 1
 
 
+def test_rejected_planning_attempt_records_only_immutable_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row()),
+            ("FROM video_digest_planning_attempts", None),
+            *_artifact_steps(),
+            ("INSERT INTO video_digest_planning_attempts", None),
+        ],
+    )
+
+    assert (
+        video_digest.checkpoint_planning_attempt(
+            _lease(),
+            0,
+            "rejected",
+            evidence_file=PLANNING_ATTEMPT_FILE,
+            recorded_at=NOW,
+        )
+        is None
+    )
+    assert not any("video_digest_stories" in statement for statement in connection.statements)
+    assert connection.steps == []
+
+
+def test_accepted_planning_attempt_registers_the_canonical_plan_atomically(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row()),
+            ("FROM video_digest_planning_attempts", None),
+            *_artifact_steps(),
+            *_artifact_steps(),
+            ("INSERT INTO video_digest_planning_attempts", None),
+            ("UPDATE video_digest_slots", {"slot_id": SLOT.slot_id}),
+            ("INSERT INTO video_digest_stories", None),
+            ("UPDATE video_digest_editions", {"edition_id": EDITION.edition_id}),
+            ("UPDATE video_digest_slots", {"slot_id": SLOT.slot_id}),
+        ],
+    )
+
+    assert (
+        video_digest.checkpoint_planning_attempt(
+            _lease(),
+            0,
+            "accepted",
+            evidence_file=PLANNING_ATTEMPT_FILE,
+            accepted_plan=PLAN,
+            plan_file=PLAN_FILE,
+            recorded_at=NOW,
+        )
+        == PLAN
+    )
+    writes = [
+        statement
+        for statement in connection.statements
+        if statement.startswith(("INSERT", "UPDATE"))
+    ]
+    attempt_write = next(
+        index
+        for index, statement in enumerate(writes)
+        if "video_digest_planning_attempts" in statement
+    )
+    story_write = next(
+        index for index, statement in enumerate(writes) if "video_digest_stories" in statement
+    )
+    assert attempt_write < story_write
+    assert connection.steps == []
+
+
+def test_planning_attempt_replays_only_exact_evidence_and_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="generating")),
+            ("FROM video_digest_planning_attempts", _planning_attempt_row()),
+            ("FROM artifacts AS artifact", _artifact_row(PLANNING_ATTEMPT_FILE)),
+            ("FROM video_digest_editions", {"plan_artifact_version_id": PLAN_FILE.version_id}),
+            ("FROM video_digest_stories", [_story_row()]),
+            ("FROM artifacts AS artifact", _artifact_row(PLAN_FILE)),
+        ],
+    )
+
+    assert (
+        video_digest.checkpoint_planning_attempt(
+            _lease(),
+            0,
+            "accepted",
+            evidence_file=PLANNING_ATTEMPT_FILE,
+            accepted_plan=PLAN,
+            plan_file=PLAN_FILE,
+            recorded_at=NOW,
+        )
+        == PLAN
+    )
+    assert all(
+        not statement.startswith(("INSERT", "UPDATE")) for statement in connection.statements
+    )
+
+
+def test_planning_attempt_rejects_conflicting_replay(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row()),
+            (
+                "FROM video_digest_planning_attempts",
+                _planning_attempt_row(
+                    disposition="rejected", accepted_plan_artifact_version_id=None
+                ),
+            ),
+        ],
+    )
+
+    with pytest.raises(VideoDigestCheckpointConflictError, match="planning attempt conflicts"):
+        video_digest.checkpoint_planning_attempt(
+            _lease(),
+            0,
+            "accepted",
+            evidence_file=PLANNING_ATTEMPT_FILE,
+            accepted_plan=PLAN,
+            plan_file=PLAN_FILE,
+            recorded_at=NOW,
+        )
+    assert connection.steps == []
+
+
+def test_planning_attempt_validates_disposition_shape_before_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        video_digest,
+        "catalog_transaction",
+        lambda *_args, **_kwargs: pytest.fail("validation opened a transaction"),
+    )
+
+    with pytest.raises(ValueError, match="index"):
+        video_digest.checkpoint_planning_attempt(
+            _lease(), 3, "rejected", evidence_file=PLANNING_ATTEMPT_FILE, recorded_at=NOW
+        )
+    with pytest.raises(ValueError, match="requires its canonical plan"):
+        video_digest.checkpoint_planning_attempt(
+            _lease(), 0, "accepted", evidence_file=PLANNING_ATTEMPT_FILE, recorded_at=NOW
+        )
+    with pytest.raises(ValueError, match="cannot register"):
+        video_digest.checkpoint_planning_attempt(
+            _lease(),
+            0,
+            "rejected",
+            evidence_file=PLANNING_ATTEMPT_FILE,
+            accepted_plan=PLAN,
+            plan_file=PLAN_FILE,
+            recorded_at=NOW,
+        )
+
+
 def test_checkpoint_plan_validates_boundary_identity_before_transaction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1128,6 +1318,133 @@ def test_checkpoint_story_verification_rejects_story_identity_conflict(
     assert connection.transaction_count == 1
 
 
+def test_edition_verification_records_and_replays_an_exact_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="generating")),
+            (
+                "FROM video_digest_editions",
+                {
+                    "plan_artifact_version_id": PLAN_FILE.version_id,
+                    "verification_manifest_artifact_version_id": None,
+                },
+            ),
+            ("FROM video_digest_stories", None),
+            *_artifact_steps(),
+            ("UPDATE video_digest_editions", {"edition_id": EDITION.edition_id}),
+        ],
+    )
+    assert (
+        video_digest.checkpoint_edition_verification(
+            _lease(), manifest_file=MANIFEST_FILE, recorded_at=NOW
+        )
+        is None
+    )
+    assert first.steps == []
+
+    replay = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="assembling")),
+            (
+                "FROM video_digest_editions",
+                {
+                    "plan_artifact_version_id": PLAN_FILE.version_id,
+                    "verification_manifest_artifact_version_id": MANIFEST_FILE.version_id,
+                },
+            ),
+            ("FROM artifacts AS artifact", _artifact_row(MANIFEST_FILE)),
+        ],
+    )
+    assert (
+        video_digest.checkpoint_edition_verification(
+            _lease(), manifest_file=MANIFEST_FILE, recorded_at=NOW
+        )
+        is None
+    )
+    assert all(not statement.startswith(("INSERT", "UPDATE")) for statement in replay.statements)
+
+
+def test_edition_verification_requires_every_mandatory_story(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="generating")),
+            (
+                "FROM video_digest_editions",
+                {
+                    "plan_artifact_version_id": PLAN_FILE.version_id,
+                    "verification_manifest_artifact_version_id": None,
+                },
+            ),
+            ("FROM video_digest_stories", {"story_id": STORY.story_id}),
+        ],
+    )
+
+    with pytest.raises(VideoDigestCheckpointConflictError, match="every mandatory story"):
+        video_digest.checkpoint_edition_verification(
+            _lease(), manifest_file=MANIFEST_FILE, recorded_at=NOW
+        )
+    assert connection.steps == []
+
+
+def test_generation_request_requires_manifest_before_artifact_registration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="generating")),
+            ("FROM video_digest_generation_requests", None),
+            (
+                "FROM video_digest_editions",
+                {
+                    "plan_artifact_version_id": PLAN_FILE.version_id,
+                    "verification_manifest_artifact_version_id": None,
+                },
+            ),
+        ],
+    )
+
+    with pytest.raises(VideoDigestCheckpointConflictError, match="verification manifest"):
+        video_digest.checkpoint_generation_request(
+            _lease(), REQUEST, request_file=REQUEST_FILE, recorded_at=NOW
+        )
+    assert not any("INSERT INTO artifacts" in statement for statement in connection.statements)
+    assert connection.steps == []
+
+
+def test_generation_request_requires_all_mandatory_stories_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="generating")),
+            ("FROM video_digest_generation_requests", None),
+            (
+                "FROM video_digest_editions",
+                {
+                    "plan_artifact_version_id": PLAN_FILE.version_id,
+                    "verification_manifest_artifact_version_id": MANIFEST_FILE.version_id,
+                },
+            ),
+            ("FROM video_digest_stories", {"story_id": STORY.story_id}),
+        ],
+    )
+
+    with pytest.raises(VideoDigestCheckpointConflictError, match="every mandatory story"):
+        video_digest.checkpoint_generation_request(
+            _lease(), REQUEST, request_file=REQUEST_FILE, recorded_at=NOW
+        )
+    assert connection.steps == []
+
+
 def test_generation_request_checkpoint_starts_pending_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1136,6 +1453,14 @@ def test_generation_request_checkpoint_starts_pending_once(
         [
             ("FROM video_digest_slots", _active_row(stage="generating")),
             ("FROM video_digest_generation_requests", None),
+            (
+                "FROM video_digest_editions",
+                {
+                    "plan_artifact_version_id": PLAN_FILE.version_id,
+                    "verification_manifest_artifact_version_id": MANIFEST_FILE.version_id,
+                },
+            ),
+            ("FROM video_digest_stories", None),
             ("FROM video_digest_stories", _story_row(stage="generating")),
             ("FROM video_digest_generation_requests", None),
             ("FROM video_digest_generation_requests", None),
@@ -1177,6 +1502,14 @@ def test_second_generation_request_requires_failed_first_attempt(
         [
             ("FROM video_digest_slots", _active_row(stage="generating")),
             ("FROM video_digest_generation_requests", None),
+            (
+                "FROM video_digest_editions",
+                {
+                    "plan_artifact_version_id": PLAN_FILE.version_id,
+                    "verification_manifest_artifact_version_id": MANIFEST_FILE.version_id,
+                },
+            ),
+            ("FROM video_digest_stories", None),
             ("FROM video_digest_stories", _story_row(stage="generating")),
             ("FROM video_digest_generation_requests", None),
             ("FROM video_digest_generation_requests", {"stage": "submitted"}),
@@ -1198,6 +1531,14 @@ def test_generation_request_rejects_parallel_paid_work(
         [
             ("FROM video_digest_slots", _active_row(stage="generating")),
             ("FROM video_digest_generation_requests", None),
+            (
+                "FROM video_digest_editions",
+                {
+                    "plan_artifact_version_id": PLAN_FILE.version_id,
+                    "verification_manifest_artifact_version_id": MANIFEST_FILE.version_id,
+                },
+            ),
+            ("FROM video_digest_stories", None),
             ("FROM video_digest_stories", _story_row(stage="generating")),
             ("FROM video_digest_generation_requests", None),
             ("FROM video_digest_generation_requests", {"request_id": "other"}),
