@@ -1,4 +1,7 @@
+import hashlib
+import json
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,16 +14,140 @@ from romanian_news.research_triggers import (
     DailyResearchTriggerInput,
     DailyResearchTriggerSet,
     EmptyResearchTriggerConstruction,
+    ModelResearchTriggerConstruction,
+    ResearchTriggerCorrectionExhausted,
     SubjectResearchFlag,
     SubjectTriggerInput,
+    construct_daily_research_triggers,
     parse_daily_research_trigger_set,
     parse_research_trigger_response,
     research_trigger_request_id,
 )
 
 
-def test_trigger_prompt_requires_english_research_questions() -> None:
-    assert "research question in English" in trigger_module.TRIGGER_PROMPT
+def test_construct_daily_research_triggers_rates_every_subject_deterministically(
+    monkeypatch,
+) -> None:
+    value = _input("1" * 64)
+    payload = _rated_subjects_payload()
+    _provider(monkeypatch, [_response(payload, "trigger-a")])
+    first = construct_daily_research_triggers(value)
+    _provider(monkeypatch, [_response(payload, "trigger-b")])
+    second = construct_daily_research_triggers(value)
+
+    assert parse_daily_research_trigger_set(first.content) == first.trigger_set
+    assert first.trigger_set.request_id == second.trigger_set.request_id
+    first_construction = first.trigger_set.construction
+    second_construction = second.trigger_set.construction
+    assert isinstance(first_construction, ModelResearchTriggerConstruction)
+    assert isinstance(second_construction, ModelResearchTriggerConstruction)
+    assert first_construction.request_id == second_construction.request_id
+    assert [attempt.status for attempt in first_construction.attempts] == ["accepted"]
+    flags = {flag.theme_id: flag for flag in first.trigger_set.triggers}
+    assert set(flags) == {"a" * 64, "b" * 64}
+    assert flags["a" * 64].flagged is True
+    assert flags["a" * 64].question == "What did European indices do?"
+    assert flags["a" * 64].evidence_types == ("financial_data",)
+    assert flags["b" * 64].flagged is False
+    assert flags["b" * 64].question is None
+    assert flags["b" * 64].evidence_types == ()
+
+
+def test_trigger_response_correction_accepts_the_second_complete_json(monkeypatch) -> None:
+    value = _input("1" * 64)
+    calls = _provider(
+        monkeypatch,
+        [
+            _response("{", "trigger-invalid"),
+            _response(_rated_subjects_payload(), "trigger-valid"),
+        ],
+    )
+
+    output = construct_daily_research_triggers(value)
+
+    construction = output.trigger_set.construction
+    assert isinstance(construction, ModelResearchTriggerConstruction)
+    assert [attempt.status for attempt in construction.attempts] == ["rejected", "accepted"]
+    assert "Validation error" in calls[1]["messages"][-1]["content"]
+
+
+def test_trigger_correction_exhaustion_raises_after_repeated_invalid_responses(
+    monkeypatch,
+) -> None:
+    value = _input("1" * 64)
+    calls = _provider(
+        monkeypatch,
+        [_response("{", "trigger-invalid-1"), _response("{", "trigger-invalid-2")],
+    )
+
+    with pytest.raises(
+        ResearchTriggerCorrectionExhausted,
+        match="remained invalid after correction",
+    ):
+        construct_daily_research_triggers(value)
+
+    assert len(calls) == 2
+
+
+def _provider(monkeypatch, responses):
+    calls = []
+    response_iterator = iter(responses)
+    monkeypatch.setattr(
+        trigger_module,
+        "openrouter_client",
+        lambda: SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(
+                    create=lambda **kwargs: calls.append(kwargs) or next(response_iterator)
+                )
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        trigger_module,
+        "record_model_attempt",
+        lambda response, **_kwargs: SimpleNamespace(
+            attempt_id=hashlib.sha256(response.id.encode()).hexdigest(),
+            response_id=response.id,
+        ),
+    )
+    return calls
+
+
+def _rated_subjects_payload() -> dict[str, object]:
+    return {
+        "subjects": [
+            _trigger_subject("subject_01", 0.8),
+            _trigger_subject("subject_02", 0.1),
+        ]
+    }
+
+
+def _trigger_subject(alias: str, gap_strength: float) -> dict[str, object]:
+    flagged = gap_strength >= POLICY.strength_threshold
+    return {
+        "subject": alias,
+        "gap_strength": gap_strength,
+        "question": "What did European indices do?" if flagged else None,
+        "evidence_types": ["financial_data"] if flagged else [],
+    }
+
+
+def _response(payload: dict[str, object] | str, response_id: str):
+    content = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
+    provider_payload = {
+        "id": response_id,
+        "model": "google/gemini-3.8-flash",
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.01},
+        "choices": [{"message": {"content": content}}],
+    }
+    return SimpleNamespace(
+        id=response_id,
+        model="google/gemini-3.8-flash",
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5),
+        choices=(SimpleNamespace(message=SimpleNamespace(content=content)),),
+        model_dump=lambda *, mode: provider_payload,
+    )
 
 
 def _reference(version: str) -> ArtifactReference:

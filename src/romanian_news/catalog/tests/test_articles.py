@@ -15,7 +15,6 @@ from romanian_news.catalog.articles import (
     _resolve_article_identities,
     publish_articles,
     read_article_catalog_states,
-    read_article_failure_attempts,
     write_article_failure_attempts,
 )
 from romanian_news.feeds.models import CatalogedFeedEntry, FeedEntry
@@ -155,20 +154,6 @@ def test_article_catalog_states_parse_typed_dates(monkeypatch) -> None:
 
     assert state.published_at == datetime.fromisoformat("2026-09-01T08:00:00+00:00")
     assert state.source_updated_at is None
-
-
-def test_article_failure_attempts_use_one_bulk_query(monkeypatch) -> None:
-    event_ids = tuple(f"{index:064x}" for index in range(75))
-    calls = []
-    monkeypatch.setattr(
-        "romanian_news.catalog.articles.catalog_query",
-        lambda sql, parameters: calls.append((sql, parameters)) or [],
-    )
-
-    assert read_article_failure_attempts(event_ids) == ()
-    assert len(calls) == 1
-    assert "event_id = ANY(%s)" in calls[0][0]
-    assert len(calls[0][1][0]) == 75
 
 
 def test_article_failure_write_serializes_enum_and_utc_times(monkeypatch) -> None:

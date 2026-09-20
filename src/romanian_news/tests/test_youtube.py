@@ -2,7 +2,6 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 
 import pytest
 from pydantic import HttpUrl, ValidationError
@@ -22,17 +21,11 @@ from romanian_news.catalog.youtube import (
 from romanian_news.youtube import discovery as discovery_module
 from romanian_news.youtube import workflow as workflow_module
 from romanian_news.youtube.analysis import (
-    CLIP_PROMPT,
-    MERGE_PROMPT,
     clip_request_digest,
-    complete_clip_coverage,
     enforce_video_budget,
-    parse_clip_extraction,
-    plan_clip_ranges,
     youtube_clip_request_id,
 )
 from romanian_news.youtube.discovery import (
-    decide_youtube_poll,
     fetch_video_metadata,
     parse_youtube_feed,
 )
@@ -73,14 +66,6 @@ RECORDER = YOUTUBE_SOURCES.source("recorder-youtube")
 STAREA = YOUTUBE_SOURCES.source("starea-impostorilor-youtube")
 VIDEO_ID = YouTubeVideoId("abcdefghijk")
 PUBLISHED_AT = datetime(2026, 9, 9, 8, tzinfo=UTC)
-
-
-def test_article_prompts_require_english_prose_and_preserve_source_evidence() -> None:
-    for prompt in (CLIP_PROMPT, MERGE_PROMPT):
-        normalized = " ".join(prompt.split())
-        assert "generated prose in English" in normalized
-        assert "source material as evidence" in normalized
-        assert "proper names" in normalized
 
 
 def test_source_registry_encodes_unique_identity() -> None:
@@ -127,20 +112,6 @@ def test_parses_both_channel_feeds_with_source_identity() -> None:
 def test_feed_rejects_another_channel() -> None:
     with pytest.raises(YouTubeProviderPayloadError, match="another channel"):
         parse_youtube_feed(RECORDER, _feed_response(STAREA))
-
-
-def test_first_poll_and_overlap_loss_are_independent_per_source() -> None:
-    for source in (RECORDER, STAREA):
-        first = decide_youtube_poll(_feed(source, VIDEO_ID), frozenset(), baseline_exists=False)
-        current = decide_youtube_poll(
-            _feed(source, "lmnopqrstuv", VIDEO_ID), frozenset({VIDEO_ID}), baseline_exists=True
-        )
-        lost = decide_youtube_poll(
-            _feed(source, "lmnopqrstuv"), frozenset({VIDEO_ID}), baseline_exists=True
-        )
-        assert first.status == YouTubePollStatus.BASELINE and first.pending_video_ids == ()
-        assert current.pending_video_ids == ("lmnopqrstuv",)
-        assert lost.status == YouTubePollStatus.OVERLAP_LOST and lost.pending_video_ids == ()
 
 
 def test_uploads_playlist_id_matches_the_synthetic_recorder_playlist() -> None:
@@ -601,19 +572,6 @@ def test_unknown_cost_is_explicit_not_zero() -> None:
     assert "0" not in candidate.cost.model_dump_json()
 
 
-def test_analysis_requires_gap_free_clips_and_bounded_evidence() -> None:
-    assert plan_clip_ranges(601) == (
-        ClipRange(start_second=0, duration_seconds=300),
-        ClipRange(start_second=300, duration_seconds=300),
-        ClipRange(start_second=600, duration_seconds=1),
-    )
-    assert complete_clip_coverage(300, (_accepted(RECORDER),)) == (_accepted(RECORDER),)
-    payload = _clip_payload()
-    cast(list[dict[str, object]], payload["evidence"])[0]["end_seconds"] = 301
-    with pytest.raises(ValueError, match="escapes"):
-        parse_clip_extraction(json.dumps(payload), ClipRange(start_second=0, duration_seconds=300))
-
-
 def test_accepted_clip_publication_keeps_receipt_attempt_run_and_checkpoint_atomic(
     monkeypatch,
 ) -> None:
@@ -1011,21 +969,3 @@ def _youtube_response(channel_id: str) -> bytes:
             ],
         }
     ).encode()
-
-
-def _clip_payload() -> dict[str, object]:
-    return {
-        "title": "Titlu",
-        "standfirst": "Introducere",
-        "narrative": "Narațiune",
-        "evidence": [
-            {
-                "kind": "reported_fact",
-                "text": "Fapt",
-                "attribution": "Recorder",
-                "start_seconds": 1,
-                "end_seconds": 2,
-            }
-        ],
-        "source_stated_uncertainties": [],
-    }

@@ -1108,22 +1108,6 @@ def test_news_feedback_sync_dispositions_are_immutable_and_constrained() -> None
 def test_news_feed_entry_events_retain_one_occurrence_and_reject_identity_changes() -> None:
     with closing(sqlite3.connect(":memory:")) as connection:
         connection.executescript(SCHEMA_PATH.read_text())
-        connection.execute("DROP TRIGGER news_feed_entry_events_reject_conflicting_inserts")
-        connection.executescript(
-            """
-            CREATE TRIGGER news_feed_entry_events_reject_conflicting_inserts
-            BEFORE INSERT ON news_feed_entry_events
-            WHEN EXISTS (
-                SELECT 1 FROM news_feed_entry_events AS existing
-                WHERE existing.event_id = NEW.event_id
-                  AND existing.feed_snapshot_version_id IS NOT NEW.feed_snapshot_version_id
-            )
-            BEGIN
-                SELECT RAISE(ABORT, 'legacy snapshot identity conflict');
-            END;
-            """
-        )
-        connection.executescript(SCHEMA_PATH.read_text())
         connection.execute(
             "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, visibility, current_version_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (

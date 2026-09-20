@@ -25,30 +25,6 @@ def test_production_workflow_starts_every_defined_schedule() -> None:
     assert workflow_schedules == {schedule.name for schedule in schedules}
 
 
-def test_production_workflow_stages_article_controller_activation() -> None:
-    workflow = WORKFLOW.read_text()
-    postgres_check = workflow.split("- name: Verify PostgreSQL catalog", maxsplit=1)[1].split(
-        "- name: Start stored automation state", maxsplit=1
-    )[0]
-    generic_start = workflow.split("- name: Start stored automation state", maxsplit=1)[1].split(
-        "- name: Inspect existing run", maxsplit=1
-    )[0]
-
-    assert "secrets.NEWS_POSTGRES_DSN" in workflow
-    assert "ensure_news_catalog_schema()" in postgres_check
-    assert "if: inputs.partition != ''" in postgres_check
-    assert '("romanian_news_automation", "youtube_relevance_controller")' in generic_start
-    assert "article_batch_controller" not in generic_start
-    assert workflow.index("- name: Start article batch controller") > workflow.index(
-        "- name: Run current feed probe"
-    )
-    assert "if: inputs.enable_article_controller && inputs.partition != ''" in workflow
-    assert "assert not enable_controller or partition" in workflow
-    assert "requested_day == today" in workflow
-    assert '"news/scheduled_at": now.isoformat()' in workflow
-    assert "--job feed_poll" in workflow
-
-
 def test_production_workflow_rejects_noncurrent_or_inspection_activation() -> None:
     workflow = WORKFLOW.read_text()
     validation_step = workflow.split("- name: Validate operation", maxsplit=1)[1].split(

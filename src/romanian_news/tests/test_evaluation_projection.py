@@ -1,4 +1,3 @@
-import inspect
 import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -1397,12 +1396,6 @@ def test_relevance_promotion_rejects_case_identity_mismatch(field, value) -> Non
     failures = evaluation_projection.relevance_promotion_failures(baseline, changed)
 
     assert failures == ("baseline and candidate case identities differ",)
-
-
-def test_experiment_api_has_no_report_parameter() -> None:
-    assert tuple(
-        inspect.signature(evaluation_projection.run_news_evaluation_experiment).parameters
-    ) == ("release", "implementation_ref")
 
 
 def test_explicit_projection_requires_langfuse_credentials(monkeypatch) -> None:

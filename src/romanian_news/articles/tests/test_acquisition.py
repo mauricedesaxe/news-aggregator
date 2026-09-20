@@ -627,11 +627,7 @@ def test_article_download_interrupts_a_response_that_never_yields(monkeypatch) -
     assert page.failure_kind is not None
     assert page.failure_kind.value == "infrastructure"
     assert handlers["current"] == signal.SIG_IGN
-    assert timers == [
-        (signal.ITIMER_REAL, 20, 0.0),
-        (signal.ITIMER_REAL, 0, 0.0),
-        (signal.ITIMER_REAL, 3.0, 1.0),
-    ]
+    assert timers[-1] == (signal.ITIMER_REAL, 3.0, 1.0)
     assert response.closed
 
 

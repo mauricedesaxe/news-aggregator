@@ -1,457 +1,516 @@
+from __future__ import annotations
+
+import hashlib
+import json
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
+import dlt
 import psycopg.errors
 import pytest
+import requests
+from pydantic import HttpUrl
 
-from romanian_news import BUCHAREST
 from romanian_news.analysis.artifacts import ArtifactReference
-from romanian_news.articles.models import (
-    ArticleAcquisitionFailure,
-    ArticleBatchSkip,
-    ArticleFailureKind,
+from romanian_news.analysis.attempts import ModelCall
+from romanian_news.analysis.relevance import ArticleAnalysisInput
+from romanian_news.analysis.relevance_v3 import (
+    RELEVANCE_V3_POLICY,
+    ContextDecision,
+    ContextGateResult,
+    ExecutionMode,
+    GateCall,
+    RelevanceV3Output,
+    production_relevance_v3_request_id,
+    relevance_v3_request_id,
 )
-from romanian_news.catalog_transport import ResearchCatalogError
-from romanian_news.daily import DailyArtifactReferences
+from romanian_news.articles.extraction import article_id, normalize_article_url
+from romanian_news.articles.models import ArticleFailureKind, ExtractedArticle
+from romanian_news.catalog.artifacts import (
+    artifact_file,
+    artifact_statements,
+    sha256,
+)
+from romanian_news.catalog_transport import (
+    ResearchCatalogError,
+    advance_artifact_current_version_statement,
+)
+from romanian_news.feeds import acquisition as feed_acquisition
+from romanian_news.feeds.registry import feed_registry
+from romanian_news.storage import publish_immutable_r2_objects
 from romanian_news.worker import operations
 
 DAY = date(2099, 9, 2)
 
 
-def test_feed_intake_prepares_schema_and_projection_before_feed_reads(
-    monkeypatch, tmp_path
-) -> None:
-    events = []
-    references = DailyArtifactReferences(day=DAY, values=())
-    monkeypatch.setattr(
-        operations, "ensure_news_catalog_schema", lambda: events.append("schema"), raising=False
-    )
-    monkeypatch.setattr(
-        operations,
-        "reconcile_feed_entry_projection",
-        lambda: events.append("projection"),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        operations,
-        "feed_registry",
-        lambda: events.append("registry") or SimpleNamespace(feeds=()),
-    )
-    monkeypatch.setattr(
-        operations,
-        "read_daily_feed_observation_references",
-        lambda _day: events.append("feed-state") or references,
-    )
-    monkeypatch.setattr(
-        operations,
-        "read_successful_feed_observation_count",
-        lambda *_args: events.append("feed-query") or 0,
-    )
-
-    result = operations.materialize_feed_intake(
-        DAY,
-        datetime(2099, 9, 2, tzinfo=UTC),
-        tmp_path,
-        "git:test",
-    )
-
-    assert result == references
-    assert events == ["schema", "projection", "registry", "feed-state", "feed-query", "feed-state"]
-
-
-def test_article_materializer_runs_one_exact_batch_and_rechecks_state(monkeypatch) -> None:
-    planned = []
-    events = []
-    today = datetime.now(BUCHAREST).date()
-    event_ids = ("a" * 64, "b" * 64)
-    references = DailyArtifactReferences(day=today, values=())
-    monkeypatch.setattr(operations, "ARTICLE_ITEM_WORKERS", 1)
-    monkeypatch.setattr(operations, "ensure_news_catalog_schema", lambda: events.append("schema"))
-    monkeypatch.setattr(operations, "feed_registry", lambda: SimpleNamespace(feeds=()))
-    work_items = tuple(
-        SimpleNamespace(
-            source=SimpleNamespace(
-                event_id=event_id, feed_id="feed-1", url="https://example.com/a"
-            ),
-            last_captured_at=None,
-        )
-        for event_id in event_ids
-    )
-    monkeypatch.setattr(
-        operations,
-        "load_exact_article_work",
-        lambda ids, *_args, **_kwargs: events.append(("load", ids)) or work_items,
-    )
-    monkeypatch.setattr(
-        operations,
-        "acquire_article_batch_item",
-        lambda work, _registry: events.append(("acquire", work.source.event_id))
-        or ArticleBatchSkip(event_id=work.source.event_id),
-    )
-    monkeypatch.setattr(
-        operations,
-        "record_article_failure_attempts",
-        lambda *_args, **_kwargs: events.append("record"),
-    )
-    monkeypatch.setattr(
-        operations,
-        "read_article_work_status",
-        lambda *_args, **kwargs: planned.append(kwargs)
-        or SimpleNamespace(
-            retryable_entries=0,
-            deferred_event_ids=(),
-            quarantined_event_ids=(),
-            source_covered_days=(today,),
-        ),
-    )
-    monkeypatch.setattr(operations, "read_daily_article_references", lambda _day: references)
-
-    result = operations.materialize_articles(
-        today,
-        event_ids,
-        "git:test",
-        run_id="run-1",
-        retry_number=0,
-    )
-
-    assert result.complete
-    assert result.skipped_event_ids == event_ids
-    assert events == [
-        "schema",
-        ("load", event_ids),
-        ("acquire", event_ids[0]),
-        ("acquire", event_ids[1]),
-    ]
-    assert len(planned) == 1
-    assert planned[0]["now"] - planned[0]["revalidate_before"] == operations.timedelta(hours=24)
-
-
-def test_article_materializer_records_item_failure_before_the_next_item(monkeypatch) -> None:
-    first_id = "a" * 64
-    second_id = "b" * 64
-    work_items = tuple(
-        SimpleNamespace(
-            source=SimpleNamespace(
-                event_id=event_id, feed_id="feed-1", url="https://example.com/a"
-            ),
-            last_captured_at=None,
-        )
-        for event_id in (first_id, second_id)
-    )
-    failure = ArticleAcquisitionFailure(
-        event_id=first_id,
-        kind=ArticleFailureKind.DETERMINISTIC,
-        fingerprint="c" * 64,
-        message="invalid snapshot",
-    )
-    events = []
-
-    def acquire(work, _registry):
-        events.append(("acquire", work.source.event_id))
-        return failure if work.source.event_id == first_id else ArticleBatchSkip(event_id=second_id)
-
-    monkeypatch.setattr(operations, "ARTICLE_ITEM_WORKERS", 1)
-    monkeypatch.setattr(operations, "ensure_news_catalog_schema", lambda: None)
-    monkeypatch.setattr(operations, "feed_registry", lambda: SimpleNamespace(feeds=()))
-    monkeypatch.setattr(operations, "load_exact_article_work", lambda *_args, **_kwargs: work_items)
-    monkeypatch.setattr(operations, "acquire_article_batch_item", acquire)
-    monkeypatch.setattr(
-        operations,
-        "record_article_failure_attempts",
-        lambda failures, **_kwargs: events.append(("record", failures[0].event_id)),
-    )
-    monkeypatch.setattr(
-        operations,
-        "read_article_work_status",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            retryable_entries=1,
-            deferred_event_ids=(first_id,),
-            quarantined_event_ids=(),
-            source_covered_days=(),
-        ),
-    )
-    monkeypatch.setattr(
-        operations,
-        "read_daily_article_references",
-        lambda day: DailyArtifactReferences(day=day, values=()),
-    )
-
-    operations.materialize_articles(
-        DAY,
-        (first_id, second_id),
-        "git:test",
-        run_id="run-1",
-        retry_number=0,
-    )
-
-    assert events == [
-        ("acquire", first_id),
-        ("record", first_id),
-        ("acquire", second_id),
-    ]
-
-
-def test_article_materializer_publishes_each_success_before_the_next_item(monkeypatch) -> None:
-    first_id = "a" * 64
-    second_id = "b" * 64
-    work_items = tuple(
-        SimpleNamespace(
-            source=SimpleNamespace(
-                event_id=event_id, feed_id="feed-1", url="https://example.com/a"
-            ),
-            last_captured_at=None,
-        )
-        for event_id in (first_id, second_id)
-    )
-    events = []
-
-    class CaptureOutcome:
-        def __init__(self, event_id):
-            self.capture = SimpleNamespace(
-                source=SimpleNamespace(
-                    event_id=event_id, feed_id="feed-1", url="https://example.com/a"
-                )
-            )
-
-    def acquire(work, _registry):
-        events.append(("acquire", work.source.event_id))
-        if work.source.event_id == second_id:
-            raise RuntimeError("peer hung")
-        return CaptureOutcome(work.source.event_id)
-
-    monkeypatch.setattr(operations, "ARTICLE_ITEM_WORKERS", 1)
-    monkeypatch.setattr(operations, "ArticleBatchCapture", CaptureOutcome)
-    monkeypatch.setattr(operations, "ArticleAcquisitionResult", lambda **kwargs: kwargs)
-    monkeypatch.setattr(operations, "ensure_news_catalog_schema", lambda: None)
-    monkeypatch.setattr(operations, "feed_registry", lambda: SimpleNamespace(feeds=()))
-    monkeypatch.setattr(operations, "load_exact_article_work", lambda *_args, **_kwargs: work_items)
-    monkeypatch.setattr(operations, "acquire_article_batch_item", acquire)
-    monkeypatch.setattr(
-        operations,
-        "publish_articles",
-        lambda result, _implementation_ref: events.append(
-            ("publish", result["captures"][0].source.event_id)
-        ),
-    )
-
-    with pytest.raises(RuntimeError, match="peer hung"):
-        operations.materialize_articles(
-            DAY,
-            (first_id, second_id),
-            "git:test",
-            run_id="run-1",
-            retry_number=0,
-        )
-
-    assert events == [
-        ("acquire", first_id),
-        ("publish", first_id),
-        ("acquire", second_id),
-    ]
-
-
-def test_article_materializer_records_publish_conflicts_as_deterministic(
+def test_feed_intake_publishes_every_registered_feed_and_is_idempotent(
+    harness,
+    sqlite_catalog,
+    catalog_connection,
+    fake_r2,
+    fake_http,
     monkeypatch,
+    tmp_path,
+    news_day,
 ) -> None:
-    first_id = "a" * 64
-    work_items = (
-        SimpleNamespace(
-            source=SimpleNamespace(
-                event_id=first_id, feed_id="feed-1", url="https://example.com/a"
-            ),
-            last_captured_at=None,
+    registry = feed_registry()
+    for feed in registry.feeds:
+        fake_http.serve(str(feed.url), harness.rss(()))
+    destination_dir = tmp_path / "dlt-destination"
+    destination_dir.mkdir()
+    monkeypatch.setattr(
+        feed_acquisition,
+        "_destination",
+        lambda _request: dlt.destinations.filesystem(bucket_url=destination_dir.as_uri()),
+    )
+    scheduled_at = datetime.now(UTC)
+
+    references = operations.materialize_feed_intake(news_day, scheduled_at, tmp_path, "git:test")
+
+    observation_rows = catalog_connection.execute(
+        "SELECT feed_id, status, artifact_version_id FROM news_feed_observations "
+        "WHERE scheduled_slot = ?",
+        (scheduled_at.isoformat(),),
+    ).fetchall()
+    assert len(observation_rows) == len(registry.feeds)
+    assert {row["status"] for row in observation_rows} == {"ok"}
+    assert {row["feed_id"] for row in observation_rows} == {feed.id for feed in registry.feeds}
+    assert len(references.values) == len(registry.feeds)
+    assert {value.version_id for value in references.values} == {
+        row["artifact_version_id"] for row in observation_rows
+    }
+    for value in references.values:
+        stored = fake_r2.objects[value.r2_key]
+        assert hashlib.sha256(stored).hexdigest() == value.content_digest
+        assert fake_r2.metadata[value.r2_key]["sha256"] == value.content_digest
+    snapshot_rows = catalog_connection.execute(
+        "SELECT file.r2_key, file.content_digest FROM artifacts artifact "
+        "JOIN artifact_files file ON file.artifact_version_id = artifact.current_version_id "
+        "WHERE artifact.kind = 'news_feed'"
+    ).fetchall()
+    assert len(snapshot_rows) == len(registry.feeds)
+    for row in snapshot_rows:
+        assert hashlib.sha256(fake_r2.objects[row["r2_key"]]).hexdigest() == row["content_digest"]
+
+    repeat = operations.materialize_feed_intake(news_day, scheduled_at, tmp_path, "git:test")
+
+    assert repeat == references
+    assert catalog_connection.execute("SELECT count(*) FROM news_feed_observations").fetchone()[
+        0
+    ] == len(registry.feeds)
+
+
+def _event_id_for_url(catalog_connection, url: str) -> str:
+    row = catalog_connection.execute(
+        "SELECT event_id FROM news_feed_entry_events WHERE original_url = ?", (url,)
+    ).fetchone()
+    assert row is not None
+    return str(row["event_id"])
+
+
+def test_article_materializer_publishes_exact_batch_and_rechecks_state(
+    harness,
+    sqlite_catalog,
+    catalog_connection,
+    fake_r2,
+    fake_http,
+    monkeypatch,
+    news_day,
+) -> None:
+    feed = harness.feed("testfeed", "testoutlet", "https://feed.test/rss", "feed.test")
+    registry = harness.registry(feed)
+    monkeypatch.setattr(operations, "feed_registry", lambda: registry)
+    url = "https://feed.test/stire-ultima-ora"
+    title = "Guvernul a aprobat un pachet de măsuri pentru energia din anul următor"
+    paragraphs = (
+        "Executivul a anunțat că noile prevederi intră în vigoare la începutul anului viitor.",
+        "Ministerul energiei estimează un efect semnificativ asupra facturilor populației.",
+        "Analistii economici salută măsura, dar avertizează asupra implementării rapide.",
+    )
+    page = harness.article(title, paragraphs)
+    observed_at = datetime.now(UTC)
+    capture = harness.seed(
+        fake_http,
+        registry,
+        feed,
+        ((url, title, observed_at, "Rezumat pe scurt al știrii."),),
+        observed_at,
+    )
+    fake_http.serve(url, page)
+    event_ids = harness.event_ids(capture, registry)
+    assert len(event_ids) == 1
+
+    result = operations.materialize_articles(
+        news_day, event_ids, "git:test", run_id="run-1", retry_number=0
+    )
+
+    assert result.complete
+    assert result.acquired_event_ids == event_ids
+    assert result.skipped_event_ids == ()
+    assert result.failures == ()
+    version_rows = catalog_connection.execute(
+        "SELECT version.canonical_url, version.bucharest_day, artifact.current_version_id "
+        "FROM news_article_versions version "
+        "JOIN artifacts artifact ON artifact.id = version.article_artifact_id "
+        "WHERE artifact.kind = 'news_article'"
+    ).fetchall()
+    assert len(version_rows) == 1
+    assert version_rows[0]["canonical_url"] == url
+    assert version_rows[0]["bucharest_day"] == news_day.isoformat()
+    assert [value.version_id for value in result.references.values] == [
+        version_rows[0]["current_version_id"]
+    ]
+    run_row = catalog_connection.execute(
+        "SELECT id FROM runs WHERE operation_key = 'news.normalize_article' "
+        "AND status = 'completed'"
+    ).fetchone()
+    assert run_row is not None
+    assert (
+        catalog_connection.execute(
+            "SELECT count(*) FROM run_inputs WHERE run_id = ?", (run_row["id"],)
+        ).fetchone()[0]
+        >= 1
+    )
+    page_rows = catalog_connection.execute(
+        "SELECT file.r2_key, file.content_digest FROM artifact_files file "
+        "JOIN news_article_versions version ON version.page_capture_version_id "
+        "= file.artifact_version_id"
+    ).fetchall()
+    assert len(page_rows) == 1
+    assert fake_r2.objects[page_rows[0]["r2_key"]] == page
+    assert (
+        hashlib.sha256(fake_r2.objects[page_rows[0]["r2_key"]]).hexdigest()
+        == page_rows[0]["content_digest"]
+    )
+
+    second = operations.materialize_articles(
+        news_day, event_ids, "git:test", run_id="run-2", retry_number=0
+    )
+
+    assert second.complete
+    assert second.acquired_event_ids == ()
+    assert second.failures == ()
+    assert second.references == result.references
+    assert (
+        catalog_connection.execute("SELECT count(*) FROM news_article_versions").fetchone()[0] == 1
+    )
+    assert (
+        catalog_connection.execute(
+            "SELECT count(*) FROM runs WHERE operation_key = 'news.normalize_article'"
+        ).fetchone()[0]
+        == 1
+    )
+    assert (
+        catalog_connection.execute("SELECT count(*) FROM news_article_failure_attempts").fetchone()[
+            0
+        ]
+        == 0
+    )
+
+
+def test_article_materializer_records_item_failure_before_the_next_item(
+    harness,
+    sqlite_catalog,
+    catalog_connection,
+    fake_r2,
+    fake_http,
+    monkeypatch,
+    news_day,
+) -> None:
+    feed = harness.feed("testfeed", "testoutlet", "https://feed.test/rss", "feed.test")
+    registry = harness.registry(feed)
+    monkeypatch.setattr(operations, "feed_registry", lambda: registry)
+    good_url = "https://feed.test/stire-buna"
+    missing_url = "https://feed.test/stire-lipsa"
+    good_title = "Parlamentul a adoptat o lege importantă pentru piața energetică"
+    good_page = harness.article(
+        good_title,
+        (
+            "Legea modifică modul de calcul al prețurilor pentru energia regenerabilă.",
+            "Autoritățile așteaptă efecte pozitive începând cu următorul an bugetar.",
         ),
     )
-    recorded = []
-
-    class CaptureOutcome:
-        capture = SimpleNamespace(
-            source=SimpleNamespace(event_id=first_id, feed_id="feed-1", url="https://example.com/a")
-        )
-
-    conflict = psycopg.errors.IntegrityConstraintViolation("news_article_aliases identity conflict")
-    publish_error = ResearchCatalogError("PostgreSQL catalog request failed")
-    publish_error.__cause__ = conflict
-
-    def publish(_result, _implementation_ref):
-        raise publish_error
-
-    monkeypatch.setattr(operations, "ArticleBatchCapture", CaptureOutcome)
-    monkeypatch.setattr(operations, "ArticleAcquisitionResult", lambda **kwargs: kwargs)
-    monkeypatch.setattr(operations, "ensure_news_catalog_schema", lambda: None)
-    monkeypatch.setattr(operations, "feed_registry", lambda: SimpleNamespace(feeds=()))
-    monkeypatch.setattr(operations, "load_exact_article_work", lambda *_args, **_kwargs: work_items)
-    monkeypatch.setattr(
-        operations, "acquire_article_batch_item", lambda work, _registry: CaptureOutcome()
-    )
-    monkeypatch.setattr(operations, "publish_articles", publish)
-    monkeypatch.setattr(
-        operations,
-        "record_article_failure_attempts",
-        lambda failures, **_kwargs: recorded.append(failures[0]),
-    )
-    monkeypatch.setattr(
-        operations,
-        "read_article_work_status",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            retryable_entries=0,
-            deferred_event_ids=(),
-            quarantined_event_ids=(),
-            source_covered_days=(DAY,),
+    observed_at = datetime.now(UTC)
+    harness.seed(
+        fake_http,
+        registry,
+        feed,
+        (
+            (good_url, good_title, observed_at, "Descriere pe scurt."),
+            (missing_url, "Lipsă", observed_at, ""),
         ),
+        observed_at,
     )
-    monkeypatch.setattr(
-        operations,
-        "read_daily_article_references",
-        lambda day: DailyArtifactReferences(day=day, values=()),
+    fake_http.serve(good_url, good_page)
+    fake_http.serve(missing_url, b"", status=404)
+    event_ids = tuple(
+        _event_id_for_url(catalog_connection, value) for value in (good_url, missing_url)
     )
 
     result = operations.materialize_articles(
-        DAY,
-        (first_id,),
-        "git:test",
-        run_id="run-1",
-        retry_number=0,
+        news_day, event_ids, "git:test", run_id="run-1", retry_number=0
     )
-    second = operations._publish_failure(first_id, publish_error)
+
+    assert result.acquired_event_ids == (event_ids[0],)
+    assert [failure.event_id for failure in result.failures] == [event_ids[1]]
+    assert result.failures[0].kind == ArticleFailureKind.DETERMINISTIC
+    assert result.remaining_entries == 1
+    attempt_rows = catalog_connection.execute(
+        "SELECT event_id, failure_kind FROM news_article_failure_attempts"
+    ).fetchall()
+    assert [(row["event_id"], row["failure_kind"]) for row in attempt_rows] == [
+        (event_ids[1], "deterministic")
+    ]
+    good_rows = catalog_connection.execute(
+        "SELECT version.canonical_url FROM news_article_versions version "
+        "JOIN artifacts artifact ON artifact.id = version.article_artifact_id "
+        "WHERE artifact.kind = 'news_article'"
+    ).fetchall()
+    assert [row["canonical_url"] for row in good_rows] == [good_url]
+    page_rows = catalog_connection.execute(
+        "SELECT file.r2_key FROM artifact_files file "
+        "JOIN news_article_versions version ON version.page_capture_version_id "
+        "= file.artifact_version_id"
+    ).fetchall()
+    assert len(page_rows) == 1
+    assert fake_r2.objects[page_rows[0]["r2_key"]] == good_page
+
+
+def test_article_materializer_publishes_each_success_before_the_next_item(
+    harness,
+    sqlite_catalog,
+    catalog_connection,
+    fake_r2,
+    fake_http,
+    monkeypatch,
+    news_day,
+) -> None:
+    feed = harness.feed("testfeed", "testoutlet", "https://feed.test/rss", "feed.test")
+    registry = harness.registry(feed)
+    monkeypatch.setattr(operations, "feed_registry", lambda: registry)
+    good_url = "https://feed.test/stire-prima"
+    dead_url = "https://feed.test/stire-cadere"
+    good_title = "Banca națională a anunțat o nouă politică monetară pentru trimestru"
+    good_page = harness.article(
+        good_title,
+        (
+            "Decizia survine după mai multe luni de dezbateri publice intense.",
+            "Economiștii așteaptă stabilizarea ratei inflației în cursul anului.",
+        ),
+    )
+    observed_at = datetime.now(UTC)
+    harness.seed(
+        fake_http,
+        registry,
+        feed,
+        (
+            (good_url, good_title, observed_at, "Descriere pe scurt."),
+            (dead_url, "Cădere", observed_at, ""),
+        ),
+        observed_at,
+    )
+    fake_http.serve(good_url, good_page)
+    fake_http.fail(dead_url, requests.ConnectionError("peer hung"))
+    event_ids = tuple(
+        _event_id_for_url(catalog_connection, value) for value in (good_url, dead_url)
+    )
+
+    result = operations.materialize_articles(
+        news_day, event_ids, "git:test", run_id="run-1", retry_number=0
+    )
+
+    assert result.acquired_event_ids == (event_ids[0],)
+    assert [failure.event_id for failure in result.failures] == [event_ids[1]]
+    assert result.failures[0].kind == ArticleFailureKind.INFRASTRUCTURE
+    assert (
+        catalog_connection.execute(
+            "SELECT count(*) FROM news_article_failure_attempts "
+            "WHERE failure_kind = 'infrastructure'"
+        ).fetchone()[0]
+        == 1
+    )
+    version_rows = catalog_connection.execute(
+        "SELECT version.canonical_url, version.page_capture_version_id "
+        "FROM news_article_versions version "
+        "JOIN artifacts artifact ON artifact.id = version.article_artifact_id "
+        "WHERE artifact.kind = 'news_article'"
+    ).fetchall()
+    assert [row["canonical_url"] for row in version_rows] == [good_url]
+    page_r2_key = catalog_connection.execute(
+        "SELECT r2_key FROM artifact_files WHERE artifact_version_id = ?",
+        (version_rows[0]["page_capture_version_id"],),
+    ).fetchone()["r2_key"]
+    assert fake_r2.objects[page_r2_key] == good_page
+
+
+def test_article_materializer_dedupes_alias_sharing_events(
+    harness,
+    sqlite_catalog,
+    catalog_connection,
+    fake_r2,
+    fake_http,
+    monkeypatch,
+    news_day,
+) -> None:
+    alpha = harness.feed("feed-alpha", "outlet-alpha", "https://alpha.test/rss", "shared.test")
+    beta = harness.feed("feed-beta", "outlet-beta", "https://beta.test/rss", "shared.test")
+    registry = harness.registry(alpha, beta)
+    monkeypatch.setattr(operations, "feed_registry", lambda: registry)
+    alpha_url = "https://shared.test/story?utm_source=alpha"
+    beta_url = "https://shared.test/story?utm_source=beta"
+    title = "Conducerea companiei naționale de transport a prezentat planul anual"
+    page = harness.article(
+        title,
+        (
+            "Planul prevede investiții semnificative în infrastructura regională.",
+            "Reprezentanții sindicatelor au reacționat cu rezervă față de promisiuni.",
+        ),
+    )
+    observed_at = datetime.now(UTC)
+    alpha_capture = harness.seed(
+        fake_http,
+        registry,
+        alpha,
+        ((alpha_url, title, observed_at, "Descriere alpha."),),
+        observed_at,
+    )
+    beta_capture = harness.seed(
+        fake_http,
+        registry,
+        beta,
+        ((beta_url, title, observed_at, "Descriere beta."),),
+        observed_at,
+    )
+    fake_http.serve(alpha_url, page)
+    fake_http.serve(beta_url, page)
+    alpha_event = harness.event_ids(alpha_capture, registry)[0]
+    beta_event = harness.event_ids(beta_capture, registry)[0]
+
+    result = operations.materialize_articles(
+        news_day, (alpha_event, beta_event), "git:test", run_id="run-1", retry_number=0
+    )
 
     assert result.complete
-    assert tuple(recorded) == result.failures
-    assert recorded[0].kind == ArticleFailureKind.DETERMINISTIC
-    assert recorded[0].message.endswith("identity conflict")
-    assert second.fingerprint == recorded[0].fingerprint
+    assert len(result.acquired_event_ids) == 1
+    assert set(result.acquired_event_ids) | set(result.skipped_event_ids) == {
+        alpha_event,
+        beta_event,
+    }
+    assert result.failures == ()
+    assert (
+        catalog_connection.execute("SELECT count(*) FROM news_article_versions").fetchone()[0] == 1
+    )
+    assert (
+        catalog_connection.execute(
+            "SELECT count(*) FROM news_article_aliases WHERE alias_key = ?",
+            ("url:https://shared.test/story",),
+        ).fetchone()[0]
+        == 1
+    )
 
 
 def test_article_materializer_isolates_a_publish_conflict_across_parallel_items(
+    harness,
+    sqlite_catalog,
+    catalog_connection,
+    fake_r2,
+    fake_http,
     monkeypatch,
+    news_day,
 ) -> None:
-    first_id = "a" * 64
-    second_id = "b" * 64
-    work_items = tuple(
-        SimpleNamespace(
-            source=SimpleNamespace(
-                event_id=event_id, feed_id="feed-1", url="https://example.com/a"
+    feed = harness.feed("testfeed", "testoutlet", "https://feed.test/rss", "feed.test")
+    registry = harness.registry(feed)
+    monkeypatch.setattr(operations, "feed_registry", lambda: registry)
+    clean_url = "https://feed.test/stire-curata"
+    conflict_url = "https://feed.test/stire-conflict"
+    clean_title = "Ministerul finanțelor a publicat raportul anual despre deficit"
+    page = harness.article(
+        clean_title,
+        (
+            "Raportul detaliază evoluția încasărilor bugetare din ultimele luni.",
+            "Oppoziția ceră dezbateri parlamentare pe baza concluziilor raportului.",
+        ),
+    )
+    observed_at = datetime.now(UTC)
+    harness.seed(
+        fake_http,
+        registry,
+        feed,
+        (
+            (clean_url, clean_title, observed_at, "Descriere."),
+            (
+                conflict_url,
+                "Conflicting headline that is long enough for extraction",
+                observed_at,
+                "Descriere conflict.",
             ),
-            last_captured_at=None,
-        )
-        for event_id in (first_id, second_id)
+        ),
+        observed_at,
     )
-    recorded = []
-    published = []
+    fake_http.serve(clean_url, page)
+    fake_http.serve(
+        conflict_url,
+        harness.article(
+            "Conflicting headline that is long enough for extraction",
+            ("Un paragraf destul de lung pentru a trece de pragul de extragere minimă.",),
+        ),
+    )
+    conflicting_artifact = f"news:article:{article_id(feed.outlet_id, normalize_article_url(conflict_url, feed.article_hosts))}"
+    catalog_connection.execute(
+        "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, "
+        "visibility, current_version_id, created_at) "
+        "VALUES (?, 'news_article', 'Conflicting', 'derived', 'current', 'private', NULL, ?)",
+        (conflicting_artifact, observed_at.isoformat()),
+    )
+    event_ids = tuple(
+        _event_id_for_url(catalog_connection, value) for value in (clean_url, conflict_url)
+    )
+
+    result = operations.materialize_articles(
+        news_day, event_ids, "git:test", run_id="run-1", retry_number=0
+    )
+
+    assert result.acquired_event_ids == (event_ids[0],)
+    assert [failure.event_id for failure in result.failures] == [event_ids[1]]
+    assert result.failures[0].kind == ArticleFailureKind.INFRASTRUCTURE
+    assert "artifacts identity conflict" in result.failures[0].message
+    assert (
+        catalog_connection.execute(
+            "SELECT count(*) FROM news_article_failure_attempts WHERE event_id = ?",
+            (event_ids[1],),
+        ).fetchone()[0]
+        == 1
+    )
+    version_rows = catalog_connection.execute(
+        "SELECT version.canonical_url, version.page_capture_version_id "
+        "FROM news_article_versions version "
+        "JOIN artifacts artifact ON artifact.id = version.article_artifact_id "
+        "WHERE artifact.kind = 'news_article'"
+    ).fetchall()
+    assert [row["canonical_url"] for row in version_rows] == [clean_url]
+    page_r2_key = catalog_connection.execute(
+        "SELECT r2_key FROM artifact_files WHERE artifact_version_id = ?",
+        (version_rows[0]["page_capture_version_id"],),
+    ).fetchone()["r2_key"]
+    assert fake_r2.objects[page_r2_key] == page
+    assert (
+        catalog_connection.execute(
+            "SELECT count(*) FROM runs WHERE operation_key = 'news.normalize_article'"
+        ).fetchone()[0]
+        == 1
+    )
+
+
+def test_publish_failure_maps_psycopg_integrity_conflict_to_deterministic() -> None:
     conflict = psycopg.errors.IntegrityConstraintViolation("news_article_aliases identity conflict")
-    publish_error = ResearchCatalogError("PostgreSQL catalog request failed")
-    publish_error.__cause__ = conflict
+    error = ResearchCatalogError("PostgreSQL catalog request failed")
+    error.__cause__ = conflict
 
-    class CaptureOutcome:
-        def __init__(self, event_id):
-            self.capture = SimpleNamespace(
-                source=SimpleNamespace(
-                    event_id=event_id, feed_id="feed-1", url="https://example.com/a"
-                )
-            )
+    failure = operations._publish_failure("a" * 64, error)
 
-    def acquire(work, _registry):
-        return CaptureOutcome(work.source.event_id)
-
-    def publish(result, _implementation_ref):
-        capture = result["captures"][0]
-        if capture.source.event_id == first_id:
-            published.append(capture.source.event_id)
-            return
-        raise publish_error
-
-    monkeypatch.setattr(operations, "ArticleBatchCapture", CaptureOutcome)
-    monkeypatch.setattr(operations, "ArticleAcquisitionResult", lambda **kwargs: kwargs)
-    monkeypatch.setattr(operations, "ensure_news_catalog_schema", lambda: None)
-    monkeypatch.setattr(operations, "feed_registry", lambda: SimpleNamespace(feeds=()))
-    monkeypatch.setattr(operations, "load_exact_article_work", lambda *_args, **_kwargs: work_items)
-    monkeypatch.setattr(operations, "acquire_article_batch_item", acquire)
-    monkeypatch.setattr(operations, "publish_articles", publish)
-    monkeypatch.setattr(
-        operations,
-        "record_article_failure_attempts",
-        lambda failures, **_kwargs: recorded.append(failures[0]),
-    )
-    monkeypatch.setattr(
-        operations,
-        "read_article_work_status",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            retryable_entries=0,
-            deferred_event_ids=(),
-            quarantined_event_ids=(),
-            source_covered_days=(DAY,),
-        ),
-    )
-    monkeypatch.setattr(
-        operations,
-        "read_daily_article_references",
-        lambda day: DailyArtifactReferences(day=day, values=()),
-    )
-
-    result = operations.materialize_articles(
-        DAY,
-        (first_id, second_id),
-        "git:test",
-        run_id="run-1",
-        retry_number=0,
-    )
-
-    assert published == [first_id]
-    assert len(result.failures) == 1
-    assert result.failures[0].event_id == second_id
-    assert result.failures[0].kind == ArticleFailureKind.DETERMINISTIC
-    assert tuple(recorded) == result.failures
-    assert result.acquired_event_ids == (first_id,)
-
-
-def test_article_materializer_dedupes_alias_sharing_events(monkeypatch) -> None:
-    first_id = "a" * 64
-    second_id = "b" * 64
-    feed = SimpleNamespace(id="feed-1", article_hosts=("example.com",))
-    url = "https://example.com/news/story?utm_source=feed"
-    work_items = tuple(
-        SimpleNamespace(
-            source=SimpleNamespace(event_id=event_id, feed_id="feed-1", url=url),
-            last_captured_at=None,
-        )
-        for event_id in (first_id, second_id)
-    )
-    acquired = []
-
-    def acquire(work, _registry):
-        acquired.append(work.source.event_id)
-        return ArticleBatchSkip(event_id=work.source.event_id)
-
-    monkeypatch.setattr(operations, "ensure_news_catalog_schema", lambda: None)
-    monkeypatch.setattr(operations, "feed_registry", lambda: SimpleNamespace(feeds=(feed,)))
-    monkeypatch.setattr(operations, "load_exact_article_work", lambda *_args, **_kwargs: work_items)
-    monkeypatch.setattr(operations, "acquire_article_batch_item", acquire)
-    monkeypatch.setattr(
-        operations,
-        "read_article_work_status",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            retryable_entries=0,
-            deferred_event_ids=(),
-            quarantined_event_ids=(),
-            source_covered_days=(DAY,),
-        ),
-    )
-    monkeypatch.setattr(
-        operations,
-        "read_daily_article_references",
-        lambda day: DailyArtifactReferences(day=day, values=()),
-    )
-
-    result = operations.materialize_articles(
-        DAY,
-        (first_id, second_id),
-        "git:test",
-        run_id="run-1",
-        retry_number=0,
-    )
-
-    assert acquired == [first_id]
-    assert set(result.skipped_event_ids) == {first_id, second_id}
+    assert failure.kind == ArticleFailureKind.DETERMINISTIC
+    assert failure.message.endswith("identity conflict")
+    assert failure.fingerprint == operations._publish_failure("a" * 64, error).fingerprint
 
 
 def test_article_materializer_rejects_more_than_ten_event_ids() -> None:
@@ -463,6 +522,181 @@ def test_article_materializer_rejects_more_than_ten_event_ids() -> None:
             run_id="run-1",
             retry_number=0,
         )
+
+
+def _seed_analysis_article(
+    sqlite_catalog, fake_r2, news_day: date, article: ExtractedArticle
+) -> ArtifactReference:
+    content = article.model_dump_json().encode()
+    r2_key = f"news/articles/{article.article_id}/{sha256(content)}.json"
+    snapshot = artifact_file(
+        artifact_id="news:feed:testfeed",
+        artifact_kind="news_feed",
+        title="RSS feed: testfeed",
+        content=b"<rss/>",
+        r2_key=f"news/feeds/testfeed/{sha256(b'<rss/>')}.xml",
+        media_type="application/xml",
+    )
+    file = artifact_file(
+        artifact_id=f"news:article:{article.article_id}",
+        artifact_kind="news_article",
+        title=article.title,
+        content=content,
+        r2_key=r2_key,
+        media_type="application/json",
+    )
+    publish_immutable_r2_objects(((snapshot.r2_key, snapshot.content), (r2_key, content)))
+    timestamp = datetime.now(UTC).isoformat()
+    statements = [
+        *artifact_statements(snapshot, timestamp, produced_by_run_id=None),
+        *artifact_statements(file, timestamp, produced_by_run_id=None),
+        advance_artifact_current_version_statement(snapshot.artifact_id, snapshot.version_id),
+        advance_artifact_current_version_statement(file.artifact_id, file.version_id),
+        (
+            "INSERT INTO news_article_versions VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            [
+                file.version_id,
+                file.artifact_id,
+                article.outlet_id,
+                str(article.canonical_url),
+                article.published_at.isoformat(),
+                article.source_updated_at.isoformat() if article.source_updated_at else None,
+                article.bucharest_day.isoformat(),
+                article.material_digest,
+                article.extraction_digest,
+                snapshot.version_id,
+                None,
+                timestamp,
+            ],
+        ),
+    ]
+    sqlite_catalog.batch(statements)
+    return ArtifactReference(
+        artifact_id=file.artifact_id,
+        version_id=file.version_id,
+        content_digest=file.content_digest,
+        r2_key=r2_key,
+    )
+
+
+def test_relevance_materializer_uses_production_v3(
+    sqlite_catalog,
+    catalog_connection,
+    fake_r2,
+    monkeypatch,
+    news_day,
+) -> None:
+    title = "Analiza politicilor publice pentru infrastructura din România"
+    body = (
+        "Guvernul a prezentat un plan de investiții care schimbă prioritățile naționale "
+        "și reașază bugetul pentru următorii ani."
+    )
+    article = ExtractedArticle(
+        article_id="a" * 64,
+        outlet_id="testoutlet",
+        canonical_url=HttpUrl("https://feed.test/stire-analiza"),
+        title=title,
+        body=body,
+        author=None,
+        published_at=datetime.now(UTC),
+        source_updated_at=None,
+        bucharest_day=news_day,
+        material_digest="1" * 64,
+        extraction_digest="2" * 64,
+    )
+    reference = _seed_analysis_article(sqlite_catalog, fake_r2, news_day, article)
+    analyzed_modes: list[ExecutionMode] = []
+
+    def analyze(
+        value: ArticleAnalysisInput, *, mode: ExecutionMode, **_kwargs: object
+    ) -> RelevanceV3Output:
+        analyzed_modes.append(mode)
+        request_id = relevance_v3_request_id(value.reference, mode=mode)
+        context = ContextGateResult(
+            decision=ContextDecision(
+                subject_role="incidental",
+                news_cycle="current_cycle",
+                romanian_consequence="absent",
+                certainty="clear",
+                evidence_quote=value.article.title,
+                reason_ro="Articolul nu descrie o consecință românească directă.",
+            ),
+            provider=GateCall(
+                request_id=request_id,
+                call=ModelCall(
+                    response_id="resp-test",
+                    model="test-model",
+                    input_tokens=64,
+                    output_tokens=32,
+                    latency_ms=10,
+                ),
+                cost_usd=0.0,
+                response_count=1,
+                traces=(),
+                accounting_complete=True,
+            ),
+        )
+        payload = json.dumps(
+            {
+                "request_id": request_id,
+                "mode": mode,
+                "context_provider_responses": [
+                    {"id": "resp-test", "usage": {"prompt_tokens": 64, "completion_tokens": 32}}
+                ],
+            },
+            sort_keys=True,
+        ).encode()
+        return RelevanceV3Output(
+            request_id=request_id,
+            policy=RELEVANCE_V3_POLICY,
+            mode=mode,
+            execution_ref=None,
+            article=value.reference,
+            context=context,
+            impact=None,
+            accepted=False,
+            content=payload,
+        )
+
+    monkeypatch.setattr(operations, "analyze_relevance_v3", analyze)
+    monkeypatch.setattr(operations, "flush_langfuse_traces", lambda: None)
+
+    references = operations.materialize_relevance(news_day, "git:test")
+
+    assert analyzed_modes == ["production_early_exit"]
+    assert [value.artifact_id for value in references.values] == [
+        f"news:relevance:{production_relevance_v3_request_id(reference)}"
+    ]
+    relevance_version = references.values[0].version_id
+    assert (
+        catalog_connection.execute(
+            "SELECT accepted FROM news_relevance_versions WHERE artifact_version_id = ?",
+            (relevance_version,),
+        ).fetchone()["accepted"]
+        == 0
+    )
+    assert (
+        hashlib.sha256(fake_r2.objects[references.values[0].r2_key]).hexdigest()
+        == references.values[0].content_digest
+    )
+    assert (
+        catalog_connection.execute(
+            "SELECT count(*) FROM runs WHERE operation_key = 'news.relevance.v3' "
+            "AND status = 'completed'"
+        ).fetchone()[0]
+        == 1
+    )
+
+    repeat = operations.materialize_relevance(news_day, "git:test")
+
+    assert repeat == references
+    assert analyzed_modes == ["production_early_exit"]
+    assert (
+        catalog_connection.execute(
+            "SELECT count(*) FROM runs WHERE operation_key = 'news.relevance.v3'"
+        ).fetchone()[0]
+        == 1
+    )
 
 
 @pytest.mark.parametrize(
@@ -527,52 +761,6 @@ def test_model_materializers_flush_traces_without_hiding_model_failure(
     assert events == ["flush"]
 
 
-def test_relevance_materializer_uses_production_v3(monkeypatch) -> None:
-    events = []
-    references = DailyArtifactReferences(day=DAY, values=())
-    reference = object()
-    analysis_input = object()
-    output = object()
-
-    def pending(**kwargs):
-        events.append(("pending", kwargs))
-        return (reference,)
-
-    monkeypatch.setattr(operations, "read_pending_relevance_references", pending)
-    monkeypatch.setattr(
-        operations,
-        "load_article_analysis_input",
-        lambda value: events.append(("load", value)) or analysis_input,
-    )
-    monkeypatch.setattr(
-        operations,
-        "analyze_relevance_v3",
-        lambda value, **kwargs: events.append(("analyze", value, kwargs)) or output,
-    )
-    monkeypatch.setattr(
-        operations,
-        "publish_relevance_outputs",
-        lambda values, implementation_ref: events.append(("publish", values, implementation_ref)),
-    )
-    monkeypatch.setattr(operations, "read_daily_relevance_references", lambda _day: references)
-    monkeypatch.setattr(operations, "flush_langfuse_traces", lambda: events.append(("flush",)))
-
-    assert operations.materialize_relevance(DAY, "git:test") == references
-    assert events == [
-        (
-            "pending",
-            {
-                "day": DAY,
-                "request_id_for_article": operations.production_relevance_v3_request_id,
-            },
-        ),
-        ("load", reference),
-        ("analyze", analysis_input, {"mode": "production_early_exit"}),
-        ("publish", (output,), "git:test"),
-        ("flush",),
-    ]
-
-
 def _raise_model_failure() -> None:
     raise RuntimeError("model failed")
 
@@ -587,29 +775,25 @@ def test_subject_assessment_materializer_reuses_completed_run_before_inference(
         content_digest="d" * 64,
         r2_key="news/subject-assessments/test.json",
     )
-    events = []
     monkeypatch.setattr(
         operations,
         "read_daily_subject_assessment_input",
-        lambda day: events.append(("input", day)) or value,
+        lambda day: value,
     )
     monkeypatch.setattr(
         operations,
         "subject_assessment_request_id",
-        lambda item: events.append(("request", item)) or "b" * 64,
+        lambda item: "b" * 64,
     )
     monkeypatch.setattr(
         operations,
         "subject_assessment_run_id",
-        lambda request_id, implementation_ref: events.append(
-            ("run", request_id, implementation_ref)
-        )
-        or "c" * 64,
+        lambda request_id, implementation_ref: "c" * 64,
     )
     monkeypatch.setattr(
         operations,
         "read_completed_subject_assessment",
-        lambda run_id: events.append(("completed", run_id)) or reference,
+        lambda run_id: reference,
     )
     monkeypatch.setattr(
         operations,
@@ -620,9 +804,3 @@ def test_subject_assessment_materializer_reuses_completed_run_before_inference(
     result = operations.materialize_subject_assessments(DAY, "git:test")
 
     assert result.values == (reference,)
-    assert events == [
-        ("input", DAY),
-        ("request", value),
-        ("run", "b" * 64, "git:test"),
-        ("completed", "c" * 64),
-    ]

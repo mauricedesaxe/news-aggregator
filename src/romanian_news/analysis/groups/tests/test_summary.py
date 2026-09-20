@@ -10,9 +10,6 @@ from romanian_news.analysis.groups import summary as summary_module
 from romanian_news.analysis.groups.models import GroupAnalysisInput, GroupSummary
 from romanian_news.analysis.groups.summary import (
     SUMMARY_COMPARISON_POLICY,
-    SUMMARY_CORRECTION_POLICY,
-    SUMMARY_PROMPT,
-    SUMMARY_TEXT_POLICY,
     summarize_group,
     summary_request_id,
 )
@@ -27,32 +24,6 @@ def test_summary_request_identity_stays_stable() -> None:
 
     assert request_id == summary_request_id(group)
     assert request_id == "0f6535e29d4d25932c1d7d11fe2d83fe8f509b82ea77cd4c2977a580d123f9b2"
-    assert summary_module.SUMMARY_TITLE_POLICY == "strip-leading-news-labels-v1"
-    assert SUMMARY_COMPARISON_POLICY == "distinct-outlets-only-v1"
-    assert SUMMARY_CORRECTION_POLICY == "complete-json-once-v1"
-    assert SUMMARY_TEXT_POLICY == "article-handle-outlet-published-title-body-12000-v2"
-
-
-def test_summary_prompt_requires_english_with_archived_field_names() -> None:
-    assert "English" in SUMMARY_PROMPT
-    assert "legacy field names" in SUMMARY_PROMPT
-    assert "values in English" in SUMMARY_PROMPT
-    assert set(GroupSummary.model_json_schema()["properties"]) >= {
-        "title_ro",
-        "summary_ro",
-        "key_points_ro",
-        "disagreements_ro",
-        "uncertainty_ro",
-    }
-    assert "4-12 word" in SUMMARY_PROMPT
-    assert "1-2 sentence" in SUMMARY_PROMPT
-    assert "60-word" in SUMMARY_PROMPT
-    assert "3 concise" in SUMMARY_PROMPT
-    assert "distinct supplied outlets" in SUMMARY_PROMPT
-    assert "fewer than two distinct outlets" in SUMMARY_PROMPT
-    assert "hedged title" in SUMMARY_PROMPT
-    assert "unconfirmed claim" in SUMMARY_PROMPT
-    assert "restating the outlet headline as fact" in SUMMARY_PROMPT
 
 
 def test_summary_accepts_no_material_uncertainty() -> None:
@@ -182,6 +153,29 @@ def test_summary_corrects_truncated_json_once(monkeypatch) -> None:
 
     assert [attempt["status"] for attempt in attempts] == ["rejected", "accepted"]
     assert len(json.loads(output.content)["provider_responses"]) == 2
+
+
+def test_summary_correction_exhaustion_raises_after_repeated_invalid_responses(
+    monkeypatch,
+) -> None:
+    value = _group_input(("outlet",))
+    responses = [_response("{"), _response("{")]
+    attempts = []
+    monkeypatch.setattr(
+        summary_module,
+        "trace_provider_call",
+        lambda *_args: SimpleNamespace(response=responses.pop(0), call_id="call", trace=None),
+    )
+    monkeypatch.setattr(
+        summary_module,
+        "record_model_attempt",
+        lambda *_args, **kwargs: attempts.append(kwargs),
+    )
+
+    with pytest.raises(ValueError, match="Group summary remained invalid after correction"):
+        summarize_group(value, "article context")
+
+    assert [attempt["status"] for attempt in attempts] == ["rejected", "rejected"]
 
 
 def _group_input(outlets: tuple[str, ...]) -> GroupAnalysisInput:

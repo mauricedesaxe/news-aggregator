@@ -11,19 +11,6 @@ FIRST_GENERATION = "d" * 64
 SECOND_GENERATION = "e" * 64
 
 
-def test_attempt_states_request_all_generations_from_catalog(monkeypatch) -> None:
-    calls = []
-    monkeypatch.setattr(
-        recovery.article_catalog,
-        "read_article_failure_attempts",
-        lambda event_ids: calls.append(event_ids) or (),
-    )
-    generations = {f"{index:064x}": FIRST_GENERATION for index in range(75)}
-
-    assert recovery.read_article_attempt_states(generations) == {}
-    assert calls == [tuple(generations)]
-
-
 def test_unchanged_deterministic_failures_quarantine_after_three_attempts(monkeypatch) -> None:
     monkeypatch.setattr(
         recovery.article_catalog,

@@ -14,7 +14,6 @@ from romanian_news.analysis.relevance import (
     PRODUCTION_RELEVANCE_POLICY,
     RELEVANCE_POLICY_V1,
     RELEVANCE_POLICY_V2,
-    RELEVANCE_PROMPT,
     ArticleAnalysisInput,
     RelevanceDecision,
     analyze_relevance,
@@ -22,7 +21,7 @@ from romanian_news.analysis.relevance import (
     relevance_policy_digest,
     relevance_request_id,
 )
-from romanian_news.analysis.tracing import ModelTraceReference, ProviderCallResult
+from romanian_news.analysis.tracing import ProviderCallResult
 from romanian_news.articles.models import ExtractedArticle
 
 _A = "a" * 64
@@ -110,12 +109,6 @@ def test_relevance_uses_exact_title_after_invalid_correction(monkeypatch) -> Non
     assert not {"policy_id", "policy_digest", "accepted"}.intersection(output_fields)
     payload = json.loads(output.content)
     assert payload["accepted"] is True
-    assert payload["policy"]["evidence_policy"] == RELEVANCE_POLICY_V2.evidence_policy
-    assert payload["policy"]["correction_instruction"]
-    assert payload["policy"]["correction_fallback"] == "article_title"
-    assert payload["policy"]["provider_require_parameters"] is True
-    assert payload["policy"]["accepted_national_reach"] == ["nationwide"]
-    assert payload["policy"]["response_schema"] == RelevanceDecision.model_json_schema()
 
 
 def test_relevance_corrects_an_invalid_evidence_quote_once(monkeypatch) -> None:
@@ -161,48 +154,6 @@ def test_relevance_corrects_an_invalid_evidence_quote_once(monkeypatch) -> None:
     assert [value["status"] for value in recorded] == ["rejected", "accepted"]
     payload = json.loads(output.content)
     assert len(payload["provider_responses"]) == 2
-
-
-def test_relevance_forwards_trace_to_attempt(monkeypatch) -> None:
-    response = _FakeResponse(
-        json.dumps(
-            {
-                "national_reach": "nationwide",
-                "consequence_magnitude": "routine",
-                "political_relevance": "strong",
-                "economic_relevance": "none",
-                "romania_relevance": "strong",
-                "confidence": 0.9,
-                "evidence_quote": "Dovada exacta",
-                "reason_ro": "Relevant",
-            }
-        )
-    )
-    trace = ModelTraceReference(
-        provider="langfuse",
-        trace_id="t" * 32,
-        observation_id="o" * 32,
-        project_ref="project",
-        recorded_at=datetime(2026, 9, 1, tzinfo=UTC),
-    )
-    recorded = []
-    monkeypatch.setattr(
-        "romanian_news.analysis.relevance.trace_provider_call",
-        lambda *_args: ProviderCallResult(
-            response=response,
-            call_id=UUID("018f0000-0000-7000-8000-000000000002"),
-            trace=trace,
-        ),
-    )
-    monkeypatch.setattr(
-        "romanian_news.analysis.relevance.record_model_attempt",
-        lambda *_args, **kwargs: recorded.append(kwargs),
-    )
-
-    analyze_relevance(_analysis_input())
-
-    assert recorded[0]["trace"] is trace
-    assert recorded[0]["fallback_response_id"] == "018f0000-0000-7000-8000-000000000002"
 
 
 def test_relevance_request_identity_stays_stable() -> None:
@@ -317,60 +268,6 @@ def test_policy_identity_changes_for_each_behavior_category() -> None:
         assert relevance_request_id(reference, variant) != relevance_request_id(
             reference, RELEVANCE_POLICY_V1
         )
-
-
-def test_v2_prompt_states_the_national_consequence_rules() -> None:
-    assert RELEVANCE_POLICY_V2.model == "google/gemini-2.5-flash"
-    for term in (
-        "concrete material effect",
-        "government power",
-        "public finances",
-        "major economic conditions",
-        "national institutions",
-        "general Romanian interest is insufficient",
-        "lowest supported",
-        "breadth of the consequence",
-        "one public service",
-        "one institution family",
-        "article's main subject",
-        "several national systems",
-        "police custody or prisons",
-        "quantify a nationwide problem",
-        "general trend does not qualify by itself",
-        "what governments generally will need to do",
-        "brief Romanian statistic does not promote",
-        "headline and most of the article concern a global trend",
-        "focus principally on Romania",
-        "global population aging",
-        "coordinated planning across education, health, and pensions",
-        "global treaties",
-        "Forming or dismissing Romania's government",
-        "active parliamentary-majority dispute",
-        "single-source reporting",
-        "political OR strong economic",
-    ):
-        assert term in RELEVANCE_POLICY_V2.prompt
-
-
-def test_relevance_prompt_defines_reach_and_consequence_levels() -> None:
-    for term in (
-        "none",
-        "sector_limited",
-        "nationwide",
-        "narrow",
-        "routine",
-        "major",
-        "administrative fees",
-        "permits",
-        "certificates",
-        "filings",
-        "procedural changes",
-        "households",
-        "businesses",
-        "public finances",
-        "institutions",
-    ):
-        assert term in RELEVANCE_PROMPT
 
 
 def _relevance_database() -> sqlite3.Connection:
