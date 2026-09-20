@@ -4,12 +4,17 @@ import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Literal, LiteralString, TypeVar, cast
+from typing import Annotated, Any, Literal, LiteralString, TypeVar, cast
 from urllib.parse import urlsplit
 
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_statements
+from romanian_news import NewsModel, Sha256
+from romanian_news.catalog.artifacts import (
+    ArtifactFile,
+    CatalogArtifactReference,
+    artifact_statements,
+)
 from romanian_news.catalog_transport import (
     CatalogConnection,
     ResearchCatalogError,
@@ -81,6 +86,72 @@ _ACTIVE_STAGES = frozenset(
 )
 _TERMINAL_STAGES = frozenset({SlotStage.SKIPPED, SlotStage.FAILED, SlotStage.PUBLISHED})
 _Result = TypeVar("_Result")
+
+
+class PlanningAttemptReference(NewsModel):
+    attempt_index: Annotated[int, Field(ge=0, le=2)]
+    disposition: Literal["rejected", "accepted"]
+    evidence: CatalogArtifactReference
+    accepted_plan_artifact_version_id: Sha256 | None
+
+
+def record_policy_bundle(file: ArtifactFile, *, recorded_at: datetime) -> Sha256:
+    timestamp = _utc(recorded_at, "recorded_at")
+    if (
+        not file.artifact_id.startswith("video-digest-policy:")
+        or file.artifact_kind != "video_digest_policy"
+        or file.media_type != "application/json"
+    ):
+        raise ValueError("Video digest policy artifact identity is invalid")
+
+    def record(connection: CatalogConnection) -> Sha256:
+        _register_artifact(connection, file, timestamp)
+        if not _stored_artifact_matches(connection, file):
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest policy conflicts with the request"
+            )
+        return file.version_id
+
+    return _checkpoint_transaction(record)
+
+
+def read_planning_attempts(edition_id: EditionId) -> tuple[PlanningAttemptReference, ...]:
+    rows = catalog_query(
+        """
+        SELECT attempt.attempt_index, attempt.disposition,
+               artifact.id AS artifact_id, version.id AS version_id,
+               file.content_digest, file.r2_key,
+               attempt.accepted_plan_artifact_version_id
+        FROM video_digest_planning_attempts attempt
+        JOIN artifact_versions version
+          ON version.id = attempt.attempt_evidence_artifact_version_id
+        JOIN artifacts artifact ON artifact.id = version.artifact_id
+        JOIN artifact_files file ON file.artifact_version_id = version.id
+        WHERE attempt.edition_id = %s
+        ORDER BY attempt.attempt_index
+        """,
+        [edition_id],
+    )
+    attempts = tuple(
+        PlanningAttemptReference(
+            attempt_index=row["attempt_index"],
+            disposition=row["disposition"],
+            evidence=CatalogArtifactReference.model_validate(
+                {
+                    field: row[field]
+                    for field in ("artifact_id", "version_id", "content_digest", "r2_key")
+                },
+                strict=True,
+            ),
+            accepted_plan_artifact_version_id=row["accepted_plan_artifact_version_id"],
+        )
+        for row in rows
+    )
+    if tuple(item.attempt_index for item in attempts) != tuple(range(len(attempts))):
+        raise VideoDigestCheckpointConflictError("Stored planning attempts are not contiguous")
+    if any(item.disposition == "accepted" for item in attempts[:-1]):
+        raise VideoDigestCheckpointConflictError("Accepted planning attempt must be final")
+    return attempts
 
 
 def schedule_slot(slot: ScheduledSlot, *, recorded_at: datetime) -> ScheduledSlot:
