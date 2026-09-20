@@ -40,6 +40,7 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
     assert tuple((migration.version, migration.name) for migration in NEWS_CATALOG_MIGRATIONS) == (
         (1, "initial"),
         (2, "video_digest"),
+        (3, "video_digest_generation_fences"),
     )
     assert tuple(migration.version for migration in NEWS_CATALOG_MIGRATIONS) == tuple(
         range(1, len(NEWS_CATALOG_MIGRATIONS) + 1)
@@ -53,4 +54,5 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
     assert tuple(migration.sha256 for migration in NEWS_CATALOG_MIGRATIONS) == (
         "fdb4743a172787b87e7cd40b8f4a1701c104e4df527f5d1d9622f8ba0639954a",
         "7d36b645f7af54d821b2da1d2eac5ac4da8738c26098d24db56eed2e44f79664",
+        "44c9d7bca5165807bf7db40245964ff6fb4527d29771b46c0ce2aa4231874c8b",
     )
