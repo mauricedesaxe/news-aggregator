@@ -125,6 +125,8 @@ def claim_slot(
         current = _database_now(connection)
         expires_at = current + duration
         stage = SlotStage(str(row["stage"]))
+        if stage == SlotStage.SKIPPED:
+            return SkippedSlot(reason=SlotSkipReason(str(row["skip_reason"])))
         if stage in _TERMINAL_STAGES:
             return TerminalSlot(state=TerminalSlotState(stage.value))
         if stage in _ACTIVE_STAGES:
