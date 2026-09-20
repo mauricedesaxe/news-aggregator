@@ -12,6 +12,7 @@ from romanian_news.config import NEWS_POSTGRES_DSN
 
 Statement = tuple[str, list[object]]
 Result = TypeVar("Result")
+CatalogConnection = psycopg.Connection[dict[str, Any]]
 
 
 class ResearchCatalogError(RuntimeError):
@@ -82,6 +83,22 @@ def catalog_batch(
     _run_catalog_operation(run, retry_transient_errors=retry_transient_errors)
 
 
+def catalog_transaction(
+    operation: Callable[[CatalogConnection], Result],
+    *,
+    retry_transient_errors: bool = False,
+) -> Result:
+    """Run a callback in one authoritative catalog transaction."""
+
+    def run() -> Result:
+        with _connect() as connection:
+            connection.execute("SET LOCAL statement_timeout = '60s'")
+            connection.execute("SET LOCAL TIME ZONE 'UTC'")
+            return operation(connection)
+
+    return _run_catalog_operation(run, retry_transient_errors=retry_transient_errors)
+
+
 def advance_artifact_current_version_statement(
     artifact_id: str,
     candidate_version_id: str,
@@ -150,11 +167,11 @@ def _catalog_row(row: Mapping[str, object]) -> dict[str, Any]:
     }
 
 
-def _connect() -> psycopg.Connection[dict[str, Any]]:
+def _connect() -> CatalogConnection:
     if NEWS_POSTGRES_DSN is None:
         raise RuntimeError("NEWS_POSTGRES_DSN is required")
     return cast(
-        psycopg.Connection[dict[str, Any]],
+        CatalogConnection,
         psycopg.connect(NEWS_POSTGRES_DSN, row_factory=cast(Any, dict_row)),
     )
 
