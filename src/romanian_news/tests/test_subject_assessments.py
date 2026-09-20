@@ -1,5 +1,7 @@
+import hashlib
 import json
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -12,6 +14,7 @@ from romanian_news.evaluation import (
     RankingEvaluationCase,
     TierEvaluationCase,
     evaluate_subject_assessment,
+    score_subject_assessments,
     subject_tier_label_conflicts,
 )
 from romanian_news.groups import NewsGroup
@@ -32,15 +35,97 @@ from romanian_news.subject_assessments import (
     subject_assessment_request_id,
 )
 from romanian_news.themes import (
+    LEGACY_SPARSE_THEME_DEFINITION,
     PRODUCTION_THEME_POLICY,
     DailyTheme,
+    DailyThemeInput,
     EmptyThemeConstruction,
     ReaderSubjectDailyThemeSet,
+    SparseDailyThemeSet,
+    ThemeGroupInput,
+    construct_daily_themes,
     daily_theme_id,
+    parse_daily_theme_set,
     sparse_theme_policy_digest,
 )
 
 DAY = date(2026, 9, 10)
+
+
+def test_schema_v2_input_validates_strictly_and_scores_without_substitution(monkeypatch) -> None:
+    value = _input()
+    theme_input = DailyThemeInput(
+        day=value.day,
+        cluster_set=value.theme_set.cluster_set,
+        groups=tuple(
+            ThemeGroupInput(group=group, summary=summary.reference, value=summary.summary)
+            for group, summary in zip(value.theme_set.groups, value.summaries, strict=True)
+        ),
+    )
+    response = _theme_response(
+        {
+            "assignments": {
+                group.id: index for index, group in enumerate(value.theme_set.groups, start=1)
+            }
+        }
+    )
+    monkeypatch.setattr(
+        "romanian_news.themes.openrouter_client",
+        lambda: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response))
+        ),
+    )
+    monkeypatch.setattr(
+        "romanian_news.themes.record_model_attempt",
+        lambda response, **_kwargs: SimpleNamespace(
+            attempt_id=hashlib.sha256(response.id.encode()).hexdigest(),
+            response_id=response.id,
+        ),
+    )
+    sparse_output = construct_daily_themes(theme_input, LEGACY_SPARSE_THEME_DEFINITION)
+    sparse_theme_set = parse_daily_theme_set(sparse_output.content)
+    assert isinstance(sparse_theme_set, SparseDailyThemeSet)
+
+    payload = value.model_dump(mode="json")
+    payload["theme_set"] = sparse_theme_set.model_dump(mode="json")
+    theme_by_group = {theme.group_ids[0]: theme.id for theme in sparse_theme_set.themes}
+    for item in payload["evidence"]:
+        item["theme_id"] = theme_by_group[item["group_id"]]
+    sparse_input = DailySubjectAssessmentInput.model_validate_json(json.dumps(payload), strict=True)
+    first_group, second_group = sparse_theme_set.groups
+    case = RankingEvaluationCase.model_construct(
+        case_id="schema-v2-ranking",
+        control=False,
+        provenance=EvaluationProvenance(feedback_ids=()),
+        higher_group_id=first_group.id,
+        lower_group_id=second_group.id,
+    )
+
+    result = score_subject_assessments(
+        (case,), sparse_input.theme_set, _assessment_set(sparse_input).assessments
+    )
+
+    assert isinstance(sparse_input.theme_set, SparseDailyThemeSet)
+    assert result.passed_cases == result.total_cases == 1
+
+
+def test_production_input_reader_rejects_schema_v2_themes(monkeypatch) -> None:
+    sparse_output = construct_daily_themes(
+        DailyThemeInput(day=DAY, cluster_set=_reference(1, "clusters"), groups=()),
+        LEGACY_SPARSE_THEME_DEFINITION,
+    )
+    monkeypatch.setattr(
+        "romanian_news.catalog.themes.read_daily_theme_reference",
+        lambda _day: _reference(2, "themes"),
+    )
+    monkeypatch.setattr(
+        assessment_module,
+        "read_verified_r2_object",
+        lambda _r2_key, _digest: sparse_output.content,
+    )
+
+    with pytest.raises(ValueError, match="schema version 3 or 4"):
+        assessment_module.read_daily_subject_assessment_input(DAY)
 
 
 def test_response_requires_exact_subject_coverage_and_subject_evidence() -> None:
@@ -510,6 +595,23 @@ def _reference(index: int, kind: str, version_id: str | None = None) -> Artifact
         version_id=value,
         content_digest=f"{index + 100:064x}",
         r2_key=f"news/{kind}/{index}.json",
+    )
+
+
+def _theme_response(payload: dict[str, object]) -> SimpleNamespace:
+    content = json.dumps(payload)
+    provider_payload = {
+        "id": "schema-v2-assignment",
+        "model": "google/gemini-3.8-flash",
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.01},
+        "choices": [{"message": {"content": content}}],
+    }
+    return SimpleNamespace(
+        id="schema-v2-assignment",
+        model="google/gemini-3.8-flash",
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5),
+        choices=(SimpleNamespace(message=SimpleNamespace(content=content)),),
+        model_dump=lambda *, mode: provider_payload,
     )
 
 

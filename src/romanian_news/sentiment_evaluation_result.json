@@ -1,0 +1,25 @@
+{
+  "schema_version": "news-sentiment-evaluation-result/v1",
+  "protocol": "jev_aspect_evaluation_protocol.json",
+  "inventory": "sentiment_label_inventory.json",
+  "status": "not_evaluable",
+  "reason": "No immutable human-reviewed article or group sentiment class labels exist.",
+  "scope": {
+    "classification": "not_evaluable",
+    "evidence_quotation": "outside_comparison",
+    "rationale_generation": "outside_comparison"
+  },
+  "models": [
+    {"model": "jev-1.13.0", "trials": 0, "metrics": null, "cost_usd": "0"},
+    {"model": "google/gemini-2.5-flash", "trials": 0, "metrics": null, "cost_usd": "0"},
+    {"model": "google/gemini-3.8-flash", "trials": 0, "metrics": null, "cost_usd": "0"},
+    {"model": "openai/gpt-4.1-mini", "trials": 0, "metrics": null, "cost_usd": "0"}
+  ],
+  "production_recommendation": "Retain the current sentiment implementation. Collect blinded human labels before comparing or replacing its classification component.",
+  "minimum_labeling_plan": [
+    "Freeze exact report, group and article version identities.",
+    "Have humans assign the four-class sentiment label from frozen definitions before seeing candidate outputs.",
+    "Record annotator, reviewer, rationale and article evidence quote in an append-only artifact.",
+    "Register disjoint calibration and test membership before threshold or composition tuning."
+  ]
+}

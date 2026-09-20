@@ -1,0 +1,598 @@
+{
+  "accounting_basis": {
+    "cost_source": "news_model_calls.cost_usd",
+    "excluded_operational_spend": "rejected articles, abandoned runs, and attempts without a report-lineage artifact",
+    "lineage": "transitive run inputs excluding prior_output",
+    "per_report_deduplication_key": [
+      "report_version_id",
+      "artifact_version_id"
+    ],
+    "portfolio_unique_key": "artifact_version_id"
+  },
+  "catalog_migration_sha256": "fdb4743a172787b87e7cd40b8f4a1701c104e4df527f5d1d9622f8ba0639954a",
+  "contains_credentials": false,
+  "contains_provider_output": false,
+  "contains_report_or_article_text": false,
+  "generator_sha256": "b24fd5484ce850791ee12b75a1f9656e0746b10c11810934b0492a4bd6ce6ad9",
+  "input_manifest_sha256": "3f7e669636571240dab80f4ea095c2c102ef1f3765566ae6288c593e351879bb",
+  "portfolio": {
+    "attributed_cost_usd": "2.032867430",
+    "maximum_report_reference_count": 1,
+    "report_count": 7,
+    "shared_cost_usd": "0.000000000",
+    "shared_model_output_count": 0,
+    "unique_model_output_count": 1656,
+    "unique_physical_cost_usd": "2.032867430"
+  },
+  "query_sha256": "411ddc6532a5e9475187c9a178e3f721cb268bbb6f0457cbd4ec4b620117364c",
+  "reports": [
+    {
+      "accounting_gaps": [],
+      "breakdown": [
+        {
+          "cost_usd": "0.034476000",
+          "input_tokens": 27873,
+          "latency_ms": 13382,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 3619,
+          "response_count": 1,
+          "stage": "news.assess_daily_subjects",
+          "total_tokens": 31492
+        },
+        {
+          "cost_usd": "0.026795250",
+          "input_tokens": 25792,
+          "latency_ms": 11314,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 1987,
+          "response_count": 2,
+          "stage": "news.construct_daily_themes",
+          "total_tokens": 27779
+        },
+        {
+          "cost_usd": "0.000845820",
+          "input_tokens": 42291,
+          "latency_ms": 81499,
+          "model": "text-embedding-3-small",
+          "model_output_count": 119,
+          "output_tokens": 0,
+          "response_count": 119,
+          "stage": "news.embed",
+          "total_tokens": 42291
+        },
+        {
+          "cost_usd": "0.226116510",
+          "input_tokens": 362387,
+          "latency_ms": 565468,
+          "model": "google/gemini-2.5-flash",
+          "model_output_count": 119,
+          "output_tokens": 47151,
+          "response_count": 239,
+          "stage": "news.relevance.v3",
+          "total_tokens": 409538
+        },
+        {
+          "cost_usd": "0.114532800",
+          "input_tokens": 189084,
+          "latency_ms": 457562,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 72,
+          "output_tokens": 24312,
+          "response_count": 191,
+          "stage": "news.score_group_sentiment",
+          "total_tokens": 213396
+        },
+        {
+          "cost_usd": "0.083964400",
+          "input_tokens": 154967,
+          "latency_ms": 311583,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 72,
+          "output_tokens": 13736,
+          "response_count": 72,
+          "stage": "news.summarize_group",
+          "total_tokens": 168703
+        }
+      ],
+      "cost_usd": "0.486730780",
+      "day": "2026-09-14",
+      "input_tokens": 802394,
+      "latency_ms": 1440808,
+      "lineage_node_count": 699,
+      "model_output_count": 384,
+      "output_tokens": 90805,
+      "report_version_id": "f6fc85b9c6fab8f15d11e8c9cea36ec88f6c0b6e4d3aedd6c429cbbf548f555e",
+      "response_count": 624,
+      "total_tokens": 893199
+    },
+    {
+      "accounting_gaps": [],
+      "breakdown": [
+        {
+          "cost_usd": "0.022462500",
+          "input_tokens": 18095,
+          "latency_ms": 11066,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 2371,
+          "response_count": 1,
+          "stage": "news.assess_daily_subjects",
+          "total_tokens": 20466
+        },
+        {
+          "cost_usd": "0.019449750",
+          "input_tokens": 17483,
+          "latency_ms": 9981,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 1690,
+          "response_count": 2,
+          "stage": "news.construct_daily_themes",
+          "total_tokens": 19173
+        },
+        {
+          "cost_usd": "0.000472900",
+          "input_tokens": 23645,
+          "latency_ms": 43903,
+          "model": "text-embedding-3-small",
+          "model_output_count": 67,
+          "output_tokens": 0,
+          "response_count": 67,
+          "stage": "news.embed",
+          "total_tokens": 23645
+        },
+        {
+          "cost_usd": "0.131081500",
+          "input_tokens": 216005,
+          "latency_ms": 387407,
+          "model": "google/gemini-2.5-flash",
+          "model_output_count": 67,
+          "output_tokens": 26512,
+          "response_count": 135,
+          "stage": "news.relevance.v3",
+          "total_tokens": 242517
+        },
+        {
+          "cost_usd": "0.072411200",
+          "input_tokens": 122596,
+          "latency_ms": 290393,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 50,
+          "output_tokens": 14608,
+          "response_count": 117,
+          "stage": "news.score_group_sentiment",
+          "total_tokens": 137204
+        },
+        {
+          "cost_usd": "0.056148000",
+          "input_tokens": 102482,
+          "latency_ms": 174578,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 50,
+          "output_tokens": 9472,
+          "response_count": 50,
+          "stage": "news.summarize_group",
+          "total_tokens": 111954
+        }
+      ],
+      "cost_usd": "0.302025850",
+      "day": "2026-09-15",
+      "input_tokens": 500306,
+      "latency_ms": 917328,
+      "lineage_node_count": 418,
+      "model_output_count": 236,
+      "output_tokens": 54653,
+      "report_version_id": "b5594aab447f3e5517f12175cc6bf01b3c352ef7f2c6da142179cf9f142eb897",
+      "response_count": 372,
+      "total_tokens": 554959
+    },
+    {
+      "accounting_gaps": [],
+      "breakdown": [
+        {
+          "cost_usd": "0.014158500",
+          "input_tokens": 11558,
+          "latency_ms": 7690,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 1464,
+          "response_count": 1,
+          "stage": "news.assess_daily_subjects",
+          "total_tokens": 13022
+        },
+        {
+          "cost_usd": "0.012683250",
+          "input_tokens": 11361,
+          "latency_ms": 9232,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 1110,
+          "response_count": 2,
+          "stage": "news.construct_daily_themes",
+          "total_tokens": 12471
+        },
+        {
+          "cost_usd": "0.000273680",
+          "input_tokens": 13684,
+          "latency_ms": 33495,
+          "model": "text-embedding-3-small",
+          "model_output_count": 43,
+          "output_tokens": 0,
+          "response_count": 43,
+          "stage": "news.embed",
+          "total_tokens": 13684
+        },
+        {
+          "cost_usd": "0.082027200",
+          "input_tokens": 129624,
+          "latency_ms": 222828,
+          "model": "google/gemini-2.5-flash",
+          "model_output_count": 43,
+          "output_tokens": 17256,
+          "response_count": 88,
+          "stage": "news.relevance.v3",
+          "total_tokens": 146880
+        },
+        {
+          "cost_usd": "0.042654000",
+          "input_tokens": 69227,
+          "latency_ms": 207575,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 34,
+          "output_tokens": 9352,
+          "response_count": 77,
+          "stage": "news.score_group_sentiment",
+          "total_tokens": 78579
+        },
+        {
+          "cost_usd": "0.032998400",
+          "input_tokens": 58192,
+          "latency_ms": 123218,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 34,
+          "output_tokens": 6076,
+          "response_count": 34,
+          "stage": "news.summarize_group",
+          "total_tokens": 64268
+        }
+      ],
+      "cost_usd": "0.184795030",
+      "day": "2026-09-16",
+      "input_tokens": 293646,
+      "latency_ms": 604038,
+      "lineage_node_count": 293,
+      "model_output_count": 156,
+      "output_tokens": 35258,
+      "report_version_id": "49c9e634788c474da7aa339f009663fa3a8a4c516aff0e475d31f6afd640f941",
+      "response_count": 245,
+      "total_tokens": 328904
+    },
+    {
+      "accounting_gaps": [],
+      "breakdown": [
+        {
+          "cost_usd": "0.028790250",
+          "input_tokens": 22367,
+          "latency_ms": 12341,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 3204,
+          "response_count": 1,
+          "stage": "news.assess_daily_subjects",
+          "total_tokens": 25571
+        },
+        {
+          "cost_usd": "0.019136250",
+          "input_tokens": 19345,
+          "latency_ms": 10153,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 1234,
+          "response_count": 2,
+          "stage": "news.construct_daily_themes",
+          "total_tokens": 20579
+        },
+        {
+          "cost_usd": "0.000766000",
+          "input_tokens": 38300,
+          "latency_ms": 68980,
+          "model": "text-embedding-3-small",
+          "model_output_count": 106,
+          "output_tokens": 0,
+          "response_count": 106,
+          "stage": "news.embed",
+          "total_tokens": 38300
+        },
+        {
+          "cost_usd": "0.187334120",
+          "input_tokens": 286192,
+          "latency_ms": 556108,
+          "model": "google/gemini-2.5-flash",
+          "model_output_count": 106,
+          "output_tokens": 40766,
+          "response_count": 212,
+          "stage": "news.relevance.v3",
+          "total_tokens": 326958
+        },
+        {
+          "cost_usd": "0.093926400",
+          "input_tokens": 156684,
+          "latency_ms": 351696,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 56,
+          "output_tokens": 19917,
+          "response_count": 161,
+          "stage": "news.score_group_sentiment",
+          "total_tokens": 176601
+        },
+        {
+          "cost_usd": "0.067352800",
+          "input_tokens": 125578,
+          "latency_ms": 211215,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 56,
+          "output_tokens": 10701,
+          "response_count": 56,
+          "stage": "news.summarize_group",
+          "total_tokens": 136279
+        }
+      ],
+      "cost_usd": "0.397305820",
+      "day": "2026-09-17",
+      "input_tokens": 648466,
+      "latency_ms": 1210493,
+      "lineage_node_count": 601,
+      "model_output_count": 326,
+      "output_tokens": 75822,
+      "report_version_id": "71e799636e9ad0b451ad482b5a94dcff0114cf1f968f4689516f21ebec3e4f81",
+      "response_count": 538,
+      "total_tokens": 724288
+    },
+    {
+      "accounting_gaps": [],
+      "breakdown": [
+        {
+          "cost_usd": "0.023438250",
+          "input_tokens": 19351,
+          "latency_ms": 8998,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 2380,
+          "response_count": 1,
+          "stage": "news.assess_daily_subjects",
+          "total_tokens": 21731
+        },
+        {
+          "cost_usd": "0.016938000",
+          "input_tokens": 17279,
+          "latency_ms": 7303,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 1061,
+          "response_count": 2,
+          "stage": "news.construct_daily_themes",
+          "total_tokens": 18340
+        },
+        {
+          "cost_usd": "0.000578640",
+          "input_tokens": 28932,
+          "latency_ms": 62884,
+          "model": "text-embedding-3-small",
+          "model_output_count": 84,
+          "output_tokens": 0,
+          "response_count": 84,
+          "stage": "news.embed",
+          "total_tokens": 28932
+        },
+        {
+          "cost_usd": "0.156541400",
+          "input_tokens": 250763,
+          "latency_ms": 437134,
+          "model": "google/gemini-2.5-flash",
+          "model_output_count": 84,
+          "output_tokens": 32525,
+          "response_count": 171,
+          "stage": "news.relevance.v3",
+          "total_tokens": 283288
+        },
+        {
+          "cost_usd": "0.081972400",
+          "input_tokens": 136367,
+          "latency_ms": 312152,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 52,
+          "output_tokens": 17141,
+          "response_count": 136,
+          "stage": "news.score_group_sentiment",
+          "total_tokens": 153508
+        },
+        {
+          "cost_usd": "0.060590800",
+          "input_tokens": 111537,
+          "latency_ms": 188401,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 52,
+          "output_tokens": 9985,
+          "response_count": 52,
+          "stage": "news.summarize_group",
+          "total_tokens": 121522
+        }
+      ],
+      "cost_usd": "0.340059490",
+      "day": "2026-09-18",
+      "input_tokens": 564229,
+      "latency_ms": 1016872,
+      "lineage_node_count": 563,
+      "model_output_count": 274,
+      "output_tokens": 63092,
+      "report_version_id": "37a7fa85cdea7c45848ba377f0d1ddac7a884682cc5ec14a3ddf99afec5660d9",
+      "response_count": 446,
+      "total_tokens": 627321
+    },
+    {
+      "accounting_gaps": [],
+      "breakdown": [
+        {
+          "cost_usd": "0.021444000",
+          "input_tokens": 16767,
+          "latency_ms": 9662,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 2365,
+          "response_count": 1,
+          "stage": "news.assess_daily_subjects",
+          "total_tokens": 19132
+        },
+        {
+          "cost_usd": "0.014259000",
+          "input_tokens": 14527,
+          "latency_ms": 8239,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 897,
+          "response_count": 2,
+          "stage": "news.construct_daily_themes",
+          "total_tokens": 15424
+        },
+        {
+          "cost_usd": "0.000460120",
+          "input_tokens": 23006,
+          "latency_ms": 38571,
+          "model": "text-embedding-3-small",
+          "model_output_count": 63,
+          "output_tokens": 0,
+          "response_count": 63,
+          "stage": "news.embed",
+          "total_tokens": 23006
+        },
+        {
+          "cost_usd": "0.118140720",
+          "input_tokens": 183161,
+          "latency_ms": 310092,
+          "model": "google/gemini-2.5-flash",
+          "model_output_count": 63,
+          "output_tokens": 25461,
+          "response_count": 126,
+          "stage": "news.relevance.v3",
+          "total_tokens": 208622
+        },
+        {
+          "cost_usd": "0.062915200",
+          "input_tokens": 103124,
+          "latency_ms": 251475,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 47,
+          "output_tokens": 13541,
+          "response_count": 110,
+          "stage": "news.score_group_sentiment",
+          "total_tokens": 116665
+        },
+        {
+          "cost_usd": "0.048524000",
+          "input_tokens": 86130,
+          "latency_ms": 155256,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 47,
+          "output_tokens": 8795,
+          "response_count": 47,
+          "stage": "news.summarize_group",
+          "total_tokens": 94925
+        }
+      ],
+      "cost_usd": "0.265743040",
+      "day": "2026-09-19",
+      "input_tokens": 426715,
+      "latency_ms": 773295,
+      "lineage_node_count": 402,
+      "model_output_count": 222,
+      "output_tokens": 51059,
+      "report_version_id": "38287cca44e9b485f671fa6b4179b597bf402bbf371bfd53f9dbb7bf718f19d6",
+      "response_count": 349,
+      "total_tokens": 477774
+    },
+    {
+      "accounting_gaps": [],
+      "breakdown": [
+        {
+          "cost_usd": "0.005484000",
+          "input_tokens": 4392,
+          "latency_ms": 5099,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 584,
+          "response_count": 1,
+          "stage": "news.assess_daily_subjects",
+          "total_tokens": 4976
+        },
+        {
+          "cost_usd": "0.006085500",
+          "input_tokens": 5234,
+          "latency_ms": 8010,
+          "model": "google/gemini-3.8-flash",
+          "model_output_count": 1,
+          "output_tokens": 576,
+          "response_count": 3,
+          "stage": "news.construct_daily_themes",
+          "total_tokens": 5810
+        },
+        {
+          "cost_usd": "0.000105320",
+          "input_tokens": 5266,
+          "latency_ms": 9849,
+          "model": "text-embedding-3-small",
+          "model_output_count": 15,
+          "output_tokens": 0,
+          "response_count": 15,
+          "stage": "news.embed",
+          "total_tokens": 5266
+        },
+        {
+          "cost_usd": "0.023829800",
+          "input_tokens": 30241,
+          "latency_ms": 75019,
+          "model": "google/gemini-2.5-flash",
+          "model_output_count": 15,
+          "output_tokens": 5903,
+          "response_count": 30,
+          "stage": "news.relevance.v3",
+          "total_tokens": 36144
+        },
+        {
+          "cost_usd": "0.011250400",
+          "input_tokens": 16834,
+          "latency_ms": 65918,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 13,
+          "output_tokens": 2823,
+          "response_count": 28,
+          "stage": "news.score_group_sentiment",
+          "total_tokens": 19657
+        },
+        {
+          "cost_usd": "0.009452400",
+          "input_tokens": 14731,
+          "latency_ms": 39228,
+          "model": "openai/gpt-4.1-mini",
+          "model_output_count": 13,
+          "output_tokens": 2225,
+          "response_count": 13,
+          "stage": "news.summarize_group",
+          "total_tokens": 16956
+        }
+      ],
+      "cost_usd": "0.056207420",
+      "day": "2026-09-20",
+      "input_tokens": 76698,
+      "latency_ms": 203123,
+      "lineage_node_count": 95,
+      "model_output_count": 58,
+      "output_tokens": 12111,
+      "report_version_id": "009b84f676ea351b63493a45a319e07bcb8cd9c55aa8c6c5369d0cb10abba6df",
+      "response_count": 90,
+      "total_tokens": 88809
+    }
+  ],
+  "schema_version": "news-report-model-cost/v1"
+}

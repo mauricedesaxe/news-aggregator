@@ -39,8 +39,10 @@ from romanian_news.groups import (
 )
 from romanian_news.subject_assessments import (
     DailySubjectAssessmentSet,
-    compare_subject_anchors,
+    SubjectAssessment,
+    SubjectAssessmentThemeSet,
     resolve_group_anchor,
+    subject_order_key,
 )
 from romanian_news.themes import (
     AliasedReaderSubjectThemeSet,
@@ -1876,8 +1878,8 @@ class SubjectTierLabelConflict(NewsModel):
 
 
 def subject_tier_label_conflicts(
-    cases: Iterable[NewsEvaluationCase],
-    theme_set: ReaderSubjectDailyThemeSet,
+    cases: Iterable[NewsEvaluationCase | RankingEvaluationSpec | TierEvaluationSpec],
+    theme_set: SubjectAssessmentThemeSet,
 ) -> tuple[SubjectTierLabelConflict, ...]:
     """Report merged subjects whose frozen tier labels disagree after construction.
 
@@ -1887,7 +1889,7 @@ def subject_tier_label_conflicts(
     """
     labels: dict[Sha256, list[tuple[str, Sha256, Tier]]] = {}
     for case in cases:
-        if not isinstance(case, TierEvaluationCase):
+        if not isinstance(case, TierEvaluationCase | TierEvaluationSpec):
             continue
         group_id = case.provenance.group_id
         if group_id is None:
@@ -1926,10 +1928,25 @@ def subject_tier_label_conflicts(
 
 def evaluate_subject_assessment(
     cases: Iterable[NewsEvaluationCase],
-    theme_set: ReaderSubjectDailyThemeSet,
+    theme_set: SubjectAssessmentThemeSet,
     assessment_set: DailySubjectAssessmentSet,
 ) -> SubjectAssessmentEvaluationResult:
     """Score stable group anchors against one trial-specific assessment set."""
+    scored_cases = tuple(
+        case for case in cases if isinstance(case, RankingEvaluationCase | TierEvaluationCase)
+    )
+    return score_subject_assessments(scored_cases, theme_set, assessment_set.assessments)
+
+
+def score_subject_assessments(
+    cases: Iterable[
+        RankingEvaluationCase | TierEvaluationCase | RankingEvaluationSpec | TierEvaluationSpec
+    ],
+    theme_set: SubjectAssessmentThemeSet,
+    assessments_value: tuple[SubjectAssessment, ...],
+) -> SubjectAssessmentEvaluationResult:
+    """Score assessment values without fabricating production construction provenance."""
+    cases = tuple(cases)
     conflicts = subject_tier_label_conflicts(cases, theme_set)
     unresolvable = tuple(conflict for conflict in conflicts if conflict.governing_case_id is None)
     if unresolvable:
@@ -1953,9 +1970,9 @@ def evaluate_subject_assessment(
     results = []
     merged_pairs = 0
     semantic_ties = 0
-    assessments = {item.theme_id: item for item in assessment_set.assessments}
+    assessments = {item.theme_id: item for item in assessments_value}
     for case in cases:
-        if isinstance(case, RankingEvaluationCase):
+        if isinstance(case, RankingEvaluationCase | RankingEvaluationSpec):
             higher_theme = resolve_group_anchor(theme_set, case.higher_group_id)
             lower_theme = resolve_group_anchor(theme_set, case.lower_group_id)
             if higher_theme == lower_theme:
@@ -1976,12 +1993,14 @@ def evaluate_subject_assessment(
                 )
                 continue
             try:
-                predicted = compare_subject_anchors(
-                    assessment_set,
-                    theme_set,
-                    case.higher_group_id,
-                    case.lower_group_id,
-                )
+                higher_key = subject_order_key(assessments[higher_theme])
+                lower_key = subject_order_key(assessments[lower_theme])
+                if higher_key == lower_key:
+                    raise ValueError(
+                        "Compared subjects tie before the technical ID: "
+                        f"{higher_theme}, {lower_theme}, key={higher_key}"
+                    )
+                predicted = higher_key < lower_key
             except ValueError as error:
                 if "tie before the technical ID" not in str(error):
                     raise
@@ -2012,7 +2031,7 @@ def evaluate_subject_assessment(
                     ),
                 )
             )
-        elif isinstance(case, TierEvaluationCase):
+        elif isinstance(case, TierEvaluationCase | TierEvaluationSpec):
             if case.case_id in superseded_case_ids:
                 continue
             group_id = case.provenance.group_id

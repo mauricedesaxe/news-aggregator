@@ -1,0 +1,48 @@
+{
+  "artifacts": [
+    {
+      "decompressed_sha256": "4a31de94051909250a7fe5cf1eb50eff616c1f33a83863870f3627c899357710",
+      "origin": "/workspace/job-finder/docs/experiments/job-model-prompt-matrix-v1.preregistration.json",
+      "path": "job-current-policy-v1-preregistration.json.gz",
+      "sha256": "aa6a5aca52d1798725437f08f3f85053c7d84144a8cfa3c2bf9629d70016ddbd"
+    },
+    {
+      "decompressed_sha256": "ec936b55527932a766287fbab44c8a7f08837bc249893c45669b63bcc9ad8662",
+      "origin": "/tmp/opencode/job-current-policy-v1-report.json",
+      "path": "job-current-policy-v1-report.json.gz",
+      "sha256": "10b77f3110d853302cc2ab2bea0e03219341dafdad925455dc26b63ed91a3836"
+    },
+    {
+      "decompressed_sha256": "71d2dc12d94c5a3d35e087c57b36b40191804cbcf1bee91e3e6c92c86d64a4f4",
+      "origin": "/tmp/opencode/job-current-policy-v1-report.md",
+      "path": "job-current-policy-v1-report.md.gz",
+      "sha256": "2c25715bd854508174a67cec8ae016469bbd8dfc2fe572d7127242f0b3d77d54"
+    },
+    {
+      "decompressed_sha256": "5bf272122efb1b6feed3b8760dc47f9f5e569fc36d9f8c00f7862ccc60db0199",
+      "origin": "/tmp/opencode/job-current-policy-v1.json",
+      "path": "job-current-policy-v1-raw.json.gz",
+      "sha256": "e2190975349d12897a9b180d91b8d600484fe6676ceb7bf63b2acc279d39e84d"
+    },
+    {
+      "decompressed_sha256": "178b649d63fb6537a2d55d53581ce174c9b31a37e1cd8f1f565356d63f8d4247",
+      "origin": "/tmp/opencode/news-current-policy-v2-report.json",
+      "path": "news-relevance-v11-report.json.gz",
+      "sha256": "2a2afa034d98806d478918921626ddef264cb7a9e35494eed263f76230e50cfd"
+    },
+    {
+      "decompressed_sha256": "d4478877b3230d674399d836a7c7bcb429eb48f1e5974add1240fadbb6389102",
+      "origin": "/tmp/opencode/news-current-policy-v2-report.md",
+      "path": "news-relevance-v11-report.md.gz",
+      "sha256": "9289221a722a2291b000e5ad9cf54c95a811f61005300e28851febf6af1df45a"
+    },
+    {
+      "decompressed_sha256": "662d9f467e98abf89479f65e163d8ae42c567ac9741205f7a969ecc9e5f28a22",
+      "origin": "/tmp/opencode/news-current-policy-v2.json",
+      "path": "news-relevance-v11-raw.json.gz",
+      "sha256": "8d76c3b01b6cec5726c70159c82f5093ec3cfca36811d10f700b19adea985605"
+    }
+  ],
+  "compression": "gzip with deterministic mtime=0",
+  "schema_version": "jev-research-import-manifest/v1"
+}

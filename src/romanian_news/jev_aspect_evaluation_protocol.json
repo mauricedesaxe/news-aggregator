@@ -1,0 +1,165 @@
+{
+  "schema_version": "jev-aspect-evaluation-protocol/v1",
+  "frozen_at": "2026-09-19",
+  "purpose": "Descriptive paired comparison of provider-neutral binary judgments against existing human-reviewed v11 labels.",
+  "source": {
+    "declared_manifest_version": "news-evaluation-2026-09-11-v11",
+    "manifest_version_id": "083d5ae5ba73686511f5eb01ce770dc2e5826de22cf27df76e205bd9b946216a",
+    "manifest_content_digest": "19859f4edb7a7b7f28d02fe22c79e3afd2fdca71d50fec3dc8140a6ee35d1caf",
+    "baseline_version_id": "78f4738f918280d467b7cba6f5e64f09f76cf5f710817640a06f7ae879cea77d",
+    "comparability_mapping_sha256": "db4d77c334f6f067bb39098b4d885dc1e47bc39478e81a24374484c344f6a751",
+    "case_count": 86,
+    "scored_unit_count": 107
+  },
+  "evidence_policy": {
+    "ground_truth": "Existing immutable human-reviewed feedback labels only.",
+    "model_outputs_as_truth": "forbidden",
+    "calibration": "none",
+    "interpretation": "Descriptive only because no disjoint calibration set exists.",
+    "deployment_gate": "No threshold tuning or winner claim may be based solely on this v11 corpus."
+  },
+  "targets": [
+    {
+      "target_id": "typesafe-jev",
+      "provider": "typesafe",
+      "requested_model": "jev-1.13.0",
+      "execution_policy_id": "typesafe-jev-1.13.0-v1",
+      "execution_policy_digest": "40080cb86e7502cc9977d14893471c702ffbbb32e3bb898f8481129c0a735eae",
+      "cost_basis": "estimated-input-rate"
+    },
+    {
+      "target_id": "openrouter-gemini-2.5-flash",
+      "provider": "openrouter",
+      "requested_model": "google/gemini-2.5-flash",
+      "execution_policy_id": "openrouter-gemini-binary-v1",
+      "execution_policy_digest": "046e423c0156e2fe311050511f3d13b853d61075587028dbfbda566af326e641",
+      "cost_basis": "provider-reported"
+    },
+    {
+      "target_id": "openrouter-gemini-3.8-flash",
+      "provider": "openrouter",
+      "requested_model": "google/gemini-3.8-flash",
+      "execution_policy_id": "openrouter-gemini-binary-v1",
+      "execution_policy_digest": "53ee2eab6876f9fcfe7ad1be2a020c3c23e6faa03bcd6f1795c23dea1f9652aa",
+      "cost_basis": "provider-reported"
+    }
+  ],
+  "trials": [
+    {
+      "trial_ref": "trial-1",
+      "target_order": ["typesafe-jev", "openrouter-gemini-2.5-flash", "openrouter-gemini-3.8-flash"]
+    },
+    {
+      "trial_ref": "trial-2",
+      "target_order": ["openrouter-gemini-2.5-flash", "openrouter-gemini-3.8-flash", "typesafe-jev"]
+    },
+    {
+      "trial_ref": "trial-3",
+      "target_order": ["openrouter-gemini-3.8-flash", "typesafe-jev", "openrouter-gemini-2.5-flash"]
+    }
+  ],
+  "concerns": [
+    {
+      "concern": "grouping",
+      "case_count": 23,
+      "scored_unit_count": 23,
+      "calls_per_model_trial": 23,
+      "state_format": "two-anchor-articles-v1",
+      "question_digests": ["75aa2a44d91b06ed319e86582823021df39b0862a451c4a0af5533d0699f1a57"]
+    },
+    {
+      "concern": "ranking",
+      "case_count": 28,
+      "scored_unit_count": 28,
+      "calls_per_model_trial": 28,
+      "state_format": "two-groups-with-relevance-evidence-v1",
+      "question_digests": ["05b65054bf9fb6f9f11f46c659c7075e7207479064c23a0e7c26cc844c8fb52a"]
+    },
+    {
+      "concern": "tier",
+      "case_count": 25,
+      "scored_unit_count": 25,
+      "calls_per_model_trial": 50,
+      "state_format": "subject-with-report-context-v1",
+      "question_digests": [
+        "4bf690e96e2db1b8da87528ebc9c63d471c9d9708ba20c6ccd1917589cb41c4d",
+        "684e1b83fb7d192dfb9c41323be5c2e117e76387362c88cc86a1cd706dfab5b7"
+      ],
+      "composition_digest": "46cd7152b68f4867f7e125c1d471fa0d8dd76f70c79e327f97ce1026ca12a7b4"
+    },
+    {
+      "concern": "confidence",
+      "case_count": 4,
+      "scored_unit_count": 4,
+      "calls_per_model_trial": 4,
+      "state_format": "source-evidence-without-disclosure-v1",
+      "question_digests": ["786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8"]
+    },
+    {
+      "concern": "daily_theme",
+      "case_count": 6,
+      "scored_unit_count": 27,
+      "calls_per_model_trial": 27,
+      "state_format": "two-groups-with-day-context-v1",
+      "question_digests": ["b1a9995323b41bcd0e902f2246bfd6717249b1adeefcbe34433c38378312cf58"]
+    }
+  ],
+  "execution": {
+    "trial_count": 3,
+    "target_count": 3,
+    "planned_requests_per_model_trial": 132,
+    "planned_provider_requests": 1188,
+    "maximum_attempts_per_request": 3,
+    "maximum_provider_attempts": 3564,
+    "per_request_reserve_usd": {
+      "openrouter-gemini-2.5-flash": "0.020",
+      "openrouter-gemini-3.8-flash": "0.020",
+      "typesafe-jev": "0.008"
+    },
+    "resume": "Atomic checkpoint after every terminal request result; exact completed request identities are never rerun.",
+    "actual_model_policy": "Stop immediately if an actual model is outside the requested model's registered provider version family.",
+    "spend_ceiling_usd": "10.00",
+    "spend_scope": "All new provider attempts for grouping, ranking, tier, confidence and daily-theme execution.",
+    "stop_rules": [
+      "Do not start if the projected maximum spend exceeds the remaining ceiling.",
+      "Stop before an attempt that could make cumulative spend exceed USD 10.00.",
+      "Stop on source, state, question, composition, target or execution-policy identity mismatch.",
+      "Stop the affected target after a terminal provider error; retain completed paired evidence.",
+      "Stop and report rather than substituting a model, label, case or threshold."
+    ]
+  },
+  "analysis": {
+    "required_metrics": [
+      "complete and failed request counts",
+      "exact accuracy and class-specific errors",
+      "paired correctness by case and trial",
+      "trial stability",
+      "control preservation",
+      "p50 and p95 latency",
+      "observed and normalized cost",
+      "exact uncertainty intervals",
+      "Pareto status"
+    ],
+    "fixed_threshold": "0.5",
+    "missing_data": "Retain failed attempts and report unavailable comparisons; never impute outputs.",
+    "limitations": [
+      "Pairwise grouping does not establish a complete partition.",
+      "Pairwise ranking does not establish a coherent global order.",
+      "Composed tier classification does not evaluate complete assessment generation.",
+      "Four confidence cases support descriptive evidence only.",
+      "Pairwise daily-theme judgments do not establish transitivity, partition validity or report usefulness."
+    ]
+  },
+  "sentiment": {
+    "disposition": "not_evaluable",
+    "inventory": "sentiment_label_inventory.json",
+    "human_article_labels": 0,
+    "human_group_labels": 0,
+    "planned_provider_requests": 0
+  },
+  "excluded": [
+    "summary_format and reader_presentation, because their current authorities are deterministic validators",
+    "atomic production-pipeline reruns, because no prospective disjoint calibration corpus exists",
+    "sentiment model comparison, because no human-reviewed sentiment ground truth exists"
+  ]
+}

@@ -1,13 +1,13 @@
 import dagster as dg
 from dagster import OpExecutionContext
 
-from romanian_news.catalog.evaluations import load_news_evaluation_release
 from romanian_news.catalog.schema import ensure_news_catalog_schema
 from romanian_news.config import IMPLEMENTATION_REF
 from romanian_news.evaluation import PIN_PATH
 from romanian_news.evaluation_projection import FreshEvaluationPlan
 from romanian_news.jev_relevance_evaluation import (
     JevRelevanceEvaluationResult,
+    load_jev_relevance_release,
     run_jev_relevance_evaluation,
 )
 
@@ -15,7 +15,7 @@ from romanian_news.jev_relevance_evaluation import (
 @dg.op(pool="news_model")
 def jev_relevance_evaluation_op(context: OpExecutionContext) -> JevRelevanceEvaluationResult:
     ensure_news_catalog_schema()
-    release = load_news_evaluation_release(PIN_PATH.read_bytes())
+    release = load_jev_relevance_release(PIN_PATH.read_bytes())
     result = run_jev_relevance_evaluation(
         release,
         FreshEvaluationPlan(implementation_ref=IMPLEMENTATION_REF),

@@ -1,0 +1,7 @@
+ts	phase	decision	why	evidence	result
+2026-09-19T12:17:18Z	frame	run the registered three-target monolithic matrix before atomic development	he pinned-v11 calls must use the frozen preregistration before any candidate policy changes	src/romanian_news/binary_relevance_preregistration.json	ready
+2026-09-19T12:17:18Z	harness	use the checkpointed relevance runner and one dedicated live artifact	the runner makes paid calls resumable and preserves every attempt	scripts/run_binary_relevance_evaluation.py	ready
+2026-09-19T12:20:00Z	preflight	pin the source to its actual declared manifest version	the production artifact declares news-evaluation-2026-09-11-v11 rather than the shorthand v11	src/romanian_news/binary_relevance_evaluation.py	fix pending verification
+2026-09-19T13:30:00Z	live-v1	keep the Jev evidence but reject Gemini v1 as coverage failure	all 1044 Gemini cases failed transport validation while all 522 Jev cases completed	/tmp/opencode/news-current-policy-v1.json	Gemini result NOT VERIFIED
+2026-09-19T13:35:00Z	transport	force a probability tool call and raise the completion budget to 1024	Job proved the same models complete reliably with forced tool transport and the News responses were truncated or unconstrained	src/romanian_news/analysis/gemini_binary.py	pending live probe
+2026-09-19T13:45:00Z	transport-probe	accept the replacement Gemini transport for the fresh v2 run	both registered Gemini models returned validated probability tool calls with complete accounting on a real v11 article	live execution ref transport-probe-20260919	VERIFIED

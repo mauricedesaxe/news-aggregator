@@ -1,0 +1,64 @@
+{
+  "actual_probe_spend_usd": "0.000727566",
+  "article_or_state_text_included": false,
+  "comparison": {
+    "batched_cost_usd": "0.000245322",
+    "batched_input_tokens": 5841,
+    "input_token_reduction_fraction": 0.491291,
+    "saved_input_tokens": 5641,
+    "separate_cost_usd": "0.000482244",
+    "separate_input_tokens": 11482
+  },
+  "full_provider_output_included": false,
+  "purpose": "Cost and transport evidence only; not a quality-equivalence evaluation.",
+  "question_semantic_digests": {
+    "main_subject": "4bf690e96e2db1b8da87528ebc9c63d471c9d9708ba20c6ccd1917589cb41c4d",
+    "worth_knowing_if_not_main": "684e1b83fb7d192dfb9c41323be5c2e117e76387362c88cc86a1cd706dfab5b7"
+  },
+  "report_version_id": "009b84f676ea351b63493a45a319e07bcb8cd9c55aa8c6c5369d0cb10abba6df",
+  "requests": [
+    {
+      "actual_model": "jev-1.13.0",
+      "estimated_input_cost_usd": "0.000240996",
+      "http_status": 200,
+      "input_tokens": 5738,
+      "latency_ms": 883,
+      "output_tokens": 21,
+      "provider_request_id": "req_01a0bd75ed5676f7a79a091a82767f1a",
+      "requested_question_ids": ["main_subject"],
+      "response_sha256": "611c46ad85c6624c3899e39344eb9c7263a149e0c7d4c527b19486327bb08013",
+      "returned_answer_ids": ["main_subject"],
+      "variant": "main-only"
+    },
+    {
+      "actual_model": "jev-1.13.0",
+      "estimated_input_cost_usd": "0.000241248",
+      "http_status": 200,
+      "input_tokens": 5744,
+      "latency_ms": 756,
+      "output_tokens": 26,
+      "provider_request_id": "req_01a0bd75f0d370a396228d185952a1a0",
+      "requested_question_ids": ["worth_knowing_if_not_main"],
+      "response_sha256": "3cc638b2fe8ce5988ceffde459318484b10a119ea659a1439b8fa75b760a9d03",
+      "returned_answer_ids": ["worth_knowing_if_not_main"],
+      "variant": "worth-only"
+    },
+    {
+      "actual_model": "jev-1.13.0",
+      "estimated_input_cost_usd": "0.000245322",
+      "http_status": 200,
+      "input_tokens": 5841,
+      "latency_ms": 859,
+      "output_tokens": 43,
+      "provider_request_id": "req_01a0bd75f3e970ebab8d90b1961fffae",
+      "requested_question_ids": ["main_subject", "worth_knowing_if_not_main"],
+      "response_sha256": "28fd89b85536fe6f97fe7b3dacb0cb2c31bde1f1706550ddfd845ea44bc1f7c1",
+      "returned_answer_ids": ["main_subject", "worth_knowing_if_not_main"],
+      "variant": "batched"
+    }
+  ],
+  "schema_version": "jev-batched-cost-probe/v1",
+  "selection_id": "subject:26234714586e39295ba72c91b6c320d3789fc8c58d414293b3747f8a505e0506",
+  "state_characters": 18715,
+  "state_sha256": "72e621bd07e49c5f8fb4bc5ae9068e78185bdbd783c65cb6504f01e91a09bc9f"
+}

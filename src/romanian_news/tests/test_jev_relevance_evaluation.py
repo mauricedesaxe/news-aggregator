@@ -1,17 +1,15 @@
+from decimal import Decimal
+
 import pytest
 
-from romanian_news.analysis.artifacts import ArtifactReference
+from romanian_news.analysis.binary_evaluation import RELEVANCE_BINARY_QUESTION
 from romanian_news.analysis.jev_relevance import JevRelevanceObservation
-from romanian_news.catalog.evaluations import LoadedNewsEvaluationRelease
-from romanian_news.evaluation import (
-    NewsEvaluationPin,
-    build_news_evaluation_baseline,
-    evaluate_news_dataset,
-)
+from romanian_news.evaluation import NewsEvaluationPin
 from romanian_news.evaluation_projection import FreshEvaluationPlan
 from romanian_news.jev_relevance_evaluation import (
     JevRelevanceCaseResult,
     JevRelevanceEvaluationResult,
+    LoadedJevRelevanceRelease,
     jev_relevance_metrics,
     run_jev_relevance_evaluation,
 )
@@ -30,18 +28,18 @@ def test_jev_evaluation_runs_every_fresh_reference_independently(monkeypatch) ->
         or article.model_dump_json().encode(),
     )
 
-    def evaluate(value, *, execution_ref, policy):
-        calls.append(("evaluate", execution_ref, value.reference.version_id, policy.policy_id))
+    def evaluate(request, *, execution_ref, policy):
+        calls.append(("evaluate", execution_ref, request.state_digest, policy.model))
         return JevRelevanceObservation(
             request_id=str(len(calls)).zfill(64),
             provider_request_id=f"provider-{execution_ref}",
             model="jev-1.13.0",
-            probability=0.8,
+            probability=Decimal("0.8"),
             predicted_accepted=True,
             input_tokens=10,
             output_tokens=2,
             latency_ms=20,
-            estimated_cost_usd=0.00000042,
+            estimated_cost_usd=Decimal("0.00000042"),
         )
 
     monkeypatch.setattr("romanian_news.jev_relevance_evaluation.evaluate_jev_relevance", evaluate)
@@ -50,6 +48,8 @@ def test_jev_evaluation_runs_every_fresh_reference_independently(monkeypatch) ->
 
     assert result.plan is plan
     assert tuple(run.execution_ref for run in result.runs) == plan.implementation_refs
+    assert {run.policy_id for run in result.runs} == {RELEVANCE_BINARY_QUESTION.question_id}
+    assert {run.policy_digest for run in result.runs} == {RELEVANCE_BINARY_QUESTION.semantic_digest}
     assert [call[1] for call in calls if call[0] == "evaluate"] == list(plan.implementation_refs)
     assert len([call for call in calls if call[0] == "read"]) == 3
 
@@ -116,27 +116,14 @@ def _case(
     )
 
 
-def _release() -> LoadedNewsEvaluationRelease:
+def _release() -> LoadedJevRelevanceRelease:
     manifest = synthetic_manifest()
-    dataset = evaluation_factories.synthetic_dataset()
     manifest_reference = evaluation_factories.reference(900, "evaluation-manifest")
-    baseline_reference = ArtifactReference(
-        artifact_id="news:evaluation-baseline:test",
-        version_id="c" * 64,
-        content_digest="d" * 64,
-        r2_key="news/evaluations/baselines/test.json",
-    )
-    return LoadedNewsEvaluationRelease(
+    return LoadedJevRelevanceRelease(
         pin=NewsEvaluationPin(
             manifest_version_id=manifest_reference.version_id,
-            baseline_version_id=baseline_reference.version_id,
+            baseline_version_id="c" * 64,
         ),
         manifest_reference=manifest_reference,
-        baseline_reference=baseline_reference,
         manifest=manifest,
-        baseline=build_news_evaluation_baseline(
-            evaluate_news_dataset(dataset),
-            manifest_reference,
-        ),
-        dataset=dataset,
     )

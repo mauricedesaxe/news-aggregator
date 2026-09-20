@@ -6,17 +6,28 @@ from typing import Annotated
 from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
+from romanian_news.analysis.artifacts import ArtifactReference
+from romanian_news.analysis.binary_evaluation import (
+    RELEVANCE_BINARY_QUESTION,
+    build_relevance_binary_request,
+)
 from romanian_news.analysis.jev_relevance import (
-    JEV_RELEVANCE_POLICY,
-    JevRelevancePolicy,
+    JEV_EXECUTION_POLICY,
+    JevExecutionPolicy,
     evaluate_jev_relevance,
-    jev_relevance_policy_digest,
 )
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.articles.models import ExtractedArticle
-from romanian_news.catalog.evaluations import LoadedNewsEvaluationRelease
+from romanian_news.catalog.evaluations import read_news_evaluation_artifact_references
+from romanian_news.evaluation import NewsEvaluationManifest, NewsEvaluationPin
 from romanian_news.evaluation_projection import FreshEvaluationPlan
 from romanian_news.storage import read_verified_r2_object
+
+
+class LoadedJevRelevanceRelease(NewsModel):
+    pin: NewsEvaluationPin
+    manifest_reference: ArtifactReference
+    manifest: NewsEvaluationManifest
 
 
 class JevRelevanceCaseResult(NewsModel):
@@ -94,9 +105,9 @@ class JevRelevanceEvaluationResult(NewsModel):
 
 
 def run_jev_relevance_evaluation(
-    release: LoadedNewsEvaluationRelease,
+    release: LoadedJevRelevanceRelease,
     plan: FreshEvaluationPlan,
-    policy: JevRelevancePolicy = JEV_RELEVANCE_POLICY,
+    policy: JevExecutionPolicy = JEV_EXECUTION_POLICY,
 ) -> JevRelevanceEvaluationResult:
     runs = tuple(
         _run_jev_relevance_trial(release, execution_ref, policy)
@@ -106,6 +117,24 @@ def run_jev_relevance_evaluation(
         manifest_artifact_version_id=release.manifest_reference.version_id,
         plan=plan,
         runs=runs,
+    )
+
+
+def load_jev_relevance_release(pin_content: bytes | str) -> LoadedJevRelevanceRelease:
+    pin = NewsEvaluationPin.model_validate_json(pin_content, strict=True)
+    references = read_news_evaluation_artifact_references((pin.manifest_version_id,))
+    manifest_reference = references[pin.manifest_version_id]
+    manifest = NewsEvaluationManifest.model_validate_json(
+        read_verified_r2_object(
+            manifest_reference.r2_key,
+            manifest_reference.content_digest,
+        ),
+        strict=True,
+    )
+    return LoadedJevRelevanceRelease(
+        pin=pin,
+        manifest_reference=manifest_reference,
+        manifest=manifest,
     )
 
 
@@ -139,17 +168,20 @@ def jev_relevance_metrics(
 
 
 def _run_jev_relevance_trial(
-    release: LoadedNewsEvaluationRelease,
+    release: LoadedJevRelevanceRelease,
     execution_ref: str,
-    policy: JevRelevancePolicy,
+    policy: JevExecutionPolicy,
 ) -> JevRelevanceRunResult:
     specs = tuple(case for case in release.manifest.cases if case.concern == "relevance")
     results: list[JevRelevanceCaseResult] = []
     for case in specs:
         content = read_verified_r2_object(case.article.r2_key, case.article.content_digest)
         article = ExtractedArticle.model_validate_json(content, strict=True)
+        request = build_relevance_binary_request(
+            ArticleAnalysisInput(reference=case.article, article=article)
+        )
         observation = evaluate_jev_relevance(
-            ArticleAnalysisInput(reference=case.article, article=article),
+            request,
             execution_ref=execution_ref,
             policy=policy,
         )
@@ -161,9 +193,9 @@ def _run_jev_relevance_trial(
                 expected_accepted=case.expected_accepted,
                 predicted_accepted=observation.predicted_accepted,
                 pass_probability=(
-                    observation.probability
+                    float(observation.probability)
                     if case.expected_accepted
-                    else 1 - observation.probability
+                    else 1 - float(observation.probability)
                 ),
                 control=case.control,
                 passed=observation.predicted_accepted == case.expected_accepted,
@@ -173,15 +205,15 @@ def _run_jev_relevance_trial(
                 input_tokens=observation.input_tokens,
                 output_tokens=observation.output_tokens,
                 latency_ms=observation.latency_ms,
-                estimated_cost_usd=observation.estimated_cost_usd,
+                estimated_cost_usd=float(observation.estimated_cost_usd),
             )
         )
     case_results = tuple(results)
     return JevRelevanceRunResult(
         manifest_artifact_version_id=release.manifest_reference.version_id,
         execution_ref=execution_ref,
-        policy_id=policy.policy_id,
-        policy_digest=jev_relevance_policy_digest(policy),
+        policy_id=RELEVANCE_BINARY_QUESTION.question_id,
+        policy_digest=RELEVANCE_BINARY_QUESTION.semantic_digest,
         case_results=case_results,
         metrics=jev_relevance_metrics(case_results),
     )

@@ -1,0 +1,58 @@
+{
+  "actual_spend_usd": "0.003117828",
+  "completed_cases": 3,
+  "protocol_artifact_sha256": "b7aff212d07d7192202e4f3d94110ca6cd8b4b5d652a71e0496c0c38e0474b85",
+  "protocol_semantic_sha256": "52971d72dcafcf697aa0df96bd258ea33b1f71077a604f1e8da09452d7974190",
+  "requested_cases": 3,
+  "results": [
+    {
+      "actual_model": "jev-1.13.0",
+      "case_id": "ascii-40000",
+      "estimated_cost_usd": "0.000737604",
+      "http_status": 200,
+      "input_tokens": 17562,
+      "latency_ms": 1028,
+      "marker_probability": "0.99",
+      "outcome": "accepted",
+      "output_tokens": 22,
+      "provider_request_id": null,
+      "response_body": null,
+      "response_sha256": "79113413997e842e2cb73b166fcd7183cf7a9e4343b3f8d107235b0b3f09908d",
+      "state_characters": 40000,
+      "state_digest": "546261126a8d22b6676785f10d5501d8a35288c5b0fa9449d3ff976560f7a0f0"
+    },
+    {
+      "actual_model": "jev-1.13.0",
+      "case_id": "ascii-60000",
+      "estimated_cost_usd": "0.001099686",
+      "http_status": 200,
+      "input_tokens": 26183,
+      "latency_ms": 1088,
+      "marker_probability": "0.99",
+      "outcome": "accepted",
+      "output_tokens": 22,
+      "provider_request_id": null,
+      "response_body": null,
+      "response_sha256": "cd03922427c6aee7e0e4a01670d40c33a5e492b11bfde43f4e43486caef359d3",
+      "state_characters": 60000,
+      "state_digest": "d61199eeeffd8ae2513ab6f6ba8aae4451d8ad1e490894a7315598c6cb42fdef"
+    },
+    {
+      "actual_model": "jev-1.13.0",
+      "case_id": "ascii-70000",
+      "estimated_cost_usd": "0.001280538",
+      "http_status": 200,
+      "input_tokens": 30489,
+      "latency_ms": 1046,
+      "marker_probability": "0.99",
+      "outcome": "accepted",
+      "output_tokens": 22,
+      "provider_request_id": null,
+      "response_body": null,
+      "response_sha256": "984b06ece77bac848646ee848bdae87e1bec7a56f9e7948422960eb4fc0f561a",
+      "state_characters": 70000,
+      "state_digest": "320932a55ce32d5bda46f911d39314bc9a1106876a94e48582fae6d058b070fd"
+    }
+  ],
+  "schema_version": "jev-context-boundary-result/v1"
+}

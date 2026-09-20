@@ -1,0 +1,113 @@
+{
+  "accepted_rollout": {
+    "clip_or_chunk_state": false,
+    "fallback": "use incumbent with unchanged full state on guard breach or provider rejection",
+    "implementation_ticket": "news-aggregator-vt6.8",
+    "mode": "shadow_only_incumbent_authoritative",
+    "preflight": "send to Jev only when len(state) <= 70000",
+    "promotion_gate": "A separately reviewed immutable sample preserves every positive control, has recall 1.0 and precision >= 0.80, with no unresolved accounting gaps.",
+    "retry_unchanged_rejected_request": false,
+    "rollback": "configuration-only return to the incumbent, exercised before promotion",
+    "telemetry": [
+      "paired Jev and incumbent verdicts",
+      "immutable input identities",
+      "guard and fallback reason",
+      "latency and provider usage",
+      "estimated Jev cost"
+    ]
+  },
+  "changes_production_behavior": false,
+  "contains_credentials": false,
+  "contains_provider_output": false,
+  "contains_report_or_article_text": false,
+  "decision_scope": "prompt-class deployment disposition; no production behavior change",
+  "default": "retain_incumbent_when_evidence_is_not_directly_comparable",
+  "dispositions": [
+    {
+      "aspect": "relevance",
+      "basis": "Jev alone passed the registered News relevance quality gate; production relevance states were below the local guard, but reviewed context headroom and affected-production quality remain unavailable.",
+      "disposition": "guarded_shadow_candidate",
+      "implementation_ticket": "news-aggregator-vt6.8",
+      "product": "news",
+      "prompt_class": "direct_binary_classification"
+    },
+    {
+      "aspect": "relevance",
+      "basis": "Every tested target failed the registered direct-suite gate; the proposed atomic architecture is untested.",
+      "disposition": "retain_incumbent",
+      "implementation_ticket": null,
+      "product": "job_finder",
+      "prompt_class": "multi_criterion_binary_classification"
+    },
+    {
+      "aspect": "grouping",
+      "basis": "Pair judgments do not establish a complete partition.",
+      "disposition": "research_only",
+      "implementation_ticket": null,
+      "product": "news",
+      "prompt_class": "pairwise_relation_judgment"
+    },
+    {
+      "aspect": "ranking",
+      "basis": "Pair precedence does not establish a coherent global order, and 190 production requests exceed the guard.",
+      "disposition": "research_only",
+      "implementation_ticket": null,
+      "product": "news",
+      "prompt_class": "pairwise_relation_judgment"
+    },
+    {
+      "aspect": "tier",
+      "basis": "Composed exact accuracy is weak, complete assessment generation is untested, and production context is unsafe.",
+      "disposition": "retain_incumbent",
+      "implementation_ticket": null,
+      "product": "news",
+      "prompt_class": "deterministic_composition_of_binary_questions"
+    },
+    {
+      "aspect": "confidence",
+      "basis": "Only four immutable labeled cases exist.",
+      "disposition": "require_more_evidence",
+      "implementation_ticket": null,
+      "product": "news",
+      "prompt_class": "direct_binary_classification"
+    },
+    {
+      "aspect": "daily_theme",
+      "basis": "Pair judgments do not establish transitivity, partition validity, or report usefulness.",
+      "disposition": "research_only",
+      "implementation_ticket": null,
+      "product": "news",
+      "prompt_class": "pairwise_relation_judgment"
+    },
+    {
+      "aspect": "sentiment",
+      "basis": "No immutable human-reviewed article or group sentiment labels exist.",
+      "disposition": "retain_incumbent",
+      "implementation_ticket": null,
+      "product": "news",
+      "prompt_class": "four_class_classification"
+    },
+    {
+      "aspect": "structured_extraction",
+      "basis": "No comparable labeled structured-extraction evaluation was completed.",
+      "disposition": "retain_incumbent",
+      "implementation_ticket": null,
+      "product": "cross_product",
+      "prompt_class": "structured_extraction"
+    },
+    {
+      "aspect": "prose_generation",
+      "basis": "No comparable human-reviewed prose quality evaluation was completed.",
+      "disposition": "retain_incumbent",
+      "implementation_ticket": null,
+      "product": "cross_product",
+      "prompt_class": "prose_generation"
+    }
+  ],
+  "issue_id": "news-aggregator-vt6.3",
+  "schema_version": "jev-deployment-decision/v1",
+  "source": {
+    "path": "artifacts/jev-research-v1/jev-research-snapshot-v1.json",
+    "sha256": "8a889bef56d63c071803fe476041a0c5c4414bafc10e7bc6e474d059208e779f"
+  }
+}

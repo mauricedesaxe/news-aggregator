@@ -6,12 +6,16 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import cache
-from typing import Generic, Literal, Protocol, TypedDict, TypeVar
+from typing import Generic, Literal, NotRequired, Protocol, TypedDict, TypeVar
 from uuid import UUID, uuid4
 
 from langfuse import Langfuse
 from langfuse.types import TraceContext
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import (
+    ChatCompletionMessageParam,
+    ChatCompletionNamedToolChoiceParam,
+    ChatCompletionToolParam,
+)
 from openai.types.shared_params import ResponseFormatJSONSchema
 
 from romanian_news.config import (
@@ -32,7 +36,9 @@ class ProviderChatRequest(TypedDict):
     messages: list[ChatCompletionMessageParam]
     temperature: float
     max_tokens: int
-    response_format: ResponseFormatJSONSchema
+    response_format: NotRequired[ResponseFormatJSONSchema]
+    tools: NotRequired[list[ChatCompletionToolParam]]
+    tool_choice: NotRequired[ChatCompletionNamedToolChoiceParam]
     extra_body: dict[str, object]
 
 

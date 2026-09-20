@@ -1,0 +1,1261 @@
+{
+  "identity": {
+    "benchmark": "confidence",
+    "source_artifact_id": "083d5ae5ba73686511f5eb01ce770dc2e5826de22cf27df76e205bd9b946216a",
+    "declared_manifest_version": "news-evaluation-2026-09-11-v11",
+    "question_digests": [
+      "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8"
+    ],
+    "composition_digest": null,
+    "cases": [
+      {
+        "case_id": "sep10-subject-16-confidence",
+        "identity": [
+          "c1369f9a24202a111dfc07e29a7194c73cb22dd491958093932a5d3b9b270d72",
+          "6e797ec3180b58e3ef74843f12c5b34da718d644b41f22aec78ded24e080ccef",
+          "ae67b296c425cdfccb61405a9b0f48afbe39726920706c66a3b6946befba19af"
+        ],
+        "judgments": [
+          [
+            "evidence_sufficient",
+            "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+            "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a"
+          ]
+        ]
+      },
+      {
+        "case_id": "sep10-subject-21-confidence",
+        "identity": [
+          "c1369f9a24202a111dfc07e29a7194c73cb22dd491958093932a5d3b9b270d72",
+          "f8007939d98f943416ede68429e027926b328e54cc83ec1187345b4c2ef8377f",
+          "8f61bf3e204ee53451365d31ecec08ff21168c025565411bf1041e324e694d60"
+        ],
+        "judgments": [
+          [
+            "evidence_sufficient",
+            "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+            "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358"
+          ]
+        ]
+      },
+      {
+        "case_id": "sep10-subject-22-confidence",
+        "identity": [
+          "c1369f9a24202a111dfc07e29a7194c73cb22dd491958093932a5d3b9b270d72",
+          "fa78ad8beb9d7c37021f3fbbf543d7b47467468583bec1a470a46fa9dc573188",
+          "47ee7277582730888cb8f84f57ba312c03ce2c75bc5a23ad06bc54c955bd354c"
+        ],
+        "judgments": [
+          [
+            "evidence_sufficient",
+            "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+            "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a"
+          ]
+        ]
+      },
+      {
+        "case_id": "sep10-subject-24-confidence",
+        "identity": [
+          "c1369f9a24202a111dfc07e29a7194c73cb22dd491958093932a5d3b9b270d72",
+          "37aebe0473f1e5d9239f098b309d6af4d35949c58084d72342d1ef5895a71398",
+          "f6c1207cdd1e75c4f141cff2e8471f003c947ad42c154cad26bc2e93e3746a01"
+        ],
+        "judgments": [
+          [
+            "evidence_sufficient",
+            "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+            "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79"
+          ]
+        ]
+      }
+    ],
+    "targets": [
+      {
+        "target_id": "openrouter-gemini-2.5-flash",
+        "provider": "openrouter",
+        "requested_model": "google/gemini-2.5-flash",
+        "execution_policy_id": "openrouter-gemini-binary-v1",
+        "execution_policy_digest": "046e423c0156e2fe311050511f3d13b853d61075587028dbfbda566af326e641",
+        "cost_basis": "provider-reported"
+      },
+      {
+        "target_id": "openrouter-gemini-3.8-flash",
+        "provider": "openrouter",
+        "requested_model": "google/gemini-3.8-flash",
+        "execution_policy_id": "openrouter-gemini-binary-v1",
+        "execution_policy_digest": "53ee2eab6876f9fcfe7ad1be2a020c3c23e6faa03bcd6f1795c23dea1f9652aa",
+        "cost_basis": "provider-reported"
+      },
+      {
+        "target_id": "typesafe-jev",
+        "provider": "typesafe",
+        "requested_model": "jev-1.13.0",
+        "execution_policy_id": "typesafe-jev-1.13.0-v1",
+        "execution_policy_digest": "40080cb86e7502cc9977d14893471c702ffbbb32e3bb898f8481129c0a735eae",
+        "cost_basis": "estimated-input-rate"
+      }
+    ],
+    "trial_refs": [
+      "git:v11-derived-dry-run:dry-run:trial-001",
+      "git:v11-derived-dry-run:dry-run:trial-002",
+      "git:v11-derived-dry-run:dry-run:trial-003"
+    ],
+    "execution_mode": "dry_run",
+    "execution_ref": "git:v11-derived-dry-run"
+  },
+  "identity_digest": "248edce94fd3ad226fd7bf5dd45320ffa0082a454e60d3f57962ba5ccfd1afc2",
+  "results": [
+    {
+      "status": "completed",
+      "request_id": "ecf77488ea0faa3fdf7f777ed8280e5a201b3ab1dba41cedfd7d8f712569f182",
+      "case_id": "sep10-subject-16-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.269",
+      "passed": true,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:98febdb0abb5babd5c9143c0",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:98febdb0abb5babd5c9143c0",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.269"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "362333db22b1b27a664b68020adc78991fdf95af45c15cc5b4615dca19fcbad1",
+      "case_id": "sep10-subject-21-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.539",
+      "passed": false,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:93d6c6f3cb079f44c8d285c2",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:93d6c6f3cb079f44c8d285c2",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.539"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "4d63b01ed49eb0b2c86098b6fc8afaa9f86d587975a2ae7b02e32eb93f0fd655",
+      "case_id": "sep10-subject-22-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.866",
+      "passed": false,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:f14cf3ad34966ea908ca65ad",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:f14cf3ad34966ea908ca65ad",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.866"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "44e46601f0918c3da024e498405cce528a17ddff039be0cfdfc32aafb4a26725",
+      "case_id": "sep10-subject-24-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.751",
+      "passed": false,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:bef50396250558dd108883c4",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:bef50396250558dd108883c4",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.751"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "2243b70ff27a4e6af354aaa4260f99dde532ac8204d3b0f021c5bbd882d0be2c",
+      "case_id": "sep10-subject-16-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.588",
+      "passed": false,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:08214fd425f01b0482f6b9d8",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:08214fd425f01b0482f6b9d8",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.588"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "c970874ac1fc4734b41bc40e4f2796e4acf5eea37b0f2e911105fe2a0cff5d20",
+      "case_id": "sep10-subject-21-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.76",
+      "passed": false,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:12c51ec143c1b989172a5065",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:12c51ec143c1b989172a5065",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.76"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "24f15867f399fc9a4403f6aabf13bcef8de1ebf82553ed5896d020f31c9468c6",
+      "case_id": "sep10-subject-22-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.539",
+      "passed": false,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:71321d7714aefc20e1834b33",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:71321d7714aefc20e1834b33",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.539"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "c1c00886e1c6cddc4622bbea53b896d6be711acbf1f88dafead861a745440980",
+      "case_id": "sep10-subject-24-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.003",
+      "passed": true,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:4b7e4c72c8d0e2ca5f86d2d6",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:4b7e4c72c8d0e2ca5f86d2d6",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.003"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "d51c6eca69b29bec8085cf7fb1d485a04a61ce040984d25dd2403ea4c8ae85a4",
+      "case_id": "sep10-subject-16-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.763",
+      "passed": false,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:a5f7c4fb1ee1d49bd1ab5715",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:a5f7c4fb1ee1d49bd1ab5715",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.763"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "8ef65eb3f7b2f047e7d62d089291f9cee202df5e62fd9ecd1febdd6feafbab01",
+      "case_id": "sep10-subject-21-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.876",
+      "passed": false,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:15030f3d8108cbd16507603c",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:15030f3d8108cbd16507603c",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.876"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "f7ff7d8ea4c9e3750559d173f8d71e6c346423e3d9b368ea2a235244900a2471",
+      "case_id": "sep10-subject-22-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.435",
+      "passed": true,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:26a4b3b31be2512c6405898b",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:26a4b3b31be2512c6405898b",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.435"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "d88fc28128f73aaaacc9b830f5f01dc3caafe333b00b7485333cbffcb06562f2",
+      "case_id": "sep10-subject-24-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-001",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.081",
+      "passed": true,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:30e573353e97719ee126f623",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:30e573353e97719ee126f623",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.081"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "55ced11cd4c08f9d35a5486e2956e1bf276d6a07ebe30a07fde40daa1109e541",
+      "case_id": "sep10-subject-16-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.815",
+      "passed": false,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:f4f4c2ee1893515bdb474468",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:f4f4c2ee1893515bdb474468",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.815"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "5034f8f4f81c884245190d300be5af89a08659075afd35349f3f2557fc27a3f3",
+      "case_id": "sep10-subject-21-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.492",
+      "passed": true,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:ca5be16f173bcc6d5ddfbf87",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:ca5be16f173bcc6d5ddfbf87",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.492"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "38398363956a19daf35ebec8dd417bfac34a474653961fd347b7d2a696343d4c",
+      "case_id": "sep10-subject-22-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.054",
+      "passed": true,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:935a60bec93f810406d2e39b",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:935a60bec93f810406d2e39b",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.054"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "02c0b4a38b5ac3276db3d5a3095f44aaeec2fa8259a5eb7e39494c70b704a3e1",
+      "case_id": "sep10-subject-24-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.756",
+      "passed": false,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:d902b3b7bc6116be419f9059",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:d902b3b7bc6116be419f9059",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.756"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "a317f679201d9f68cd4fb0ab96fe8cc5836a07868e98ee7616c56c200a0b6506",
+      "case_id": "sep10-subject-16-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.595",
+      "passed": false,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:0a3c70a418167934bf791c0a",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:0a3c70a418167934bf791c0a",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.595"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "675d1670007b5f23916d6a7eff606325dedc96d66ecbc878a76c4cf7c5d653bd",
+      "case_id": "sep10-subject-21-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.807",
+      "passed": false,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:5a68f5d7e2261b9cef386089",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:5a68f5d7e2261b9cef386089",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.807"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "47dd1755616f1e858a545ee347d783a62268d7d6bffb463dc586a5eb8ccdab63",
+      "case_id": "sep10-subject-22-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.908",
+      "passed": false,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:9a494fc9c705125e9737ce60",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:9a494fc9c705125e9737ce60",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.908"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "eb3734ff0216ae209b28b4859e0e7ca24c6fcc9acd6dc5213f61a8f3b8a0c600",
+      "case_id": "sep10-subject-24-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.257",
+      "passed": true,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:2d1266cada6dec9e75f2a3f8",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:2d1266cada6dec9e75f2a3f8",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.257"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "f47109b24f214e1c57d806c2fb0a66bfecc8bd0286a3e7130036b46f422d33aa",
+      "case_id": "sep10-subject-16-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.919",
+      "passed": false,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:190d1141b3936706474d0f7b",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:190d1141b3936706474d0f7b",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.919"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "feebd5d02fcc0e0fcd14b91829cdcddc650b1fbee4bd440e6eb37e5f5eaa1f29",
+      "case_id": "sep10-subject-21-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.528",
+      "passed": false,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:19df4f07258583c466c193c1",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:19df4f07258583c466c193c1",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.528"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "95d904492df8ffdcad5df22755049ae35c5aa4ab0a5634dc168642077c4f7ae6",
+      "case_id": "sep10-subject-22-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.323",
+      "passed": true,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:30af5e4a97be1ae01001c7f6",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:30af5e4a97be1ae01001c7f6",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.323"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "1f29800362e9026bf5ae305bb67a4a018e7e64c130f297d62a9b6ec1b4cf64de",
+      "case_id": "sep10-subject-24-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-002",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.33",
+      "passed": true,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:c26a2768ea2df066c8a1791b",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:c26a2768ea2df066c8a1791b",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.33"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "f53193641921f7d2648218f31e6f0671d954ac2002cb33b8e27c98d11418199d",
+      "case_id": "sep10-subject-16-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.41",
+      "passed": true,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:f49d4fb410e13b838d5728bc",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:f49d4fb410e13b838d5728bc",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.41"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "4712cb3eb39378f428a4b89a50ad80c64287cbc9fffd7966d3c0c52e745af6d1",
+      "case_id": "sep10-subject-21-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.085",
+      "passed": true,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:3afdd97ba5fe5784c8f8717e",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:3afdd97ba5fe5784c8f8717e",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.085"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "ed0f7662163e74713480b5483b454327f0bbedfef85896028df821be6818cf48",
+      "case_id": "sep10-subject-22-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.883",
+      "passed": false,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:714990e614c7364ecdf90845",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:714990e614c7364ecdf90845",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.883"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "aa98bc44bf3195f42176fcdd140631fdf3f1ec87339644d42de01bede5656cb3",
+      "case_id": "sep10-subject-24-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "typesafe-jev",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.914",
+      "passed": false,
+      "actual_model": "jev-1.13.0",
+      "provider_request_id": "dry-run:5b31cce747afff8d0eb2cfe8",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:5b31cce747afff8d0eb2cfe8",
+          "actual_model": "jev-1.13.0",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.914"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "f3af31c119c4d5b384bf63219ddc8ea7fc596f22437699803bd23fbb8113cf0c",
+      "case_id": "sep10-subject-16-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.716",
+      "passed": false,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:58a6969eaf0ba9544f1ae2af",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:58a6969eaf0ba9544f1ae2af",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.716"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "ebf7eb2b9506ffaa18d78f2e5d90b33d65d60442eadfe43c3bdaff33563b200a",
+      "case_id": "sep10-subject-21-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.972",
+      "passed": false,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:adfef8dfe3bcaa603d8bc995",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:adfef8dfe3bcaa603d8bc995",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.972"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "4b64def660e77760ff30260fae2c7516e2961635c125c5fe37b966bd57a26002",
+      "case_id": "sep10-subject-22-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.394",
+      "passed": true,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:10c24999de83cf3188fae8ab",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:10c24999de83cf3188fae8ab",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.394"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "0f831265b482cc0995c0233f0577f963b7ae81b138e0e6a4391336ef5c95e692",
+      "case_id": "sep10-subject-24-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79",
+      "expected": false,
+      "verdict": true,
+      "probability": "0.956",
+      "passed": false,
+      "actual_model": "google/gemini-2.5-flash",
+      "provider_request_id": "dry-run:ded309f13a4038ba11891bc0",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:ded309f13a4038ba11891bc0",
+          "actual_model": "google/gemini-2.5-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.956"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "218f18ce9d2b5cf824b012c335a9c55c1370a27ebba64857139e4eeb2b7b6cff",
+      "case_id": "sep10-subject-16-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.39",
+      "passed": true,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:cf8b702d751e1e892cdb1e49",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:cf8b702d751e1e892cdb1e49",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.39"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "4847f4a996017199fd7afdcc368f2982176ebfe79e96e7cb6148fa8eee679064",
+      "case_id": "sep10-subject-21-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.147",
+      "passed": true,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:a86159d5dc6f8288b3832477",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:a86159d5dc6f8288b3832477",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.147"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "65f4ec2fc30c851430e3315fad9022b5a7006acb662bb8cd004463c7637ee569",
+      "case_id": "sep10-subject-22-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.279",
+      "passed": true,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:56340e3625ccdf5ab861fa3f",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:56340e3625ccdf5ab861fa3f",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.279"
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "request_id": "c2f05d43a2dba0000fd8dc66e0aa6aa599ca39d92d29bca07ea1265b8188dabd",
+      "case_id": "sep10-subject-24-confidence",
+      "judgment_id": "evidence_sufficient",
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "git:v11-derived-dry-run:dry-run:trial-003",
+      "question_id": "evidence_sufficient",
+      "question_digest": "786be75c50ddde5f2e8415a0a2223f8081f7b01b8fe06084c15f88c0ce91c4c8",
+      "state_digest": "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79",
+      "expected": false,
+      "verdict": false,
+      "probability": "0.287",
+      "passed": true,
+      "actual_model": "google/gemini-3.8-flash",
+      "provider_request_id": "dry-run:b5e8684960513ec17af074ec",
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "status": "completed",
+          "provider_request_id": "dry-run:b5e8684960513ec17af074ec",
+          "actual_model": "google/gemini-3.8-flash",
+          "http_status": null,
+          "error": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": "0",
+          "latency_ms": 0,
+          "probability": "0.287"
+        }
+      ]
+    }
+  ]
+}

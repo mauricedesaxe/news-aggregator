@@ -16,7 +16,7 @@ def test_manual_jev_evaluation_uses_a_fresh_plan(monkeypatch) -> None:
     monkeypatch.setattr(jev_relevance_evaluation, "ensure_news_catalog_schema", lambda: None)
     monkeypatch.setattr(
         jev_relevance_evaluation,
-        "load_news_evaluation_release",
+        "load_jev_relevance_release",
         lambda _content: release,
     )
     monkeypatch.setattr(jev_relevance_evaluation, "IMPLEMENTATION_REF", "git:test")

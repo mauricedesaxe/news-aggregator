@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "case_id": "ascii-80000",
+      "marker_at_end": true,
+      "state_characters": 80000,
+      "state_digest": "86a246120bf25c47056900d5b010da3877a5af5f949bd9b3b6b1db6de971e63f"
+    },
+    {
+      "case_id": "ascii-100000",
+      "marker_at_end": true,
+      "state_characters": 100000,
+      "state_digest": "a5eb1dd693f0987765d66e46daad6b196510cfdf7654380005e1449c80cc2777"
+    },
+    {
+      "case_id": "ascii-110000",
+      "marker_at_end": true,
+      "state_characters": 110000,
+      "state_digest": "26c0c09b9cc308a71b83fb5183760662dc1dfc44d2461c89e5eb5df0b5e762f3"
+    }
+  ],
+  "endpoint": "https://api.typesafe.ai/v1/systemone",
+  "execution": {
+    "attempts_per_case": 1,
+    "input_cost_per_million_tokens_usd": "0.042",
+    "maximum_provider_requests": 3,
+    "spend_ceiling_usd": "0.05",
+    "stop_before_next_case_if_spend_ceiling_reached": true,
+    "timeout_seconds": 90
+  },
+  "interpretation": {
+    "not_an_accuracy_evaluation": true,
+    "primary_evidence": "HTTP outcome and provider-reported usage.input_tokens; accepted responses above 32000 or a plateau at 32000 distinguish behavior better than character estimates.",
+    "secondary_evidence": "The marker is at the final bytes of every state. Its probability is suggestive, not proof, because model output is nondeterministic."
+  },
+  "prior_evidence": {
+    "path": "artifacts/jev-aspect-v1/jev-context-boundary-result-v1.json",
+    "sha256": "72b1c22be77fc844bd11802f7c8fdafb3aab7109a26b5f8e57c182e133e71ed3"
+  },
+  "provider": "typesafe",
+  "purpose": "Bracket the Jev acceptance boundary below 120000 characters after every v1 case at 120000 characters or larger was rejected with max_tokens_exceeded.",
+  "question": {
+    "false_criteria": "The state does not contain the exact text 'BOUNDARY_MARKER_PRESENT'.",
+    "instructions": "Determine whether the exact text 'BOUNDARY_MARKER_PRESENT' appears anywhere in the state.",
+    "question_id": "boundary_marker_present",
+    "threshold": "0.5",
+    "true_criteria": "The state contains the exact text 'BOUNDARY_MARKER_PRESENT'."
+  },
+  "question_digest": "0cbf2cd8e37967cacbcbeba7f4d1edeb6ec71391584a5a8dc555f0abc90c8d1a",
+  "requested_model": "jev-1.13.0",
+  "schema_version": "jev-context-boundary-protocol/v2"
+}
