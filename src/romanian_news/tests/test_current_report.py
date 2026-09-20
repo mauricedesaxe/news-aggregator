@@ -271,14 +271,3 @@ def test_freshness_distinguishes_inputs_not_ready_and_missing_report(monkeypatch
         report_inputs, "read_current_daily_report_input_versions", lambda _day: versions
     )
     assert isinstance(read_daily_report_freshness(DAY), ReportMissing)
-
-
-def pipeline_input() -> DailyReportInput:
-    return DailyReportInput(
-        day=DAY,
-        themes=_reference(THEMES_VERSION, "news:themes:2026-09-14"),
-        assessments=_reference(ASSESSMENTS_VERSION, "news:subject-assessments:2026-09-14"),
-        cluster_set=_reference(CLUSTER_VERSION, "news:clusters:2026-09-14"),
-        summaries=(),
-        sentiments=(),
-    )

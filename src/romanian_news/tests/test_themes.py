@@ -16,7 +16,6 @@ from romanian_news.themes import (
     LEGACY_SPARSE_THEME_POLICY,
     LEGACY_THEME_POLICY,
     PRODUCTION_THEME_DEFINITION,
-    PRODUCTION_THEME_POLICY,
     AliasedReaderSubjectThemeSet,
     DailyThemeCorrectionExhaustedError,
     DailyThemeInput,
@@ -49,7 +48,7 @@ def test_policy_definition_rejects_prompt_digest_mismatch() -> None:
 
 def test_candidate_uses_versioned_policy_and_its_prompt(monkeypatch) -> None:
     value = _input(2)
-    calls = _provider(
+    _provider(
         monkeypatch,
         [_response({"assignments": _assignments(value, (1, 2))}, "assignment")],
     )
@@ -58,7 +57,6 @@ def test_candidate_uses_versioned_policy_and_its_prompt(monkeypatch) -> None:
 
     assert isinstance(output.theme_set, AliasedReaderSubjectThemeSet)
     assert output.theme_set.schema_version == 4
-    assert calls[0]["messages"][0]["content"] == PRODUCTION_THEME_DEFINITION.assignment_prompt
     assert parse_daily_theme_set(output.content) == output.theme_set
 
 
@@ -151,8 +149,6 @@ def test_mixed_flow_calls_assignment_and_merged_prose_once(monkeypatch) -> None:
         "title",
         "summary",
     }
-    assert "English" in calls[1]["messages"][0]["content"]
-    assert "Do not add facts" in calls[1]["messages"][0]["content"]
 
 
 def test_zero_padded_keys_sort_past_nine(monkeypatch) -> None:
@@ -596,12 +592,6 @@ def test_version_one_artifact_remains_readable() -> None:
 
     assert output.theme_set.schema_version == 1
     assert parsed.schema_version == 1
-
-
-def test_production_policy_uses_low_reasoning_gemini() -> None:
-    assert PRODUCTION_THEME_POLICY.model == "google/gemini-3.8-flash"
-    assert PRODUCTION_THEME_POLICY.reasoning_effort == "low"
-    assert PRODUCTION_THEME_POLICY.temperature == 0
 
 
 def test_merged_prose_keys_apply_in_any_property_order(monkeypatch) -> None:

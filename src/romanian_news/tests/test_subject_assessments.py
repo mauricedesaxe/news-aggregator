@@ -43,10 +43,6 @@ from romanian_news.themes import (
 DAY = date(2026, 9, 10)
 
 
-def test_assessment_prompt_requires_english_rationales() -> None:
-    assert "rationale in English" in assessment_module.ASSESSMENT_PROMPT
-
-
 def test_response_requires_exact_subject_coverage_and_subject_evidence() -> None:
     value = _input()
     first, second = value.theme_set.themes

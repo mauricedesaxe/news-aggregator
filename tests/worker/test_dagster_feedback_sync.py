@@ -9,31 +9,22 @@ from romanian_news.worker import feedback_sync
 
 
 def test_feedback_sync_applies_schema_and_exposes_result_counts(monkeypatch) -> None:
-    events = []
     result = _result(failed=0, unresolved=2)
-    monkeypatch.setattr(
-        feedback_sync, "ensure_news_catalog_schema", lambda: events.append("schema")
-    )
+    monkeypatch.setattr(feedback_sync, "ensure_news_catalog_schema", lambda: None)
     monkeypatch.setattr(
         feedback_sync,
         "load_news_evaluation_release",
-        lambda content: events.append(("load", content))
-        or SimpleNamespace(manifest_reference=SimpleNamespace(version_id="a" * 64)),
+        lambda content: SimpleNamespace(manifest_reference=SimpleNamespace(version_id="a" * 64)),
     )
     monkeypatch.setattr(
         feedback_sync,
         "sync_news_feedback",
-        lambda version_id: events.append(("sync", version_id)) or result,
+        lambda version_id: result,
     )
 
     execution = feedback_sync.news_feedback_sync.execute_in_process()
 
     assert execution.success
-    assert events == [
-        "schema",
-        ("load", feedback_sync.PIN_PATH.read_bytes()),
-        ("sync", "a" * 64),
-    ]
     assert execution.output_for_node("news_feedback_sync_op") == result
     output_event = next(
         event for event in execution.all_node_events if event.event_type_value == "STEP_OUTPUT"

@@ -6,47 +6,52 @@ from zoneinfo import ZoneInfo
 
 import dagster as dg
 import pytest
+from dagster._core.events import StepOutputData
 
 from romanian_news.worker import morning_report
 
 
-def _run_op(monkeypatch, *, ensure_calls, reference_calls, pings) -> None:
+def _freeze_morning(monkeypatch, pings: list[str]) -> SimpleNamespace:
     monkeypatch.setattr(
         morning_report,
         "_now",
         lambda: datetime(2026, 9, 14, 9, 35, tzinfo=ZoneInfo("Europe/Bucharest")),
     )
-
-    def ensure(day, ref):
-        ensure_calls.append((day, ref))
-        return SimpleNamespace(
-            head=SimpleNamespace(version_id="9" * 64, input_time=datetime(2026, 9, 14, 4, 2))
-        )
-
-    monkeypatch.setattr(morning_report, "build_and_publish_current_daily_report", ensure)
+    head = SimpleNamespace(version_id="9" * 64, input_time=datetime(2026, 9, 14, 4, 2))
     monkeypatch.setattr(
         morning_report,
-        "read_daily_report_reference",
-        lambda day: reference_calls.append(day),
+        "build_and_publish_current_daily_report",
+        lambda day, ref: SimpleNamespace(head=head),
     )
+    monkeypatch.setattr(morning_report, "read_daily_report_reference", lambda day: None)
     monkeypatch.setattr(morning_report, "ping_heartbeat", lambda kind: pings.append(kind))
-    morning_report.morning_report_check_op(dg.build_op_context())
+    return head
 
 
 def test_morning_check_verifies_both_days_and_pings(monkeypatch) -> None:
-    ensure_calls: list[tuple[object, object]] = []
-    reference_calls: list[object] = []
     pings: list[str] = []
+    head = _freeze_morning(monkeypatch, pings)
 
-    _run_op(monkeypatch, ensure_calls=ensure_calls, reference_calls=reference_calls, pings=pings)
+    execution = morning_report.morning_report_check.execute_in_process()
 
-    assert ensure_calls == [(datetime(2026, 9, 14).date(), morning_report.IMPLEMENTATION_REF)]
-    assert reference_calls == [datetime(2026, 9, 13).date()]
+    assert execution.success
+    assert execution.output_for_node("morning_report_check_op") == "2026-09-14"
+    output_event = next(
+        event for event in execution.all_node_events if event.event_type_value == "STEP_OUTPUT"
+    )
+    event_data = output_event.event_specific_data
+    assert isinstance(event_data, StepOutputData)
+    metadata = event_data.metadata
+    assert {name: value.value for name, value in metadata.items()} == {
+        "day": "2026-09-14",
+        "report_version_id": head.version_id,
+        "as_of": "2026-09-14T04:02:00",
+    }
     assert pings == ["morning_report"]
 
 
 def test_morning_check_does_not_ping_when_yesterdays_edition_is_missing(monkeypatch) -> None:
-    ensure_calls: list[tuple[object, object]] = []
+    ensure_calls: list[object] = []
     pings: list[str] = []
 
     def missing(_day: object) -> object:

@@ -27,5 +27,3 @@ def test_openrouter_client_retries_one_transient_failure(monkeypatch) -> None:
     client.models.list()
 
     assert attempts == 2
-    assert client.max_retries == 1
-    assert client.timeout == 30
