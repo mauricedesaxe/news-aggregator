@@ -894,6 +894,58 @@ def test_rejected_planning_attempt_records_only_immutable_evidence(
     assert connection.steps == []
 
 
+def test_read_planning_attempts_returns_ordered_immutable_artifact_projection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        {
+            "attempt_index": 0,
+            "disposition": "rejected",
+            "artifact_id": PLANNING_ATTEMPT_FILE.artifact_id,
+            "version_id": PLANNING_ATTEMPT_FILE.version_id,
+            "content_digest": PLANNING_ATTEMPT_FILE.content_digest,
+            "r2_key": PLANNING_ATTEMPT_FILE.r2_key,
+            "accepted_plan_artifact_version_id": None,
+        },
+        {
+            "attempt_index": 1,
+            "disposition": "accepted",
+            "artifact_id": f"{EDITION.edition_id}:1:planning-attempt",
+            "version_id": "8" * 64,
+            "content_digest": "9" * 64,
+            "r2_key": "video-digest/planning/attempt-1.json",
+            "accepted_plan_artifact_version_id": PLAN_FILE.version_id,
+        },
+    ]
+    monkeypatch.setattr(video_digest, "catalog_query", lambda _query, _values: rows)
+
+    attempts = video_digest.read_planning_attempts(EDITION.edition_id)
+
+    assert tuple(item.attempt_index for item in attempts) == (0, 1)
+    assert attempts[0].evidence.version_id == PLANNING_ATTEMPT_FILE.version_id
+    assert attempts[1].accepted_plan_artifact_version_id == PLAN_FILE.version_id
+
+
+def test_record_policy_bundle_validates_and_registers_exact_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_file = artifact_file(
+        artifact_id="video-digest-policy:production-v1",
+        artifact_kind="video_digest_policy",
+        title="Video digest policy",
+        content=b"{}",
+        r2_key="video-digest/policies/production-v1.json",
+        media_type="application/json",
+    )
+    connection = _use_connection(
+        monkeypatch,
+        [*_artifact_steps(), ("FROM artifacts AS artifact", _artifact_row(policy_file))],
+    )
+
+    assert video_digest.record_policy_bundle(policy_file, recorded_at=NOW) == policy_file.version_id
+    assert connection.steps == []
+
+
 def test_accepted_planning_attempt_registers_the_canonical_plan_atomically(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
