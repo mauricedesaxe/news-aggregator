@@ -1,0 +1,48 @@
+{
+  "cases": [
+    {
+      "case_id": "ascii-120000",
+      "marker_at_end": true,
+      "state_characters": 120000,
+      "state_digest": "43b88ae2010adaf81598cd635672e5a2b77d1b9088f5a7500d333fa94b9feab2"
+    },
+    {
+      "case_id": "ascii-150000",
+      "marker_at_end": true,
+      "state_characters": 150000,
+      "state_digest": "bf97ccafc2208cedfbd0370178ceaff587fd5595de31ca4473bb11bc6e22f792"
+    },
+    {
+      "case_id": "ascii-180000",
+      "marker_at_end": true,
+      "state_characters": 180000,
+      "state_digest": "6df1d5dd0ba3d13329af9b9f00f7802ee9a9963ca94b06d940f2328246958352"
+    }
+  ],
+  "endpoint": "https://api.typesafe.ai/v1/systemone",
+  "execution": {
+    "attempts_per_case": 1,
+    "input_cost_per_million_tokens_usd": "0.042",
+    "maximum_provider_requests": 3,
+    "spend_ceiling_usd": "0.05",
+    "stop_before_next_case_if_spend_ceiling_reached": true,
+    "timeout_seconds": 90
+  },
+  "interpretation": {
+    "not_an_accuracy_evaluation": true,
+    "primary_evidence": "HTTP outcome and provider-reported usage.input_tokens; accepted responses above 32000 or a plateau at 32000 distinguish behavior better than character estimates.",
+    "secondary_evidence": "The marker is at the final bytes of every state. Its probability is suggestive, not proof, because model output is nondeterministic."
+  },
+  "provider": "typesafe",
+  "purpose": "Observe Jev acceptance, provider-reported input tokens, and rejection behavior around and beyond the documented approximate 150000-character boundary.",
+  "question": {
+    "false_criteria": "The state does not contain the exact text 'BOUNDARY_MARKER_PRESENT'.",
+    "instructions": "Determine whether the exact text 'BOUNDARY_MARKER_PRESENT' appears anywhere in the state.",
+    "question_id": "boundary_marker_present",
+    "threshold": "0.5",
+    "true_criteria": "The state contains the exact text 'BOUNDARY_MARKER_PRESENT'."
+  },
+  "question_digest": "0cbf2cd8e37967cacbcbeba7f4d1edeb6ec71391584a5a8dc555f0abc90c8d1a",
+  "requested_model": "jev-1.13.0",
+  "schema_version": "jev-context-boundary-protocol/v1"
+}

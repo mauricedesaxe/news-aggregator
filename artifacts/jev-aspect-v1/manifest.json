@@ -1,0 +1,264 @@
+{
+  "schema_version": "jev-aspect-artifact-manifest/v1",
+  "updated_at": "2026-09-20",
+  "protocol": "../../src/romanian_news/jev_aspect_evaluation_protocol.json",
+  "aggregate_spend_ceiling_usd": "10.00",
+  "aggregate_spend_recorded_usd": "3.337281954",
+  "artifacts": [
+    {
+      "concern": "context_limit",
+      "mode": "provider_research",
+      "path": "../../src/romanian_news/jev_context_limits.json",
+      "sha256": "6ed18de6785c785f27b7535fac9d91bf53f256a8cfe1d4740118d7c71a7ebf23",
+      "note": "jev-context-limits.md",
+      "note_sha256": "3f5ae75031c588951823398bdbae685e009f84768edecfe495c38dd5b52007f1"
+    },
+    {
+      "concern": "context_headroom",
+      "mode": "reviewed_requests",
+      "path": "jev-context-headroom-reviewed-v1.json",
+      "sha256": "f279a376e5f6116680e08cf81548fba4b4dd0206f609271194a2fdbcb05d0c5e",
+      "report_markdown": "jev-context-headroom-reviewed-v1.md",
+      "report_markdown_sha256": "fdf8ceb2180e2f013d2f266368277743a5f84e20f266f77d5847e711d1c56f74"
+    },
+    {
+      "concern": "context_headroom",
+      "mode": "latest_7_production_reports",
+      "path": "jev-production-context-latest-7-v1.json",
+      "sha256": "d4f161902c4e672c51e6b57ead48eff3ddbbd744047832119098d4983183f36f",
+      "report_markdown": "jev-production-context-latest-7-v1.md",
+      "report_markdown_sha256": "e487ccde5a438c45023e8198298b761bde5f902b0e17bb361c0c56ec7700e1a0",
+      "raw_request_identities": "jev-production-context-latest-7-v1-requests.json.gz",
+      "raw_request_identities_sha256": "5c74ed53d2608577ea71c2d5931f737222919ebc6a1de7bc9e8eefee6afb2c66"
+    },
+    {
+      "concern": "context_boundary",
+      "mode": "preregistered_protocol_v1",
+      "path": "jev-context-boundary-protocol-v1.json",
+      "sha256": "db671b7658bc7a42dee4605c3ff9c02824e3809eb837f928196e196993da79c9"
+    },
+    {
+      "concern": "context_boundary",
+      "mode": "probe_result_v1",
+      "path": "jev-context-boundary-result-v1.json",
+      "sha256": "72b1c22be77fc844bd11802f7c8fdafb3aab7109a26b5f8e57c182e133e71ed3"
+    },
+    {
+      "concern": "context_boundary",
+      "mode": "preregistered_protocol_v2",
+      "path": "jev-context-boundary-protocol-v2.json",
+      "sha256": "269603e354ff5a82c75567e6edebe851dc4a97ff577a97320e94c59bfa838eb9"
+    },
+    {
+      "concern": "context_boundary",
+      "mode": "probe_result_v2",
+      "path": "jev-context-boundary-result-v2.json",
+      "sha256": "269061a4c0f452993d3fb6e5de47e356f0378dc11ce2672886f5dcd74d919000"
+    },
+    {
+      "concern": "context_boundary",
+      "mode": "preregistered_protocol_v3",
+      "path": "jev-context-boundary-protocol-v3.json",
+      "sha256": "b7aff212d07d7192202e4f3d94110ca6cd8b4b5d652a71e0496c0c38e0474b85"
+    },
+    {
+      "concern": "context_boundary",
+      "mode": "probe_result_v3",
+      "path": "jev-context-boundary-result-v3.json",
+      "sha256": "e7d7e6a9d414fdb36c89b466a3423abebb9cf9869ebffcf53034fe4f269c4e6e",
+      "report_markdown": "jev-context-boundary-report-v1.md",
+      "report_markdown_sha256": "477a6ea2fa726fed33bf58e9f6ff32e4a8c2091a7057a3272fb95961bfbc4ed0"
+    },
+    {
+      "concern": "context_safety",
+      "mode": "batched_tier_cost",
+      "path": "jev-batched-tier-cost-v1.json",
+      "sha256": "3e763194eee8ec15542da9b0eb129e5f0ec65d1d6f9c08df195ecab537b6422f",
+      "cost_usd": "0.000727566",
+      "quality_equivalence_evaluated": false
+    },
+    {
+      "concern": "context_safety",
+      "mode": "decision_v1",
+      "path": "jev-context-safety-decision-v1.json",
+      "sha256": "400d154709c17c63659512d4ad077bb035d4cb93f708501a435fb54a45ee0549",
+      "report_markdown": "jev-context-safety-decision-v1.md",
+      "report_markdown_sha256": "a05077df85e6ef5b14905ef887f0060b3dce41a9949e2f6e955d41414c70eebf",
+      "generator": "../../scripts/build_jev_context_safety_decision.py",
+      "generator_sha256": "d51d5a4e34903ad2ca8ec452d1b37c387fddc975f421facab2177a97b409f3c7"
+    },
+    {
+      "concern": "grouping",
+      "mode": "dry_run",
+      "path": "news-grouping-generic-dry-run.json",
+      "sha256": "b6fe27b2fac8dd85302580e080cfea51b1d8950632adb695edfe165a4461dbf0",
+      "completed": 207,
+      "failed": 0
+    },
+    {
+      "concern": "ranking",
+      "mode": "dry_run",
+      "path": "news-ranking-dry-run.json",
+      "sha256": "0f154b0283248ae5027df0d693a53eaa78fd5ee32c37b8fb4aad46ebb9c9f3b1",
+      "completed": 252,
+      "failed": 0
+    },
+    {
+      "concern": "tier",
+      "mode": "dry_run",
+      "path": "news-tier-dry-run.json",
+      "sha256": "bd0db1c6df68a060b2f157c7855e17874d1675e8891e7a8a46d169dfb77782a4",
+      "completed": 450,
+      "failed": 0
+    },
+    {
+      "concern": "confidence",
+      "mode": "dry_run",
+      "path": "news-confidence-dry-run.json",
+      "sha256": "962f0074fc64393cddf384e632618d69f3df3857bf3853373f2ba72707d50fa1",
+      "completed": 36,
+      "failed": 0
+    },
+    {
+      "concern": "daily_theme",
+      "mode": "dry_run",
+      "path": "news-daily-theme-dry-run.json",
+      "sha256": "71885649a8b43659d75f4076dbb2406e76eb1efb74152214f431d0352e9e93fd",
+      "completed": 243,
+      "failed": 0
+    },
+    {
+      "concern": "grouping",
+      "mode": "live",
+      "path": "news-grouping-live-v1.json",
+      "sha256": "5bbd09968a8462f35ad709a3ee17482c1d1d76d6c954ecb43c57944d9b4634c8",
+      "completed": 207,
+      "failed": 0,
+      "cost_usd": "0.283487364",
+      "errors_by_trial": {
+        "openrouter-gemini-2.5-flash": [2, 2, 2],
+        "openrouter-gemini-3.8-flash": [4, 4, 3],
+        "typesafe-jev": [2, 2, 3]
+      },
+      "report_json": "news-grouping-live-v1-report.json",
+      "report_markdown": "news-grouping-live-v1-report.md"
+    },
+    {
+      "concern": "ranking",
+      "mode": "live",
+      "path": "news-ranking-live-v1.json",
+      "sha256": "5d994a74920e8bb87c6d9d1b7f978c42ddc065569016bac5c6eb807e2edc47d9",
+      "completed": 252,
+      "failed": 0,
+      "cost_usd": "0.706083564",
+      "max_input_tokens": 18069,
+      "errors_by_trial": {
+        "openrouter-gemini-2.5-flash": [16, 16, 16],
+        "openrouter-gemini-3.8-flash": [1, 1, 3],
+        "typesafe-jev": [7, 6, 8]
+      },
+      "report_json": "news-ranking-live-v1-report.json",
+      "report_markdown": "news-ranking-live-v1-report.md"
+    },
+    {
+      "concern": "tier",
+      "mode": "live",
+      "path": "news-tier-live-v1.json",
+      "sha256": "bf1072beb1dc8c07ef08a98dc650ac52b560cf1d5b11d80d11ea7fa63d316d0f",
+      "completed": 450,
+      "failed": 0,
+      "cost_usd": "2.144062824",
+      "max_input_tokens": 14369,
+      "composed_exact_matches_by_trial": {
+        "openrouter-gemini-2.5-flash": [14, 14, 14],
+        "openrouter-gemini-3.8-flash": [13, 11, 12],
+        "typesafe-jev": [13, 13, 13]
+      },
+      "composed_result": "news-tier-live-v1-composed.json",
+      "composed_result_sha256": "5fe540fea32975fcca6a3dfa603ed2b7007bf853d0dcf1b130528b73a19bb0c9",
+      "report_json": "news-tier-live-v1-report.json",
+      "report_markdown": "news-tier-live-v1-report.md"
+    },
+    {
+      "concern": "confidence",
+      "mode": "live",
+      "path": "news-confidence-live-v1.json",
+      "sha256": "2556116ce729a4042000a475f41e8bd18d96123f1f04ceca883b5082cd07aa9d",
+      "completed": 36,
+      "failed": 0,
+      "cost_usd": "0.058012338",
+      "max_input_tokens": 2869,
+      "correct_by_trial": {
+        "openrouter-gemini-2.5-flash": [3, 3, 3],
+        "openrouter-gemini-3.8-flash": [4, 4, 4],
+        "typesafe-jev": [4, 4, 4]
+      },
+      "analysis_mode": "descriptive_only",
+      "winner": null,
+      "descriptive_result": "news-confidence-live-v1-descriptive.json",
+      "descriptive_result_sha256": "b7afdde51e6aa7072bebafcf07eb9932452561572bd250611d1451b70ad2f6d0",
+      "report_json": "news-confidence-live-v1-report.json",
+      "report_markdown": "news-confidence-live-v1-report.md"
+    },
+    {
+      "concern": "daily_theme",
+      "mode": "live",
+      "path": "news-daily-theme-live-v1.json",
+      "sha256": "b5660525b58731b2cb62ef732250dac996a9d261185474d2b3bbdccc64ebbdf9",
+      "completed": 243,
+      "failed": 0,
+      "cost_usd": "0.145635864",
+      "max_input_tokens": 847,
+      "must_link_passed_of_13_by_trial": {
+        "openrouter-gemini-2.5-flash": [7, 6, 6],
+        "openrouter-gemini-3.8-flash": [3, 3, 3],
+        "typesafe-jev": [6, 6, 6]
+      },
+      "must_separate_passed_of_14_by_trial": {
+        "openrouter-gemini-2.5-flash": [14, 14, 14],
+        "openrouter-gemini-3.8-flash": [14, 14, 14],
+        "typesafe-jev": [14, 14, 14]
+      },
+      "constraints_result": "news-daily-theme-live-v1-constraints.json",
+      "constraints_result_sha256": "87005952429f4c7a5557f11b5b949c29e0caa29509b65cc72f3590d6a92c2371",
+      "report_json": "news-daily-theme-live-v1-report.json",
+      "report_markdown": "news-daily-theme-live-v1-report.md"
+    },
+    {
+      "concern": "research_snapshot",
+      "mode": "synthesis_v1",
+      "path": "../jev-research-v1/jev-research-snapshot-v1.json",
+      "sha256": "8a889bef56d63c071803fe476041a0c5c4414bafc10e7bc6e474d059208e779f",
+      "report_markdown": "../jev-research-v1/jev-research-snapshot-v1.md",
+      "report_markdown_sha256": "2e8bf3192eaa1f1c0aa639e0a2844c3c423d45befc4f8d69e0b055db81038c52",
+      "generator": "../../scripts/build_jev_research_snapshot.py",
+      "generator_sha256": "b0a50f539fcdfd34ef61c28d22e0ccf49aed259764962021fe042659e66f8aff"
+    },
+    {
+      "concern": "deployment_decision",
+      "mode": "prompt_class_v1",
+      "path": "../jev-research-v1/jev-deployment-decision-v1.json",
+      "sha256": "b0a75ccfe16a7b52b23ea52ac3972f23fd6a821a81a88eb9e9dc071d6cc960f3",
+      "report_markdown": "../jev-research-v1/jev-deployment-decision-v1.md",
+      "report_markdown_sha256": "375d82f6b6b94d8440fecda7c5c8c3f3f714721f49b02abe6630236d0d98ba91",
+      "generator": "../../scripts/build_jev_deployment_decision.py",
+      "generator_sha256": "a82467c062cf0fd5be28272a0c468fdf7dc6be5944e51907bd7d475137a5015f",
+      "implementation_ticket": "news-aggregator-vt6.8",
+      "changes_production_behavior": false
+    }
+  ],
+  "interrupted": [],
+  "corrections": [
+    {
+      "field": "daily_theme_reviewed_pairs",
+      "before": 29,
+      "after": 27,
+      "evidence": "Immutable v11 per-day counts are 3, 3, 2, 2, 9, and 8."
+    },
+    {
+      "field": "planned_provider_requests",
+      "before": 1206,
+      "after": 1188
+    }
+  ]
+}

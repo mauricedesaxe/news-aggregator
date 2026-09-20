@@ -1,0 +1,125 @@
+{
+  "schema_version": "news-binary-relevance-preregistration/v1",
+  "registered_at": "2026-09-19",
+  "purpose": "Compare Jev and Gemini on pinned v11 relevance under identical monolithic semantics, then evaluate a separately calibrated provider-neutral atomic architecture without tuning on v11.",
+  "known_prior_exposure": {
+    "status": "not_blind",
+    "details": "Historical Jev aggregate precision, recall, controls, and some error context from v11 have been observed. They may define historical gates but must not be used to edit candidate prompts."
+  },
+  "models": [
+    {
+      "target": "typesafe-jev",
+      "provider": "typesafe",
+      "requested_model": "jev-1.13.0",
+      "availability_evidence": "Successful historical v11 relevance calls and the pinned JEV_EXECUTION_POLICY adapter constant."
+    },
+    {
+      "target": "openrouter-gemini-2.5-flash",
+      "provider": "openrouter",
+      "requested_model": "google/gemini-2.5-flash",
+      "availability_evidence": "OpenRouter endpoint inventory returned active Google and Google AI Studio endpoints on 2026-09-19: https://openrouter.ai/api/v1/models/google/gemini-2.5-flash/endpoints"
+    },
+    {
+      "target": "openrouter-gemini-3.8-flash",
+      "provider": "openrouter",
+      "requested_model": "google/gemini-3.8-flash",
+      "availability_evidence": "OpenRouter endpoint inventory returned active Google and Google AI Studio endpoints on 2026-09-19: https://openrouter.ai/api/v1/models/google/gemini-3.8-flash/endpoints"
+    }
+  ],
+  "availability_rule": "Before a paid run, abort rather than substitute if a requested model has no active endpoint or the provider reports a different actual model. Record the endpoint response as run evidence.",
+  "held_out_source": {
+    "declared_manifest_version": "news-evaluation-2026-09-11-v11",
+    "source_artifact_id": "083d5ae5ba73686511f5eb01ce770dc2e5826de22cf27df76e205bd9b946216a",
+    "source_content_digest": "19859f4edb7a7b7f28d02fe22c79e3afd2fdca71d50fec3dc8140a6ee35d1caf",
+    "relevance_case_count": 174,
+    "selection": "All and only manifest cases whose concern is relevance, in manifest order."
+  },
+  "monolithic_policy": {
+    "name": "shared-monolithic-relevance",
+    "question_id": "relevant",
+    "question_digest": "5d77b7025c568fec62748abacd89920ea6ddfb5e5d9a4aa272d2e4baa9d2407a",
+    "threshold": "0.5",
+    "execution_policy_digests": {
+      "typesafe-jev": "40080cb86e7502cc9977d14893471c702ffbbb32e3bb898f8481129c0a735eae",
+      "openrouter-gemini-2.5-flash": "046e423c0156e2fe311050511f3d13b853d61075587028dbfbda566af326e641",
+      "openrouter-gemini-3.8-flash": "53ee2eab6876f9fcfe7ad1be2a020c3c23e6faa03bcd6f1795c23dea1f9652aa"
+    }
+  },
+  "operational_amendments": [
+    {
+      "registered_at": "2026-09-19",
+      "reason": "The first live Gemini pass had 0/1044 completed cases. Strict JSON with a 64-token completion cap produced truncated or schema-violating content. The provider-neutral question, state, threshold, and model IDs are unchanged; only the Gemini transport now forces a probability function call and permits 1024 completion tokens.",
+      "failed_artifact": "/tmp/opencode/news-current-policy-v1.json",
+      "failed_artifact_sha256": "508df85ee973b70c51f719ba658f8f9aac4fc8651ab07517da55fec368323e3a",
+      "superseded_execution_policy_digests": {
+        "openrouter-gemini-2.5-flash": "0e7134cda723c7507a5b0bbba382149afc2aa30916c24ff05121ddb62892f022",
+        "openrouter-gemini-3.8-flash": "5172aabb5cb6ab7b4b811e0e1382bd7ea912edf68595aa0456fe4f58e1fa5f24"
+      },
+      "replacement_execution_policy_digests": {
+        "openrouter-gemini-2.5-flash": "046e423c0156e2fe311050511f3d13b853d61075587028dbfbda566af326e641",
+        "openrouter-gemini-3.8-flash": "53ee2eab6876f9fcfe7ad1be2a020c3c23e6faa03bcd6f1795c23dea1f9652aa"
+      }
+    }
+  ],
+  "protocol_deviations": [
+    {
+      "recorded_at": "2026-09-19",
+      "rule": "Atomic-policy calibration was to remain blind to v11 per-case outputs until the final atomic policy digest was frozen.",
+      "deviation": "The completed monolithic analysis listed stable false-positive, false-negative, and unstable v11 case IDs before atomic calibration began.",
+      "evidence": {
+        "report": "/tmp/opencode/news-current-policy-v2-report.md",
+        "report_sha256": "d4478877b3230d674399d836a7c7bcb429eb48f1e5974add1240fadbb6389102"
+      },
+      "consequence": "The atomic policy must still be frozen using only the prospective disjoint calibration set, but any later atomic v11 result is non-blind exploratory evidence rather than a confirmatory held-out result. A new disjoint post-freeze holdout is required for confirmatory evidence."
+    }
+  ],
+  "atomic_policy": {
+    "status": "calibration_required",
+    "architecture_contract": "Provider-neutral binary questions decompose Relevance V3 context and impact semantics; arithmetic and boolean composition remain deterministic code; every model receives identical semantics and a local 0.5 threshold.",
+    "architecture_contract_digest": "343e294c1f3de2d2d2dee3a94ae1d2243c448f3628ffc78219c91b404714634e",
+    "architecture_contract_digest_method": "SHA-256 of the UTF-8 architecture_contract text",
+    "final_policy_digest": null,
+    "registration_rule": "After calibration, append the selected question and composition digests plus rejected alternatives to this file before any atomic v11 call. Changing them after that amendment creates a new experiment identity."
+  },
+  "calibration": {
+    "existing_safe_labeled_set": false,
+    "contamination_finding": "v10 and v11 share all 174 relevance cases. Earlier releases are ancestors. The later v12 material adds no relevance labels. None may be used for calibration.",
+    "source_protocol": "Prospectively select article versions from reports after 2026-09-11. Freeze article version ID, material digest, canonical URL, publication time, report ID, and feedback provenance before labeling.",
+    "overlap_rule": "Exclude any article version ID, material digest, canonical URL, or feedback ID appearing in v11. Persist the complete overlap-check output with the calibration manifest.",
+    "selection_rule": "Review eligible articles chronologically until both relevance classes contain at least 10 examples or 40 articles have been reviewed. Freeze every reviewed article and exclusion; do not discard difficult labels.",
+    "labeling_rule": "A human labels monolithic relevance and every candidate atomic question from the registered semantics without seeing model output. A second human resolves ambiguous labels before model calls.",
+    "separation_rule": "Calibration cases are never reported as held-out performance and v11 per-case outputs remain unread until the atomic policy digest is frozen."
+  },
+  "monolithic_run": {
+    "trials": 3,
+    "target_order_by_trial": [
+      ["openrouter-gemini-2.5-flash", "openrouter-gemini-3.8-flash", "typesafe-jev"],
+      ["openrouter-gemini-3.8-flash", "typesafe-jev", "openrouter-gemini-2.5-flash"],
+      ["typesafe-jev", "openrouter-gemini-2.5-flash", "openrouter-gemini-3.8-flash"]
+    ],
+    "case_order": "manifest relevance-case order",
+    "resume_rule": "Resume only an exact identity match. Preserve failed attempts; --retry-errors may rerun only operational-error cases.",
+    "inspection_rule": "Do not inspect any fresh paired result until all registered targets and trials have either completed or reached the registered operational stop."
+  },
+  "analysis": {
+    "primary_metrics": ["precision", "recall", "positive_control_preservation", "false_positive_count", "false_negative_count"],
+    "secondary_metrics": ["accuracy", "passed_cases", "request_count", "input_tokens", "output_tokens", "total_cost_usd", "p50_attempt_latency_ms", "p95_attempt_latency_ms", "p50_article_latency_ms", "p95_article_latency_ms", "failed_cases"],
+    "intervals": "Report two-sided 95% Clopper-Pearson intervals for precision, recall, and positive-control preservation per target and trial.",
+    "paired_analysis": "For each target pair, report the 2x2 correctness disagreement table and a two-sided exact McNemar binomial p-value. Report effect counts before p-values.",
+    "stability": "For each target and case, report unanimous verdict rate across three trials, flip count, and probability range. Report stable false-positive/false-negative IDs and boundary cases whose verdict changes.",
+    "aggregation": "Report each trial separately plus pooled descriptive totals. Repeated trials are not independent samples.",
+    "missingness": "Operational failures are coverage failures, are excluded from quality denominators, and are reported by attempt status and target. No quality comparison is valid below 100% completed-case coverage."
+  },
+  "gates": {
+    "coverage": "Every target must complete all 174 relevance cases in every trial with validated accounting.",
+    "quality": "Every trial must preserve all positive controls, have recall = 1.0, and precision >= 0.80.",
+    "selection": "A target that fails coverage or quality is not deployment-eligible. Among eligible targets, report the quality-cost-latency Pareto frontier; do not collapse it to an unsupported single winner."
+  },
+  "budget": {
+    "currency": "USD",
+    "monolithic_forecast": "4.54",
+    "monolithic_hard_cap": "10.00",
+    "forecast_method": "Assume 6,000 input and 64 output/reasoning tokens for each of 174 cases, three trials, and one call per case. Apply 0.042 USD/M Jev input tokens, active standard OpenRouter rates of 0.30/2.50 USD/M input/output for Gemini 2.5 Flash and 0.75/3.75 USD/M for Gemini 3.8 Flash, then add 25% retry contingency.",
+    "stop_rule": "Stop scheduling new calls before projected cumulative cost exceeds the hard cap. Preserve completed evidence and preregister a larger budget before resuming. Atomic calibration and atomic v11 work require separate budgets in the digest amendment."
+  }
+}

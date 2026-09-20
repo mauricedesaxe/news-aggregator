@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="plannotator-theme" content="host">
+  <meta name="description" content="Test results for Jev, Gemini 2.5 Flash, and Gemini 3.8 Flash on News and Job Finder tasks.">
+  <link rel="icon" href="data:,">
+  <title>Jev Test Results</title>
+  <style>
+    :root {
+      --background: oklch(0.97 0.005 260);
+      --foreground: oklch(0.18 0.02 260);
+      --card: oklch(1 0 0);
+      --card-foreground: oklch(0.18 0.02 260);
+      --muted: oklch(0.92 0.01 260);
+      --muted-foreground: oklch(0.40 0.02 260);
+      --primary: oklch(0.50 0.25 280);
+      --primary-foreground: oklch(1 0 0);
+      --secondary: oklch(0.50 0.18 180);
+      --accent: oklch(0.60 0.22 50);
+      --accent-foreground: oklch(0.18 0.02 260);
+      --destructive: oklch(0.50 0.25 25);
+      --success: oklch(0.45 0.20 150);
+      --warning: oklch(0.55 0.18 85);
+      --border: oklch(0.88 0.01 260);
+      --code-bg: oklch(0.92 0.01 260);
+      --ring: oklch(0.50 0.25 280);
+      --radius: 0.625rem;
+      --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+      --font-display: ui-serif, Georgia, "Times New Roman", serif;
+      color-scheme: light;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: oklch(0.15 0.02 260);
+        --foreground: oklch(0.90 0.01 260);
+        --card: oklch(0.22 0.02 260);
+        --card-foreground: oklch(0.90 0.01 260);
+        --muted: oklch(0.26 0.02 260);
+        --muted-foreground: oklch(0.72 0.02 260);
+        --primary: oklch(0.75 0.18 280);
+        --primary-foreground: oklch(0.15 0.02 260);
+        --accent: oklch(0.70 0.20 60);
+        --border: oklch(0.35 0.02 260);
+        --code-bg: oklch(0.26 0.02 260);
+        --destructive: oklch(0.65 0.20 25);
+        --success: oklch(0.72 0.17 150);
+        --warning: oklch(0.75 0.15 85);
+        color-scheme: dark;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px 32px 64px;
+      color: var(--foreground);
+      background-color: var(--background);
+      background-image: radial-gradient(circle, color-mix(in oklab, var(--border) 70%, transparent) 0.75px, transparent 0.75px);
+      background-size: 20px 20px;
+      font-family: var(--font-sans);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    a { color: var(--primary); text-underline-offset: 3px; }
+    a:focus-visible, summary:focus-visible {
+      outline: 3px solid color-mix(in oklab, var(--ring) 45%, transparent);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+    code { font-family: var(--font-mono); }
+
+    .page {
+      width: min(1420px, 100%);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 178px minmax(0, 1fr);
+      gap: 0 44px;
+    }
+    .main { min-width: 0; }
+
+    .toc {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      grid-row: 1 / -1;
+      max-height: calc(100dvh - 48px);
+      padding: 14px 0;
+      overflow-y: auto;
+    }
+    .toc-title {
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted-foreground);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .toc a {
+      display: block;
+      margin: 2px 0;
+      padding: 7px 9px;
+      border-left: 2px solid transparent;
+      border-radius: 4px;
+      color: var(--muted-foreground);
+      font-size: 11px;
+      line-height: 1.35;
+      text-decoration: none;
+    }
+    .toc a:hover { color: var(--foreground); background: var(--muted); }
+    .toc a.active { color: var(--foreground); border-left-color: var(--primary); }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      min-height: 420px;
+      padding: clamp(34px, 6vw, 76px);
+      border: 1.5px solid var(--primary);
+      border-radius: calc(var(--radius) * 2);
+      background: color-mix(in oklab, var(--primary) 5%, var(--card));
+      box-shadow: 0 20px 70px color-mix(in oklab, var(--primary) 11%, transparent);
+    }
+    .hero::after {
+      content: "01";
+      position: absolute;
+      right: clamp(24px, 6vw, 72px);
+      bottom: -0.25em;
+      color: color-mix(in oklab, var(--primary) 9%, transparent);
+      font-family: var(--font-display);
+      font-size: clamp(170px, 28vw, 380px);
+      line-height: 0.8;
+      pointer-events: none;
+    }
+    .eyebrow, .section-kicker, .metric-label, .tag, th {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+    .eyebrow { margin-bottom: 22px; color: var(--primary); font-size: 11px; }
+    h1, h2, h3 { margin-top: 0; color: var(--card-foreground); }
+    h1 {
+      position: relative;
+      z-index: 1;
+      max-width: 820px;
+      margin-bottom: 22px;
+      font-family: var(--font-display);
+      font-size: clamp(50px, 7vw, 94px);
+      font-weight: 500;
+      letter-spacing: -0.045em;
+      line-height: 0.96;
+    }
+    .hero-lede {
+      position: relative;
+      z-index: 1;
+      max-width: 740px;
+      margin: 0;
+      color: var(--muted-foreground);
+      font-size: clamp(17px, 2vw, 22px);
+      line-height: 1.5;
+    }
+    .hero-lede strong { color: var(--foreground); }
+    .hero-meta {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: 32px;
+    }
+    .tag {
+      padding: 6px 9px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--card);
+      color: var(--muted-foreground);
+      font-size: 9px;
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin: 18px 0 0;
+    }
+    .kpi, .panel {
+      min-width: 0;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+    }
+    .kpi { padding: 20px; }
+    .metric-value {
+      display: block;
+      margin: 6px 0 4px;
+      font-family: var(--font-display);
+      font-size: clamp(30px, 3vw, 45px);
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .metric-label { color: var(--muted-foreground); font-size: 9px; }
+    .metric-note { color: var(--muted-foreground); font-size: 12px; }
+    .is-good { color: var(--success); }
+    .is-warn { color: var(--warning); }
+    .is-bad { color: var(--destructive); }
+    .is-primary { color: var(--primary); }
+
+    section { padding-top: 82px; scroll-margin-top: 16px; }
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, 0.65fr);
+      gap: 32px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+    .section-kicker { margin-bottom: 8px; color: var(--primary); font-size: 10px; }
+    h2 {
+      margin-bottom: 0;
+      font-family: var(--font-display);
+      font-size: clamp(36px, 5vw, 58px);
+      font-weight: 500;
+      letter-spacing: -0.035em;
+      line-height: 1;
+    }
+    h3 { margin-bottom: 8px; font-size: 18px; line-height: 1.3; }
+    .section-intro { margin: 0; color: var(--muted-foreground); }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+    }
+    .decision-primary {
+      padding: 30px;
+      border-color: var(--success);
+      background: color-mix(in oklab, var(--success) 6%, var(--card));
+    }
+    .decision-primary .section-kicker { color: var(--success); }
+    .decision-primary h3 { font-family: var(--font-display); font-size: 32px; font-weight: 500; }
+    .decision-stack { display: grid; gap: 16px; }
+    .decision-secondary { padding: 22px; }
+    .decision-secondary p, .decision-primary p { margin-bottom: 0; color: var(--muted-foreground); }
+
+    .callout {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: start;
+      margin-top: 16px;
+      padding: 17px 19px;
+      border: 1px solid color-mix(in oklab, var(--warning) 40%, var(--border));
+      border-radius: var(--radius);
+      background: color-mix(in oklab, var(--warning) 7%, var(--card));
+    }
+    .callout-mark {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--warning);
+      color: var(--background);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .callout strong { display: block; margin-bottom: 2px; }
+    .callout p { margin: 0; color: var(--muted-foreground); font-size: 13px; }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .model-card { padding: 24px; }
+    .model-id { margin-bottom: 20px; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
+    .score-row { margin-top: 17px; }
+    .score-line { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 6px; font-size: 12px; }
+    .score-line span:first-child { color: var(--muted-foreground); }
+    .bar { height: 7px; overflow: hidden; border-radius: 99px; background: var(--muted); }
+    .bar > span { display: block; width: var(--value); height: 100%; border-radius: inherit; background: var(--primary); }
+    .model-foot {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+    .model-foot b { display: block; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+    .model-foot span { color: var(--muted-foreground); font-size: 10px; }
+    .no-comparison .model-id { margin-bottom: 12px; }
+    .no-comparison p { margin: 0; color: var(--muted-foreground); font-size: 13px; }
+
+    .table-panel { overflow: hidden; }
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.45; }
+    th {
+      padding: 13px 15px;
+      border-bottom: 2px solid var(--border);
+      background: var(--muted);
+      color: var(--muted-foreground);
+      font-size: 9px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    td { padding: 14px 15px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:nth-child(even) { background: color-mix(in oklab, var(--muted) 45%, transparent); }
+    tbody tr:hover { background: color-mix(in oklab, var(--primary) 5%, var(--card)); }
+    td:first-child { font-weight: 650; }
+    .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+    .context-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .context-card { padding: 23px; }
+    .context-card.safe { border-top: 3px solid var(--success); }
+    .context-card.conditional { border-top: 3px solid var(--warning); }
+    .context-card.unsafe { border-top: 3px solid var(--destructive); }
+    .context-card p { margin: 0; color: var(--muted-foreground); font-size: 13px; }
+    .context-count { margin: 14px 0 6px; font-family: var(--font-display); font-size: 31px; line-height: 1; }
+
+    .guard {
+      display: grid;
+      grid-template-columns: 0.7fr 1.3fr;
+      gap: 24px;
+      margin-top: 16px;
+      padding: 26px;
+      border: 1.5px solid var(--primary);
+      border-radius: var(--radius);
+      background: color-mix(in oklab, var(--primary) 5%, var(--card));
+    }
+    .guard-value { font-family: var(--font-display); font-size: clamp(40px, 6vw, 68px); line-height: 1; }
+    .guard-copy { align-self: center; color: var(--muted-foreground); }
+    .guard-copy strong { color: var(--foreground); }
+
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    details.panel { padding: 0; overflow: hidden; }
+    summary {
+      padding: 19px 22px;
+      cursor: pointer;
+      color: var(--card-foreground);
+      font-weight: 700;
+      list-style-position: inside;
+    }
+    details[open] summary { border-bottom: 1px solid var(--border); }
+    .details-body { padding: 18px 22px 22px; color: var(--muted-foreground); font-size: 13px; }
+    .details-body p:first-child { margin-top: 0; }
+    .details-body p:last-child { margin-bottom: 0; }
+
+    .source-card {
+      margin-top: 16px;
+      padding: 24px;
+      background: var(--code-bg);
+    }
+    .source-card code {
+      display: block;
+      margin-top: 10px;
+      color: var(--foreground);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+    .source-card p { margin: 0; color: var(--muted-foreground); font-size: 13px; }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      margin-top: 80px;
+      padding-top: 22px;
+      border-top: 1px solid var(--border);
+      color: var(--muted-foreground);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    @media (max-width: 1040px) {
+      body { padding-top: 0; }
+      .page { grid-template-columns: 1fr; }
+      .toc {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        grid-row: auto;
+        gap: 4px;
+        max-height: none;
+        margin: 0 -32px;
+        padding: 9px 32px;
+        overflow-x: auto;
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in oklab, var(--background) 92%, transparent);
+        backdrop-filter: blur(12px);
+      }
+      .toc-title { display: none; }
+      .toc a { flex: 0 0 auto; border-left: 0; border-bottom: 2px solid transparent; white-space: nowrap; }
+      .toc a.active { border-left: 0; border-bottom-color: var(--primary); }
+      .main { padding-top: 24px; }
+      section { scroll-margin-top: 58px; }
+    }
+
+    @media (max-width: 820px) {
+      .kpis, .chart-grid, .context-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .section-head, .decision-grid, .guard { grid-template-columns: 1fr; }
+      .section-intro { max-width: 680px; }
+    }
+
+    @media (max-width: 560px) {
+      body { padding: 0 16px 40px; font-size: 14px; }
+      .toc { margin: 0 -16px; padding: 8px 16px; }
+      .hero { min-height: 390px; padding: 34px 24px; }
+      .hero::after { right: 10px; font-size: 180px; }
+      .kpis, .chart-grid, .context-grid, .evidence-grid { grid-template-columns: 1fr; }
+      section { padding-top: 66px; }
+      .decision-primary, .decision-secondary, .model-card, .context-card { padding: 20px; }
+      footer { flex-direction: column; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav class="toc" id="toc" aria-label="Report sections">
+      <div class="toc-title">Contents</div>
+      <a class="active" href="#decision">What changes</a>
+      <a href="#relevance">News relevance</a>
+      <a href="#job-relevance">Job relevance</a>
+      <a href="#grouping">News grouping</a>
+      <a href="#ranking">Ranking</a>
+      <a href="#tier">Tier</a>
+      <a href="#confidence">Confidence</a>
+      <a href="#daily-theme">Daily theme</a>
+      <a href="#sentiment">Sentiment</a>
+      <a href="#context">Input size</a>
+      <a href="#evidence">What we don't know</a>
+    </nav>
+
+    <main class="main">
+      <header class="hero">
+        <div class="eyebrow">Jev model test results</div>
+        <h1>Test Jev on news relevance.</h1>
+        <p class="hero-lede">
+          <strong>Jev caught every relevant article in all three trials and cost less than the other models.</strong>
+          Run it beside the current model first, without using its answer. Don't use it for the other tasks yet.
+        </p>
+        <div class="hero-meta" aria-label="Report metadata">
+          <span class="tag">Jev 1.13.0</span>
+          <span class="tag">3 trials</span>
+          <span class="tag">People reviewed the answers</span>
+          <span class="tag">September 20, 2026</span>
+        </div>
+      </header>
+
+      <div class="kpis" aria-label="Key results">
+        <article class="kpi">
+          <span class="metric-label">News relevance</span>
+          <strong class="metric-value is-good">1.00</strong>
+          <span class="metric-note">Recall in all 3 Jev trials</span>
+        </article>
+        <article class="kpi">
+          <span class="metric-label">Jev trial cost</span>
+          <strong class="metric-value is-primary">$0.046</strong>
+          <span class="metric-note">522 relevance requests</span>
+        </article>
+        <article class="kpi">
+          <span class="metric-label">Current production cost</span>
+          <strong class="metric-value">$2.033</strong>
+          <span class="metric-note">7 fixed News reports</span>
+        </article>
+        <article class="kpi">
+          <span class="metric-label">Live model changes</span>
+          <strong class="metric-value is-warn">0</strong>
+          <span class="metric-note">Current models still decide</span>
+        </article>
+      </div>
+
+      <section id="decision">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">01 / What changes</div>
+            <h2>Run one live test</h2>
+          </div>
+          <p class="section-intro">Run Jev beside the current model for news relevance. Keep its answer out of the product until a separate review.</p>
+        </div>
+
+        <div class="decision-grid">
+          <article class="panel decision-primary">
+            <div class="section-kicker">Try this next</div>
+            <h3>News relevance only</h3>
+            <p>Jev recorded 100% recall and 81.46-82.00% precision in the three trials. Run it on the same articles as the current model, but keep using the current model's answer. Record disagreements, speed, usage, cost, skipped requests, and the exact inputs.</p>
+            <div class="callout">
+              <span class="callout-mark">i</span>
+              <div>
+                <strong>Work item: news-aggregator-vt6.8</strong>
+                <p>Before Jev can decide live results, test it again on a fixed reviewed sample. It must find every relevant article, keep precision at or above 80%, and account for every request.</p>
+              </div>
+            </div>
+          </article>
+          <div class="decision-stack">
+            <article class="panel decision-secondary">
+              <h3>Job relevance, tier, sentiment</h3>
+              <p>The models missed the required accuracy, prompts were too long, or there were no human-reviewed answers to test against.</p>
+            </article>
+            <article class="panel decision-secondary">
+              <h3>Grouping, ranking, daily themes</h3>
+              <p>Choosing between two items doesn't prove that a model can group everything, rank a full list, or write a useful report.</p>
+            </article>
+            <article class="panel decision-secondary">
+              <h3>Confidence</h3>
+              <p>Four reviewed examples aren't enough to justify changing the live model.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="relevance">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">02 / Best test</div>
+            <h2>News relevance</h2>
+          </div>
+          <p class="section-intro">The same 174 reviewed cases were run three times. Precision and recall show the lowest and highest result.</p>
+        </div>
+
+        <div class="chart-grid">
+          <article class="panel model-card">
+            <h3>Jev</h3>
+            <div class="model-id">typesafe-jev / jev-1.13.0</div>
+            <div class="score-row">
+              <div class="score-line"><span>Precision</span><strong>81.46-82.00%</strong></div>
+              <div class="bar" aria-label="Jev precision 81.46 to 82 percent"><span style="--value:82%"></span></div>
+            </div>
+            <div class="score-row">
+              <div class="score-line"><span>Recall</span><strong>100.00%</strong></div>
+              <div class="bar" aria-label="Jev recall 100 percent"><span style="--value:100%"></span></div>
+            </div>
+            <div class="model-foot">
+              <div><b>$0.0460</b><span>Total cost</span></div>
+              <div><b>522</b><span>Requests</span></div>
+              <div><b>824.7 ms</b><span>Slow requests (p95)</span></div>
+            </div>
+          </article>
+
+          <article class="panel model-card">
+            <h3>Gemini 2.5 Flash</h3>
+            <div class="model-id">openrouter-gemini-2.5-flash</div>
+            <div class="score-row">
+              <div class="score-line"><span>Precision</span><strong>80.69-80.95%</strong></div>
+              <div class="bar" aria-label="Gemini 2.5 precision 80.69 to 80.95 percent"><span style="--value:80.95%"></span></div>
+            </div>
+            <div class="score-row">
+              <div class="score-line"><span>Recall</span><strong>95.12-96.75%</strong></div>
+              <div class="bar" aria-label="Gemini 2.5 recall 95.12 to 96.75 percent"><span style="--value:96.75%"></span></div>
+            </div>
+            <div class="model-foot">
+              <div><b>$0.2663</b><span>Total cost</span></div>
+              <div><b>522</b><span>Requests</span></div>
+              <div><b>857 ms</b><span>Slow requests (p95)</span></div>
+            </div>
+          </article>
+
+          <article class="panel model-card">
+            <h3>Gemini 3.8 Flash</h3>
+            <div class="model-id">openrouter-gemini-3.8-flash</div>
+            <div class="score-row">
+              <div class="score-line"><span>Precision</span><strong>90.40-90.48%</strong></div>
+              <div class="bar" aria-label="Gemini 3.8 precision 90.40 to 90.48 percent"><span style="--value:90.48%"></span></div>
+            </div>
+            <div class="score-row">
+              <div class="score-line"><span>Recall</span><strong>91.87-92.68%</strong></div>
+              <div class="bar" aria-label="Gemini 3.8 recall 91.87 to 92.68 percent"><span style="--value:92.68%"></span></div>
+            </div>
+            <div class="model-foot">
+              <div><b>$2.0442</b><span>Total cost</span></div>
+              <div><b>522</b><span>Requests</span></div>
+              <div><b>5,485.85 ms</b><span>Slow requests (p95)</span></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="panel table-panel">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Model</th><th>Correct by trial</th><th>Requests</th><th>Tokens in / out</th><th>Cost</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Jev</td><td class="num">146, 147, 146 / 174</td><td class="num">522</td><td class="num">1,095,921 / 11,484</td><td class="num">$0.046028682</td></tr>
+                <tr><td>Gemini 2.5 Flash</td><td class="num">142, 141, 140 / 174</td><td class="num">522</td><td class="num">865,962 / 2,610</td><td class="num">$0.266313600</td></tr>
+                <tr><td>Gemini 3.8 Flash</td><td class="num">153, 152, 152 / 174</td><td class="num">522</td><td class="num">884,232 / 368,266</td><td class="num">$2.044171500</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <section id="job-relevance">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">03 / Job Finder</div>
+            <h2>Job relevance</h2>
+          </div>
+          <p class="section-intro">The main test checked all six current hiring rules together on 121 reviewed cases. Every model missed at least one required accuracy check.</p>
+        </div>
+
+        <div class="chart-grid">
+          <article class="panel model-card">
+            <h3>Jev</h3><div class="model-id">jev-1.13.0</div>
+            <div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>104-106 / 121</strong></div><div class="bar" aria-label="Jev job relevance accuracy up to 87.60 percent"><span style="--value:87.60%"></span></div></div>
+            <div class="model-foot"><div><b>$0.1212</b><span>Total cost</span></div><div><b>1,530</b><span>Requests</span></div><div><b>4,300.9 ms</b><span>Slow requests (p95)</span></div></div>
+          </article>
+          <article class="panel model-card">
+            <h3>Gemini 2.5 Flash</h3><div class="model-id">google-gemini-2.5-flash</div>
+            <div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>104-106 / 121</strong></div><div class="bar" aria-label="Gemini 2.5 job relevance accuracy up to 87.60 percent"><span style="--value:87.60%"></span></div></div>
+            <div class="model-foot"><div><b>$0.8058</b><span>Total cost</span></div><div><b>1,538</b><span>Requests</span></div><div><b>4,640 ms</b><span>Slow requests (p95)</span></div></div>
+          </article>
+          <article class="panel model-card">
+            <h3>Gemini 3.8 Flash</h3><div class="model-id">google-gemini-3.8-flash</div>
+            <div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>104-106 / 121</strong></div><div class="bar" aria-label="Gemini 3.8 job relevance accuracy up to 87.60 percent"><span style="--value:87.60%"></span></div></div>
+            <div class="model-foot"><div><b>$4.3303</b><span>Total cost</span></div><div><b>1,569</b><span>Requests</span></div><div><b>32,881.2 ms</b><span>Slow requests (p95)</span></div></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="grouping">
+        <div class="section-head"><div><div class="section-kicker">04 / News task</div><h2>News grouping</h2></div><p class="section-intro">The test asked whether 23 article pairs belonged together. It did not build complete groups.</p></div>
+        <div class="chart-grid">
+          <article class="panel model-card"><h3>Jev</h3><div class="model-id">typesafe-jev</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>20-21 / 23</strong></div><div class="bar" aria-label="Jev grouping accuracy up to 91.30 percent"><span style="--value:91.30%"></span></div></div><div class="model-foot"><div><b>$0.1167</b><span>Cost per 1,000</span></div><div><b>69</b><span>Requests</span></div><div><b>839.8 ms</b><span>Slow requests (p95)</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 2.5 Flash</h3><div class="model-id">openrouter-gemini-2.5-flash</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>21 / 23</strong></div><div class="bar" aria-label="Gemini 2.5 grouping accuracy 91.30 percent"><span style="--value:91.30%"></span></div></div><div class="model-foot"><div><b>$0.6631</b><span>Cost per 1,000</span></div><div><b>69</b><span>Requests</span></div><div><b>906.5 ms</b><span>Slow requests (p95)</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 3.8 Flash</h3><div class="model-id">openrouter-gemini-3.8-flash</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>19-20 / 23</strong></div><div class="bar" aria-label="Gemini 3.8 grouping accuracy up to 86.96 percent"><span style="--value:86.96%"></span></div></div><div class="model-foot"><div><b>$3.3287</b><span>Cost per 1,000</span></div><div><b>69</b><span>Requests</span></div><div><b>4,695.3 ms</b><span>Slow requests (p95)</span></div></div></article>
+        </div>
+      </section>
+
+      <section id="ranking">
+        <div class="section-head"><div><div class="section-kicker">05 / News task</div><h2>Ranking</h2></div><p class="section-intro">The test asked which article should come first in 28 pairs. It did not rank a full report.</p></div>
+        <div class="chart-grid">
+          <article class="panel model-card"><h3>Jev</h3><div class="model-id">typesafe-jev</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>20-22 / 28</strong></div><div class="bar" aria-label="Jev ranking accuracy up to 78.57 percent"><span style="--value:78.57%"></span></div></div><div class="model-foot"><div><b>$0.3321</b><span>Cost per 1,000</span></div><div><b>84</b><span>Requests</span></div><div><b>1,057.3 ms</b><span>Slow requests (p95)</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 2.5 Flash</h3><div class="model-id">openrouter-gemini-2.5-flash</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>12 / 28</strong></div><div class="bar" aria-label="Gemini 2.5 ranking accuracy 42.86 percent"><span style="--value:42.86%"></span></div></div><div class="model-foot"><div><b>$1.8752</b><span>Cost per 1,000</span></div><div><b>84</b><span>Requests</span></div><div><b>1,174.2 ms</b><span>Slow requests (p95)</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 3.8 Flash</h3><div class="model-id">openrouter-gemini-3.8-flash</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>25-27 / 28</strong></div><div class="bar" aria-label="Gemini 3.8 ranking accuracy up to 96.43 percent"><span style="--value:96.43%"></span></div></div><div class="model-foot"><div><b>$6.1984</b><span>Cost per 1,000</span></div><div><b>84</b><span>Requests</span></div><div><b>4,863.3 ms</b><span>Slow requests (p95)</span></div></div></article>
+        </div>
+      </section>
+
+      <section id="tier">
+        <div class="section-head"><div><div class="section-kicker">06 / News task</div><h2>Tier</h2></div><p class="section-intro">The test turned two yes-or-no answers into a tier for 50 cases. It did not create complete article assessments.</p></div>
+        <div class="chart-grid">
+          <article class="panel model-card"><h3>Jev</h3><div class="model-id">typesafe-jev</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>23 / 50</strong></div><div class="bar" aria-label="Jev tier accuracy 46 percent"><span style="--value:46%"></span></div></div><div class="model-foot"><div><b>$0.6031</b><span>Cost per 1,000</span></div><div><b>150</b><span>Requests</span></div><div><b>1,083.1 ms</b><span>Slow requests (p95)</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 2.5 Flash</h3><div class="model-id">openrouter-gemini-2.5-flash</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>25 / 50</strong></div><div class="bar" aria-label="Gemini 2.5 tier accuracy 50 percent"><span style="--value:50%"></span></div></div><div class="model-foot"><div><b>$2.6005</b><span>Cost per 1,000</span></div><div><b>150</b><span>Requests</span></div><div><b>1,420.4 ms</b><span>Slow requests (p95)</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 3.8 Flash</h3><div class="model-id">openrouter-gemini-3.8-flash</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>27-30 / 50</strong></div><div class="bar" aria-label="Gemini 3.8 tier accuracy up to 60 percent"><span style="--value:60%"></span></div></div><div class="model-foot"><div><b>$11.0901</b><span>Cost per 1,000</span></div><div><b>150</b><span>Requests</span></div><div><b>5,005.5 ms</b><span>Slow requests (p95)</span></div></div></article>
+        </div>
+      </section>
+
+      <section id="confidence">
+        <div class="section-head"><div><div class="section-kicker">07 / News task</div><h2>Confidence</h2></div><p class="section-intro">Only four reviewed cases were available. That is enough to describe these runs, not enough to choose a model.</p></div>
+        <div class="chart-grid">
+          <article class="panel model-card"><h3>Jev</h3><div class="model-id">typesafe-jev</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>4 / 4</strong></div><div class="bar" aria-label="Jev confidence accuracy 100 percent on four cases"><span style="--value:100%"></span></div></div><div class="model-foot"><div><b>$0.0887</b><span>Cost per 1,000</span></div><div><b>12</b><span>Requests</span></div><div><b>745.6 ms</b><span>Slow requests (p95)</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 2.5 Flash</h3><div class="model-id">openrouter-gemini-2.5-flash</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>3 / 4</strong></div><div class="bar" aria-label="Gemini 2.5 confidence accuracy 75 percent on four cases"><span style="--value:75%"></span></div></div><div class="model-foot"><div><b>$0.4620</b><span>Cost per 1,000</span></div><div><b>12</b><span>Requests</span></div><div><b>844.4 ms</b><span>Slow requests (p95)</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 3.8 Flash</h3><div class="model-id">openrouter-gemini-3.8-flash</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>4 / 4</strong></div><div class="bar" aria-label="Gemini 3.8 confidence accuracy 100 percent on four cases"><span style="--value:100%"></span></div></div><div class="model-foot"><div><b>$4.2838</b><span>Cost per 1,000</span></div><div><b>12</b><span>Requests</span></div><div><b>3,816.7 ms</b><span>Slow requests (p95)</span></div></div></article>
+        </div>
+      </section>
+
+      <section id="daily-theme">
+        <div class="section-head"><div><div class="section-kicker">08 / News task</div><h2>Daily theme</h2></div><p class="section-intro">The test checked 27 pairs of possible themes. It did not write or review a complete daily report.</p></div>
+        <div class="chart-grid">
+          <article class="panel model-card"><h3>Jev</h3><div class="model-id">typesafe-jev</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>20 / 27</strong></div><div class="bar" aria-label="Jev daily theme accuracy 74.07 percent"><span style="--value:74.07%"></span></div></div><div class="model-foot"><div><b>$0.0315</b><span>Cost per 1,000</span></div><div><b>81</b><span>Requests</span></div><div><b>694.8 ms</b><span>Slow requests (p95)</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 2.5 Flash</h3><div class="model-id">openrouter-gemini-2.5-flash</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>20-21 / 27</strong></div><div class="bar" aria-label="Gemini 2.5 daily theme accuracy up to 77.78 percent"><span style="--value:77.78%"></span></div></div><div class="model-foot"><div><b>$0.1631</b><span>Cost per 1,000</span></div><div><b>81</b><span>Requests</span></div><div><b>916.8 ms</b><span>Slow requests (p95)</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 3.8 Flash</h3><div class="model-id">openrouter-gemini-3.8-flash</div><div class="score-row"><div class="score-line"><span>Correct by trial</span><strong>17 / 27</strong></div><div class="bar" aria-label="Gemini 3.8 daily theme accuracy 62.96 percent"><span style="--value:62.96%"></span></div></div><div class="model-foot"><div><b>$1.6034</b><span>Cost per 1,000</span></div><div><b>81</b><span>Requests</span></div><div><b>3,125.4 ms</b><span>Slow requests (p95)</span></div></div></article>
+        </div>
+      </section>
+
+      <section id="sentiment">
+        <div class="section-head"><div><div class="section-kicker">09 / News task</div><h2>Sentiment</h2></div><p class="section-intro">No one had reviewed and fixed the correct sentiment labels before this research. There is no fair model comparison to show.</p></div>
+        <div class="chart-grid no-comparison">
+          <article class="panel model-card"><h3>Jev</h3><div class="model-id">typesafe-jev</div><p>No reviewed labels were available, so there is no measured result for this test.</p><div class="model-foot"><div><b>-</b><span>Accuracy</span></div><div><b>-</b><span>Cost</span></div><div><b>0</b><span>Test requests</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 2.5 Flash</h3><div class="model-id">openrouter-gemini-2.5-flash</div><p>No reviewed labels were available, so there is no measured result for this test.</p><div class="model-foot"><div><b>-</b><span>Accuracy</span></div><div><b>-</b><span>Cost</span></div><div><b>0</b><span>Test requests</span></div></div></article>
+          <article class="panel model-card"><h3>Gemini 3.8 Flash</h3><div class="model-id">openrouter-gemini-3.8-flash</div><p>No reviewed labels were available, so there is no measured result for this test.</p><div class="model-foot"><div><b>-</b><span>Accuracy</span></div><div><b>-</b><span>Cost</span></div><div><b>0</b><span>Test requests</span></div></div></article>
+        </div>
+      </section>
+
+      <section id="context">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">10 / Input size</div>
+            <h2>Some prompts are too long</h2>
+          </div>
+          <p class="section-intro">Jev allows 64,000 tokens per request and 32,000 tokens for the saved state plus the longest question. The character check below is only a rough warning.</p>
+        </div>
+
+        <div class="context-grid">
+          <article class="panel context-card safe">
+            <div class="context-count">0 / 21,139</div>
+            <h3>Grouping</h3>
+            <p>Every production request we checked was below the size limit.</p>
+          </article>
+          <article class="panel context-card conditional">
+            <div class="context-count">190 / 8,367</div>
+            <h3>Ranking</h3>
+            <p>190 requests were too long. We haven't tested how well the fallback works on those cases.</p>
+          </article>
+          <article class="panel context-card unsafe">
+            <div class="context-count">197 / 228</div>
+            <h3>Tier model calls</h3>
+            <p>Most requests were too long. Combining questions saved tokens in one test, but we don't know whether it changes the answers.</p>
+          </article>
+        </div>
+
+        <div class="guard">
+          <div>
+            <div class="metric-label">Size check</div>
+            <div class="guard-value">70,000</div>
+            <div class="metric-note">state characters, not tokens</div>
+          </div>
+          <div class="guard-copy">
+            <strong>If the input is too long or Jev rejects it:</strong>
+            send the original full input to the current model. Don't cut up or remove source material. Don't send the same rejected request to Jev again.
+          </div>
+        </div>
+      </section>
+
+      <section id="evidence">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">11 / Missing answers</div>
+            <h2>What we still don't know</h2>
+          </div>
+          <p class="section-intro">People reviewed the correct answers before testing. A model's own answer was never treated as correct just because the model produced it.</p>
+        </div>
+
+        <div class="evidence-grid">
+          <details class="panel" open>
+            <summary>What was directly tested?</summary>
+            <div class="details-body">
+              <p>Job relevance tested all six current hiring rules together. News relevance tested one yes-or-no question on 174 articles.</p>
+              <p>We didn't test each hiring rule separately. The News test also didn't test a complete report.</p>
+            </div>
+          </details>
+          <details class="panel">
+            <summary>Which tests were incomplete?</summary>
+            <div class="details-body">
+              <p>Grouping, ranking, tier, confidence, and daily themes were broken into small yes-or-no questions. That shows how the models compare on those questions, but not whether they can complete the real task.</p>
+            </div>
+          </details>
+          <details class="panel">
+            <summary>What could not be evaluated?</summary>
+            <div class="details-body">
+              <p>No one had reviewed the correct sentiment for the articles or groups. We also had no reviewed answers for structured data or written summaries. Keep the current models for those tasks.</p>
+            </div>
+          </details>
+          <details class="panel">
+            <summary>How was production cost counted?</summary>
+            <div class="details-body">
+              <p>We followed every model call used to build seven fixed report versions. They contain 1,656 separate model outputs. Every call was counted once and none were missing.</p>
+              <p>Attributed and unique physical cost are both exactly <strong>$2.032867430</strong>.</p>
+            </div>
+          </details>
+        </div>
+
+        <article class="panel source-card">
+          <div class="metric-label">Source data</div>
+          <p>This page summarizes the fixed test results below. It contains no passwords, model responses, reports, or article text.</p>
+          <code>artifacts/jev-research-v1/jev-research-snapshot-v1.json</code>
+          <code>SHA-256: 8a889bef56d63c071803fe476041a0c5c4414bafc10e7bc6e474d059208e779f</code>
+        </article>
+      </section>
+
+      <footer>
+        <span>Jev research snapshot v1</span>
+        <span>Current models still decide every live result</span>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const links = [...document.querySelectorAll(".toc a")];
+      const sections = links
+        .map((link) => ({ link, section: document.querySelector(link.getAttribute("href")) }))
+        .filter(({ section }) => section);
+
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries.find((entry) => entry.isIntersecting);
+        if (!visible) return;
+        links.forEach((link) => link.classList.remove("active"));
+        const match = sections.find(({ section }) => section === visible.target);
+        if (match) {
+          match.link.classList.add("active");
+          if (window.innerWidth <= 1040) {
+            match.link.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+          }
+        }
+      }, { rootMargin: "-15% 0px -75% 0px" });
+
+      sections.forEach(({ section }) => observer.observe(section));
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,485 @@
+{
+  "benchmark": "ranking",
+  "case_count": 28,
+  "composition_digest": null,
+  "declared_manifest_version": "news-evaluation-2026-09-11-v11",
+  "identity_digest": "0148359e774e6b000f62f8993daa179e56d7877bd84873f4b5c3437effd38f2c",
+  "judgment_count_per_run": 28,
+  "limitation": "Pairwise precedence does not establish a coherent global order.",
+  "paired_comparisons": [
+    {
+      "both_correct": 11,
+      "both_wrong": 0,
+      "first_only_correct": 1,
+      "first_target_id": "openrouter-gemini-2.5-flash",
+      "mcnemar_two_sided_exact_p_value": 0.000274658203125,
+      "paired_count": 28,
+      "second_only_correct": 16,
+      "second_target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "jev-aspect-v1:trial-001",
+      "unavailable_count": 0
+    },
+    {
+      "both_correct": 10,
+      "both_wrong": 5,
+      "first_only_correct": 2,
+      "first_target_id": "openrouter-gemini-2.5-flash",
+      "mcnemar_two_sided_exact_p_value": 0.0224609375,
+      "paired_count": 28,
+      "second_only_correct": 11,
+      "second_target_id": "typesafe-jev",
+      "trial_ref": "jev-aspect-v1:trial-001",
+      "unavailable_count": 0
+    },
+    {
+      "both_correct": 20,
+      "both_wrong": 0,
+      "first_only_correct": 7,
+      "first_target_id": "openrouter-gemini-3.8-flash",
+      "mcnemar_two_sided_exact_p_value": 0.0703125,
+      "paired_count": 28,
+      "second_only_correct": 1,
+      "second_target_id": "typesafe-jev",
+      "trial_ref": "jev-aspect-v1:trial-001",
+      "unavailable_count": 0
+    },
+    {
+      "both_correct": 11,
+      "both_wrong": 0,
+      "first_only_correct": 1,
+      "first_target_id": "openrouter-gemini-2.5-flash",
+      "mcnemar_two_sided_exact_p_value": 0.000274658203125,
+      "paired_count": 28,
+      "second_only_correct": 16,
+      "second_target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "jev-aspect-v1:trial-002",
+      "unavailable_count": 0
+    },
+    {
+      "both_correct": 10,
+      "both_wrong": 4,
+      "first_only_correct": 2,
+      "first_target_id": "openrouter-gemini-2.5-flash",
+      "mcnemar_two_sided_exact_p_value": 0.012939453125,
+      "paired_count": 28,
+      "second_only_correct": 12,
+      "second_target_id": "typesafe-jev",
+      "trial_ref": "jev-aspect-v1:trial-002",
+      "unavailable_count": 0
+    },
+    {
+      "both_correct": 21,
+      "both_wrong": 0,
+      "first_only_correct": 6,
+      "first_target_id": "openrouter-gemini-3.8-flash",
+      "mcnemar_two_sided_exact_p_value": 0.125,
+      "paired_count": 28,
+      "second_only_correct": 1,
+      "second_target_id": "typesafe-jev",
+      "trial_ref": "jev-aspect-v1:trial-002",
+      "unavailable_count": 0
+    },
+    {
+      "both_correct": 12,
+      "both_wrong": 3,
+      "first_only_correct": 0,
+      "first_target_id": "openrouter-gemini-2.5-flash",
+      "mcnemar_two_sided_exact_p_value": 0.000244140625,
+      "paired_count": 28,
+      "second_only_correct": 13,
+      "second_target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "jev-aspect-v1:trial-003",
+      "unavailable_count": 0
+    },
+    {
+      "both_correct": 10,
+      "both_wrong": 6,
+      "first_only_correct": 2,
+      "first_target_id": "openrouter-gemini-2.5-flash",
+      "mcnemar_two_sided_exact_p_value": 0.03857421875,
+      "paired_count": 28,
+      "second_only_correct": 10,
+      "second_target_id": "typesafe-jev",
+      "trial_ref": "jev-aspect-v1:trial-003",
+      "unavailable_count": 0
+    },
+    {
+      "both_correct": 19,
+      "both_wrong": 2,
+      "first_only_correct": 6,
+      "first_target_id": "openrouter-gemini-3.8-flash",
+      "mcnemar_two_sided_exact_p_value": 0.125,
+      "paired_count": 28,
+      "second_only_correct": 1,
+      "second_target_id": "typesafe-jev",
+      "trial_ref": "jev-aspect-v1:trial-003",
+      "unavailable_count": 0
+    }
+  ],
+  "pareto": {
+    "dimensions": [
+      "worst_trial_errors",
+      "mean_cost_usd",
+      "median_trial_p95_latency_ms"
+    ],
+    "frontier": [
+      "openrouter-gemini-3.8-flash",
+      "typesafe-jev"
+    ],
+    "targets": [
+      {
+        "error_counts_by_trial": [
+          16,
+          16,
+          16
+        ],
+        "mean_cost_usd": 0.05250626,
+        "median_trial_p50_latency_ms": 678.5,
+        "median_trial_p95_latency_ms": 1174.2,
+        "non_dominated": false,
+        "target_id": "openrouter-gemini-2.5-flash",
+        "total_attempt_count": 84,
+        "total_cost_usd": 0.15751878,
+        "total_input_tokens": 574677,
+        "total_output_tokens": 420,
+        "worst_trial_errors": 16
+      },
+      {
+        "error_counts_by_trial": [
+          1,
+          1,
+          3
+        ],
+        "mean_cost_usd": 0.17355575,
+        "median_trial_p50_latency_ms": 2467.5,
+        "median_trial_p95_latency_ms": 4863.299999999999,
+        "non_dominated": true,
+        "target_id": "openrouter-gemini-3.8-flash",
+        "total_attempt_count": 84,
+        "total_cost_usd": 0.52066725,
+        "total_input_tokens": 577617,
+        "total_output_tokens": 48280,
+        "worst_trial_errors": 3
+      },
+      {
+        "error_counts_by_trial": [
+          7,
+          6,
+          8
+        ],
+        "mean_cost_usd": 0.009299178,
+        "median_trial_p50_latency_ms": 816.5,
+        "median_trial_p95_latency_ms": 1057.3,
+        "non_dominated": true,
+        "target_id": "typesafe-jev",
+        "total_attempt_count": 84,
+        "total_cost_usd": 0.027897534,
+        "total_input_tokens": 664227,
+        "total_output_tokens": 2100,
+        "worst_trial_errors": 8
+      }
+    ]
+  },
+  "question_digests": [
+    "05b65054bf9fb6f9f11f46c659c7075e7207479064c23a0e7c26cc844c8fb52a"
+  ],
+  "schema_version": "binary-benchmark-analysis/v1",
+  "source_artifact_id": "083d5ae5ba73686511f5eb01ce770dc2e5826de22cf27df76e205bd9b946216a",
+  "stability": [
+    {
+      "flip_count": 0,
+      "judgment_count": 28,
+      "target_id": "openrouter-gemini-2.5-flash",
+      "unanimous_count": 28,
+      "unanimous_rate": 1.0,
+      "unavailable_count": 0,
+      "unstable_ids": []
+    },
+    {
+      "flip_count": 4,
+      "judgment_count": 28,
+      "target_id": "openrouter-gemini-3.8-flash",
+      "unanimous_count": 24,
+      "unanimous_rate": 0.8571428571428571,
+      "unavailable_count": 0,
+      "unstable_ids": [
+        "sep04-pnrr-ranks-above-ai-gigafactory:a_should_rank_above_b",
+        "sep05-pnrr-ranks-above-energy-storage-control:a_should_rank_above_b",
+        "sep10-bvb-ranks-above-aur-afd:a_should_rank_above_b",
+        "sep10-rates-rank-above-aur-afd:a_should_rank_above_b"
+      ]
+    },
+    {
+      "flip_count": 3,
+      "judgment_count": 28,
+      "target_id": "typesafe-jev",
+      "unanimous_count": 26,
+      "unanimous_rate": 0.9285714285714286,
+      "unavailable_count": 0,
+      "unstable_ids": [
+        "sep02-psd-aur-government-ranks-above-tise-party-criticism:a_should_rank_above_b",
+        "sep05-fuel-ranks-above-pnrr:a_should_rank_above_b"
+      ]
+    }
+  ],
+  "target_aggregates": [
+    {
+      "error_counts_by_trial": [
+        16,
+        16,
+        16
+      ],
+      "mean_cost_usd": 0.05250626,
+      "median_trial_p50_latency_ms": 678.5,
+      "median_trial_p95_latency_ms": 1174.2,
+      "target_id": "openrouter-gemini-2.5-flash",
+      "total_attempt_count": 84,
+      "total_cost_usd": 0.15751878,
+      "total_input_tokens": 574677,
+      "total_output_tokens": 420,
+      "worst_trial_errors": 16
+    },
+    {
+      "error_counts_by_trial": [
+        1,
+        1,
+        3
+      ],
+      "mean_cost_usd": 0.17355575,
+      "median_trial_p50_latency_ms": 2467.5,
+      "median_trial_p95_latency_ms": 4863.299999999999,
+      "target_id": "openrouter-gemini-3.8-flash",
+      "total_attempt_count": 84,
+      "total_cost_usd": 0.52066725,
+      "total_input_tokens": 577617,
+      "total_output_tokens": 48280,
+      "worst_trial_errors": 3
+    },
+    {
+      "error_counts_by_trial": [
+        7,
+        6,
+        8
+      ],
+      "mean_cost_usd": 0.009299178,
+      "median_trial_p50_latency_ms": 816.5,
+      "median_trial_p95_latency_ms": 1057.3,
+      "target_id": "typesafe-jev",
+      "total_attempt_count": 84,
+      "total_cost_usd": 0.027897534,
+      "total_input_tokens": 664227,
+      "total_output_tokens": 2100,
+      "worst_trial_errors": 8
+    }
+  ],
+  "target_ids": [
+    "openrouter-gemini-2.5-flash",
+    "openrouter-gemini-3.8-flash",
+    "typesafe-jev"
+  ],
+  "trial_refs": [
+    "jev-aspect-v1:trial-001",
+    "jev-aspect-v1:trial-002",
+    "jev-aspect-v1:trial-003"
+  ],
+  "trials": [
+    {
+      "accuracy": 0.42857142857142855,
+      "accuracy_95_exact_interval": {
+        "confidence_level": 0.95,
+        "lower": 0.24462393630214663,
+        "successes": 12,
+        "total": 28,
+        "upper": 0.628206371387904
+      },
+      "attempt_count": 28,
+      "completed": 28,
+      "correct": 12,
+      "cost_usd": 0.0578177,
+      "failed": 0,
+      "input_tokens": 191559,
+      "inversion_count": 16,
+      "output_tokens": 140,
+      "p50_latency_ms": 678.5,
+      "p95_latency_ms": 1227.3999999999999,
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "jev-aspect-v1:trial-001"
+    },
+    {
+      "accuracy": 0.42857142857142855,
+      "accuracy_95_exact_interval": {
+        "confidence_level": 0.95,
+        "lower": 0.24462393630214663,
+        "successes": 12,
+        "total": 28,
+        "upper": 0.628206371387904
+      },
+      "attempt_count": 28,
+      "completed": 28,
+      "correct": 12,
+      "cost_usd": 0.05413787,
+      "failed": 0,
+      "input_tokens": 191559,
+      "inversion_count": 16,
+      "output_tokens": 140,
+      "p50_latency_ms": 686.5,
+      "p95_latency_ms": 1071.8,
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "jev-aspect-v1:trial-002"
+    },
+    {
+      "accuracy": 0.42857142857142855,
+      "accuracy_95_exact_interval": {
+        "confidence_level": 0.95,
+        "lower": 0.24462393630214663,
+        "successes": 12,
+        "total": 28,
+        "upper": 0.628206371387904
+      },
+      "attempt_count": 28,
+      "completed": 28,
+      "correct": 12,
+      "cost_usd": 0.04556321,
+      "failed": 0,
+      "input_tokens": 191559,
+      "inversion_count": 16,
+      "output_tokens": 140,
+      "p50_latency_ms": 677.0,
+      "p95_latency_ms": 1174.2,
+      "target_id": "openrouter-gemini-2.5-flash",
+      "trial_ref": "jev-aspect-v1:trial-003"
+    },
+    {
+      "accuracy": 0.9642857142857143,
+      "accuracy_95_exact_interval": {
+        "confidence_level": 0.95,
+        "lower": 0.8165224024553763,
+        "successes": 27,
+        "total": 28,
+        "upper": 0.9990962012443418
+      },
+      "attempt_count": 28,
+      "completed": 28,
+      "correct": 27,
+      "cost_usd": 0.20428425,
+      "failed": 0,
+      "input_tokens": 192539,
+      "inversion_count": 1,
+      "output_tokens": 15968,
+      "p50_latency_ms": 2468.0,
+      "p95_latency_ms": 4863.299999999999,
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "jev-aspect-v1:trial-001"
+    },
+    {
+      "accuracy": 0.9642857142857143,
+      "accuracy_95_exact_interval": {
+        "confidence_level": 0.95,
+        "lower": 0.8165224024553763,
+        "successes": 27,
+        "total": 28,
+        "upper": 0.9990962012443418
+      },
+      "attempt_count": 28,
+      "completed": 28,
+      "correct": 27,
+      "cost_usd": 0.1617303,
+      "failed": 0,
+      "input_tokens": 192539,
+      "inversion_count": 1,
+      "output_tokens": 16366,
+      "p50_latency_ms": 2467.5,
+      "p95_latency_ms": 5418.949999999998,
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "jev-aspect-v1:trial-002"
+    },
+    {
+      "accuracy": 0.8928571428571429,
+      "accuracy_95_exact_interval": {
+        "confidence_level": 0.95,
+        "lower": 0.7177356042846756,
+        "successes": 25,
+        "total": 28,
+        "upper": 0.9773349093609409
+      },
+      "attempt_count": 28,
+      "completed": 28,
+      "correct": 25,
+      "cost_usd": 0.1546527,
+      "failed": 0,
+      "input_tokens": 192539,
+      "inversion_count": 3,
+      "output_tokens": 15946,
+      "p50_latency_ms": 2392.5,
+      "p95_latency_ms": 4673.849999999999,
+      "target_id": "openrouter-gemini-3.8-flash",
+      "trial_ref": "jev-aspect-v1:trial-003"
+    },
+    {
+      "accuracy": 0.75,
+      "accuracy_95_exact_interval": {
+        "confidence_level": 0.95,
+        "lower": 0.5512845484713915,
+        "successes": 21,
+        "total": 28,
+        "upper": 0.8930920081707734
+      },
+      "attempt_count": 28,
+      "completed": 28,
+      "correct": 21,
+      "cost_usd": 0.009299178,
+      "failed": 0,
+      "input_tokens": 221409,
+      "inversion_count": 7,
+      "output_tokens": 700,
+      "p50_latency_ms": 831.5,
+      "p95_latency_ms": 1048.9,
+      "target_id": "typesafe-jev",
+      "trial_ref": "jev-aspect-v1:trial-001"
+    },
+    {
+      "accuracy": 0.7857142857142857,
+      "accuracy_95_exact_interval": {
+        "confidence_level": 0.95,
+        "lower": 0.5904689734941717,
+        "successes": 22,
+        "total": 28,
+        "upper": 0.9170393876123615
+      },
+      "attempt_count": 28,
+      "completed": 28,
+      "correct": 22,
+      "cost_usd": 0.009299178,
+      "failed": 0,
+      "input_tokens": 221409,
+      "inversion_count": 6,
+      "output_tokens": 700,
+      "p50_latency_ms": 816.5,
+      "p95_latency_ms": 1057.3,
+      "target_id": "typesafe-jev",
+      "trial_ref": "jev-aspect-v1:trial-002"
+    },
+    {
+      "accuracy": 0.7142857142857143,
+      "accuracy_95_exact_interval": {
+        "confidence_level": 0.95,
+        "lower": 0.5133316845510594,
+        "successes": 20,
+        "total": 28,
+        "upper": 0.8677634874288749
+      },
+      "attempt_count": 28,
+      "completed": 28,
+      "correct": 20,
+      "cost_usd": 0.009299178,
+      "failed": 0,
+      "input_tokens": 221409,
+      "inversion_count": 8,
+      "output_tokens": 700,
+      "p50_latency_ms": 799.5,
+      "p95_latency_ms": 1095.6499999999999,
+      "target_id": "typesafe-jev",
+      "trial_ref": "jev-aspect-v1:trial-003"
+    }
+  ]
+}

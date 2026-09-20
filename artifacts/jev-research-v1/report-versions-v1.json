@@ -1,0 +1,34 @@
+{
+  "reports": [
+    {
+      "day": "2026-09-14",
+      "report_version_id": "f6fc85b9c6fab8f15d11e8c9cea36ec88f6c0b6e4d3aedd6c429cbbf548f555e"
+    },
+    {
+      "day": "2026-09-15",
+      "report_version_id": "b5594aab447f3e5517f12175cc6bf01b3c352ef7f2c6da142179cf9f142eb897"
+    },
+    {
+      "day": "2026-09-16",
+      "report_version_id": "49c9e634788c474da7aa339f009663fa3a8a4c516aff0e475d31f6afd640f941"
+    },
+    {
+      "day": "2026-09-17",
+      "report_version_id": "71e799636e9ad0b451ad482b5a94dcff0114cf1f968f4689516f21ebec3e4f81"
+    },
+    {
+      "day": "2026-09-18",
+      "report_version_id": "37a7fa85cdea7c45848ba377f0d1ddac7a884682cc5ec14a3ddf99afec5660d9"
+    },
+    {
+      "day": "2026-09-19",
+      "report_version_id": "38287cca44e9b485f671fa6b4179b597bf402bbf371bfd53f9dbb7bf718f19d6"
+    },
+    {
+      "day": "2026-09-20",
+      "report_version_id": "009b84f676ea351b63493a45a319e07bcb8cd9c55aa8c6c5369d0cb10abba6df"
+    }
+  ],
+  "schema_version": "news-report-cost-input/v1",
+  "source": "artifacts/jev-aspect-v1/jev-production-context-latest-7-v1.json"
+}

@@ -1,0 +1,67 @@
+{
+  "actual_spend_usd": "0",
+  "completed_cases": 3,
+  "protocol_artifact_sha256": "db671b7658bc7a42dee4605c3ff9c02824e3809eb837f928196e196993da79c9",
+  "protocol_semantic_sha256": "243bc9aba235dd887666ae3669271c727a3bf5ef3ab15cd59452b26c1584f7cd",
+  "requested_cases": 3,
+  "results": [
+    {
+      "case_id": "ascii-120000",
+      "estimated_cost_usd": "0",
+      "http_status": 400,
+      "input_tokens": null,
+      "latency_ms": 1026,
+      "marker_probability": null,
+      "outcome": "rejected",
+      "output_tokens": null,
+      "provider_request_id": null,
+      "response_body": {
+        "detail": {
+          "error_type": "max_tokens_exceeded"
+        }
+      },
+      "response_sha256": "67e8823cd0b4c64996e5c7fa072e5c99b5f326a412062a74f4081ef733df1175",
+      "state_characters": 120000,
+      "state_digest": "43b88ae2010adaf81598cd635672e5a2b77d1b9088f5a7500d333fa94b9feab2"
+    },
+    {
+      "case_id": "ascii-150000",
+      "estimated_cost_usd": "0",
+      "http_status": 400,
+      "input_tokens": null,
+      "latency_ms": 1136,
+      "marker_probability": null,
+      "outcome": "rejected",
+      "output_tokens": null,
+      "provider_request_id": null,
+      "response_body": {
+        "detail": {
+          "error_type": "max_tokens_exceeded"
+        }
+      },
+      "response_sha256": "67e8823cd0b4c64996e5c7fa072e5c99b5f326a412062a74f4081ef733df1175",
+      "state_characters": 150000,
+      "state_digest": "bf97ccafc2208cedfbd0370178ceaff587fd5595de31ca4473bb11bc6e22f792"
+    },
+    {
+      "case_id": "ascii-180000",
+      "estimated_cost_usd": "0",
+      "http_status": 400,
+      "input_tokens": null,
+      "latency_ms": 1273,
+      "marker_probability": null,
+      "outcome": "rejected",
+      "output_tokens": null,
+      "provider_request_id": null,
+      "response_body": {
+        "detail": {
+          "error_type": "max_tokens_exceeded"
+        }
+      },
+      "response_sha256": "67e8823cd0b4c64996e5c7fa072e5c99b5f326a412062a74f4081ef733df1175",
+      "state_characters": 180000,
+      "state_digest": "6df1d5dd0ba3d13329af9b9f00f7802ee9a9963ca94b06d940f2328246958352"
+    }
+  ],
+  "schema_version": "jev-context-boundary-result/v1"
+}

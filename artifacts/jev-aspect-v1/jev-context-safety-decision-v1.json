@@ -1,0 +1,231 @@
+{
+  "article_or_state_text_included": false,
+  "decision_scope": "context routing only; no production migration approval",
+  "full_provider_output_included": false,
+  "issue_id": "news-aggregator-vt6.6.3",
+  "policy": {
+    "basis": "70,000-character deterministic ASCII state accepted; 80,000 rejected",
+    "documented_state_plus_longest_question_tokens": 32000,
+    "formal_tokenizer_bound": false,
+    "measurement": "Python len(state) Unicode code points",
+    "state_character_guard": 70000
+  },
+  "roles": [
+    {
+      "estimate_is_formal_tokenizer_bound": false,
+      "fallback": {
+        "clip_or_chunk_state": false,
+        "preflight": "use_incumbent_with_full_state_when_state_characters_exceed_70000",
+        "provider_rejection": "use_incumbent_with_full_state",
+        "retry_unchanged_jev_request": false
+      },
+      "minimum_estimated_production_token_headroom": null,
+      "minimum_observed_reviewed_token_headroom": null,
+      "production": {
+        "affected_provider_requests": 0,
+        "affected_question_requests": 0,
+        "clip_measurement": "character loss only; semantic evidence loss not measured",
+        "maximum_naive_tail_clip_characters": 0,
+        "maximum_naive_tail_clip_fraction": 0.0,
+        "maximum_state_characters": 24181,
+        "minimum_character_headroom_at_guard": 45819,
+        "provider_requests": 496,
+        "question_requests": 496
+      },
+      "reviewed_routing_effect": {
+        "accuracy_delta_percentage_points": null,
+        "affected_production_quality": "not_estimable",
+        "affected_requests": null
+      },
+      "role": "relevance",
+      "status": "conditional"
+    },
+    {
+      "estimate_is_formal_tokenizer_bound": false,
+      "fallback": {
+        "clip_or_chunk_state": false,
+        "preflight": "use_incumbent_with_full_state_when_state_characters_exceed_70000",
+        "provider_rejection": "use_incumbent_with_full_state",
+        "retry_unchanged_jev_request": false
+      },
+      "minimum_estimated_production_token_headroom": 11876,
+      "minimum_observed_reviewed_token_headroom": 26641,
+      "production": {
+        "affected_provider_requests": 0,
+        "affected_question_requests": 0,
+        "clip_measurement": "character loss only; semantic evidence loss not measured",
+        "maximum_naive_tail_clip_characters": 0,
+        "maximum_naive_tail_clip_fraction": 0.0,
+        "maximum_state_characters": 24753,
+        "minimum_character_headroom_at_guard": 45247,
+        "provider_requests": 21139,
+        "question_requests": 21139
+      },
+      "reviewed_routing_effect": {
+        "accuracy_delta_percentage_points": "0.000000",
+        "affected_production_quality": "not_estimable",
+        "affected_requests": 0
+      },
+      "role": "grouping",
+      "status": "safe"
+    },
+    {
+      "estimate_is_formal_tokenizer_bound": false,
+      "fallback": {
+        "clip_or_chunk_state": false,
+        "preflight": "use_incumbent_with_full_state_when_state_characters_exceed_70000",
+        "provider_rejection": "use_incumbent_with_full_state",
+        "retry_unchanged_jev_request": false
+      },
+      "minimum_estimated_production_token_headroom": -28927,
+      "minimum_observed_reviewed_token_headroom": 13931,
+      "production": {
+        "affected_provider_requests": 190,
+        "affected_question_requests": 190,
+        "clip_measurement": "character loss only; semantic evidence loss not measured",
+        "maximum_naive_tail_clip_characters": 70493,
+        "maximum_naive_tail_clip_fraction": 0.501755,
+        "maximum_state_characters": 140493,
+        "minimum_character_headroom_at_guard": -70493,
+        "provider_requests": 8367,
+        "question_requests": 8367
+      },
+      "reviewed_routing_effect": {
+        "accuracy_delta_percentage_points": "0.000000",
+        "affected_production_quality": "not_estimable",
+        "affected_requests": 0
+      },
+      "role": "ranking",
+      "status": "conditional"
+    },
+    {
+      "estimate_is_formal_tokenizer_bound": false,
+      "fallback": {
+        "clip_or_chunk_state": false,
+        "preflight": "always_use_incumbent_with_full_state",
+        "provider_rejection": "use_incumbent_with_full_state",
+        "retry_unchanged_jev_request": false
+      },
+      "minimum_estimated_production_token_headroom": -1736,
+      "minimum_observed_reviewed_token_headroom": 17631,
+      "production": {
+        "affected_provider_requests": 197,
+        "affected_question_requests": 394,
+        "clip_measurement": "character loss only; semantic evidence loss not measured",
+        "maximum_naive_tail_clip_characters": 40825,
+        "maximum_naive_tail_clip_fraction": 0.368374,
+        "maximum_state_characters": 110825,
+        "minimum_character_headroom_at_guard": -40825,
+        "provider_requests": 228,
+        "question_requests": 456
+      },
+      "reviewed_routing_effect": {
+        "accuracy_delta_percentage_points": "0.000000",
+        "affected_production_quality": "not_estimable",
+        "affected_requests": 0
+      },
+      "role": "tier",
+      "status": "unsafe"
+    },
+    {
+      "estimate_is_formal_tokenizer_bound": false,
+      "fallback": {
+        "clip_or_chunk_state": false,
+        "preflight": "use_incumbent_with_full_state_when_state_characters_exceed_70000",
+        "provider_rejection": "use_incumbent_with_full_state",
+        "retry_unchanged_jev_request": false
+      },
+      "minimum_estimated_production_token_headroom": 3232,
+      "minimum_observed_reviewed_token_headroom": 29131,
+      "production": {
+        "affected_provider_requests": 0,
+        "affected_question_requests": 0,
+        "clip_measurement": "character loss only; semantic evidence loss not measured",
+        "maximum_naive_tail_clip_characters": 0,
+        "maximum_naive_tail_clip_fraction": 0.0,
+        "maximum_state_characters": 62656,
+        "minimum_character_headroom_at_guard": 7344,
+        "provider_requests": 324,
+        "question_requests": 324
+      },
+      "reviewed_routing_effect": {
+        "accuracy_delta_percentage_points": "0.000000",
+        "affected_production_quality": "not_estimable",
+        "affected_requests": 0
+      },
+      "role": "confidence",
+      "status": "safe"
+    },
+    {
+      "estimate_is_formal_tokenizer_bound": false,
+      "fallback": {
+        "clip_or_chunk_state": false,
+        "preflight": "use_incumbent_with_full_state_when_state_characters_exceed_70000",
+        "provider_rejection": "use_incumbent_with_full_state",
+        "retry_unchanged_jev_request": false
+      },
+      "minimum_estimated_production_token_headroom": 30752,
+      "minimum_observed_reviewed_token_headroom": 31153,
+      "production": {
+        "affected_provider_requests": 0,
+        "affected_question_requests": 0,
+        "clip_measurement": "character loss only; semantic evidence loss not measured",
+        "maximum_naive_tail_clip_characters": 0,
+        "maximum_naive_tail_clip_fraction": 0.0,
+        "maximum_state_characters": 2165,
+        "minimum_character_headroom_at_guard": 67835,
+        "provider_requests": 8367,
+        "question_requests": 8367
+      },
+      "reviewed_routing_effect": {
+        "accuracy_delta_percentage_points": "0.000000",
+        "affected_production_quality": "not_estimable",
+        "affected_requests": 0
+      },
+      "role": "daily_theme",
+      "status": "safe"
+    }
+  ],
+  "schema_version": "jev-context-safety-decision/v1",
+  "sources": [
+    {
+      "path": "src/romanian_news/jev_context_limits.json",
+      "sha256": "6ed18de6785c785f27b7535fac9d91bf53f256a8cfe1d4740118d7c71a7ebf23"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/jev-context-headroom-reviewed-v1.json",
+      "sha256": "f279a376e5f6116680e08cf81548fba4b4dd0206f609271194a2fdbcb05d0c5e"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/jev-production-context-latest-7-v1.json",
+      "sha256": "d4f161902c4e672c51e6b57ead48eff3ddbbd744047832119098d4983183f36f"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/jev-production-context-latest-7-v1-requests.json.gz",
+      "sha256": "5c74ed53d2608577ea71c2d5931f737222919ebc6a1de7bc9e8eefee6afb2c66"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/jev-context-boundary-result-v2.json",
+      "sha256": "269061a4c0f452993d3fb6e5de47e356f0378dc11ce2672886f5dcd74d919000"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/jev-context-boundary-result-v3.json",
+      "sha256": "e7d7e6a9d414fdb36c89b466a3423abebb9cf9869ebffcf53034fe4f269c4e6e"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/jev-batched-tier-cost-v1.json",
+      "sha256": "3e763194eee8ec15542da9b0eb129e5f0ec65d1d6f9c08df195ecab537b6422f"
+    }
+  ],
+  "tier_batching": {
+    "batched_cost_usd": "0.000245322",
+    "batched_input_tokens": 5841,
+    "input_token_reduction_fraction": 0.491291,
+    "quality_equivalence_evaluated": false,
+    "sample_count": 1,
+    "saved_input_tokens": 5641,
+    "separate_cost_usd": "0.000482244",
+    "separate_input_tokens": 11482,
+    "state_size_reduced": false
+  }
+}

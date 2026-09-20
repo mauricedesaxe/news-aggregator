@@ -1,0 +1,1847 @@
+{
+  "concerns": [
+    {
+      "all_trial_cost_usd": "0.001063818",
+      "all_trial_latency_ms": {
+        "max": 766,
+        "p50": 631,
+        "p95": 766,
+        "p99": 766
+      },
+      "concern": "confidence",
+      "daily_statistics": [
+        {
+          "count": 4,
+          "day": "unknown",
+          "max": 2869,
+          "max_utilization_percent": 8.965625,
+          "minimum_headroom_tokens": 29131,
+          "p50": 1710,
+          "p95": 2869,
+          "p99": 2869,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        }
+      ],
+      "declared_manifest_version": "news-evaluation-2026-09-11-v11",
+      "execution_identity_digest": "8b3b14b58d68d35364ee6c7063f64efbaaa2185a9de8230ab066feaa74262edc",
+      "request_statistics": {
+        "count": 4,
+        "max": 2869,
+        "max_utilization_percent": 8.965625,
+        "minimum_headroom_tokens": 29131,
+        "p50": 1710,
+        "p95": 2869,
+        "p99": 2869,
+        "thresholds": [
+          {
+            "count_at_or_above": 0,
+            "percent": 50,
+            "share_at_or_above": 0.0,
+            "tokens": 16000
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 75,
+            "share_at_or_above": 0.0,
+            "tokens": 24000
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 90,
+            "share_at_or_above": 0.0,
+            "tokens": 28800
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 100,
+            "share_at_or_above": 0.0,
+            "tokens": 32000
+          }
+        ]
+      },
+      "requests": [
+        {
+          "case_id": "sep10-subject-16-confidence",
+          "day": null,
+          "input_tokens": 2482,
+          "judgment_id": "evidence_sufficient",
+          "state_characters": 6416,
+          "state_digest": "e902b9816c4172a987a11e86e82e43f321c2d535b25ede29f4591a3f5db5149a"
+        },
+        {
+          "case_id": "sep10-subject-21-confidence",
+          "day": null,
+          "input_tokens": 1382,
+          "judgment_id": "evidence_sufficient",
+          "state_characters": 3010,
+          "state_digest": "619683b44eee1987c9641765255d28b6bfe3d9b0fdfbeff05f34655ee58eb358"
+        },
+        {
+          "case_id": "sep10-subject-22-confidence",
+          "day": null,
+          "input_tokens": 2869,
+          "judgment_id": "evidence_sufficient",
+          "state_characters": 7423,
+          "state_digest": "622df4f8323e9eb4ddef4a6afce7feaabbf8e21443f265e615f7e8b240938f4a"
+        },
+        {
+          "case_id": "sep10-subject-24-confidence",
+          "day": null,
+          "input_tokens": 1710,
+          "judgment_id": "evidence_sufficient",
+          "state_characters": 4115,
+          "state_digest": "ac693474763680f5e81ddd46fbe0d48a764a13e6f7e207b9862e548215861a79"
+        }
+      ],
+      "source_artifact": "artifacts/jev-aspect-v1/news-confidence-live-v1.json",
+      "source_artifact_sha256": "2556116ce729a4042000a475f41e8bd18d96123f1f04ceca883b5082cd07aa9d",
+      "state_character_statistics": {
+        "max": 7423,
+        "p50": 4115,
+        "p95": 7423,
+        "p99": 7423
+      },
+      "trial_count": 3,
+      "unique_request_count": 4
+    },
+    {
+      "all_trial_cost_usd": "0.002550114",
+      "all_trial_latency_ms": {
+        "max": 763,
+        "p50": 625,
+        "p95": 699,
+        "p99": 763
+      },
+      "concern": "daily_theme",
+      "daily_statistics": [
+        {
+          "count": 3,
+          "day": "2026-09-04",
+          "max": 741,
+          "max_utilization_percent": 2.315625,
+          "minimum_headroom_tokens": 31259,
+          "p50": 738,
+          "p95": 741,
+          "p99": 741,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        },
+        {
+          "count": 5,
+          "day": "2026-09-05",
+          "max": 847,
+          "max_utilization_percent": 2.646875,
+          "minimum_headroom_tokens": 31153,
+          "p50": 797,
+          "p95": 847,
+          "p99": 847,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        },
+        {
+          "count": 2,
+          "day": "2026-09-06",
+          "max": 740,
+          "max_utilization_percent": 2.3125,
+          "minimum_headroom_tokens": 31260,
+          "p50": 735,
+          "p95": 740,
+          "p99": 740,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        },
+        {
+          "count": 9,
+          "day": "2026-09-08",
+          "max": 793,
+          "max_utilization_percent": 2.478125,
+          "minimum_headroom_tokens": 31207,
+          "p50": 710,
+          "p95": 793,
+          "p99": 793,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        },
+        {
+          "count": 8,
+          "day": "2026-09-10",
+          "max": 780,
+          "max_utilization_percent": 2.4375,
+          "minimum_headroom_tokens": 31220,
+          "p50": 743,
+          "p95": 780,
+          "p99": 780,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        }
+      ],
+      "declared_manifest_version": "news-evaluation-2026-09-11-v11",
+      "execution_identity_digest": "d2a768664653003e58ad42c65dc4e2264e0110e1522520ce8ddd60b5d75e97c6",
+      "request_statistics": {
+        "count": 27,
+        "max": 847,
+        "max_utilization_percent": 2.646875,
+        "minimum_headroom_tokens": 31153,
+        "p50": 740,
+        "p95": 847,
+        "p99": 847,
+        "thresholds": [
+          {
+            "count_at_or_above": 0,
+            "percent": 50,
+            "share_at_or_above": 0.0,
+            "tokens": 16000
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 75,
+            "share_at_or_above": 0.0,
+            "tokens": 24000
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 90,
+            "share_at_or_above": 0.0,
+            "tokens": 28800
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 100,
+            "share_at_or_above": 0.0,
+            "tokens": 32000
+          }
+        ]
+      },
+      "requests": [
+        {
+          "case_id": "2026-09-04-c28afbbe96f3-daily-themes",
+          "day": "2026-09-04",
+          "input_tokens": 738,
+          "judgment_id": "2026-09-04-c28afbbe96f3-unrelated-theme-control",
+          "state_characters": 1589,
+          "state_digest": "f48b7eacb1c4757f9f085724f4e96ff4dd63f34af5a88896b0ec6f6c656b190b"
+        },
+        {
+          "case_id": "2026-09-04-c28afbbe96f3-daily-themes",
+          "day": "2026-09-04",
+          "input_tokens": 723,
+          "judgment_id": "sep04-neptun-production-and-market-impact",
+          "state_characters": 1520,
+          "state_digest": "eb1676555eb3c6f702c11a622814b8bf73bd51dab1a08c869354b6f92e01d11d"
+        },
+        {
+          "case_id": "2026-09-04-c28afbbe96f3-daily-themes",
+          "day": "2026-09-04",
+          "input_tokens": 741,
+          "judgment_id": "sep04-robor-and-euro-reference-rates",
+          "state_characters": 1286,
+          "state_digest": "4df4a7b85f856cb79d0f3e88e9ea0d82c1cec1e7d990ffaea337b6f64aec6fbc"
+        },
+        {
+          "case_id": "2026-09-05-7869988df4e8-daily-themes",
+          "day": "2026-09-05",
+          "input_tokens": 797,
+          "judgment_id": "2026-09-05-7869988df4e8-unrelated-theme-control",
+          "state_characters": 1926,
+          "state_digest": "48eb9aa5305913960d51baa833d2006c5b0dd183fb9909535013c4dafae36e29"
+        },
+        {
+          "case_id": "2026-09-05-7869988df4e8-daily-themes",
+          "day": "2026-09-05",
+          "input_tokens": 733,
+          "judgment_id": "sep05-bucharest-prices-and-housing-market",
+          "state_characters": 1622,
+          "state_digest": "302f6d723b2ec4cdcc9fb38bd36014555b648de6a4bfc2e4e2407dad23ec9a26"
+        },
+        {
+          "case_id": "2026-09-05-7869988df4e8-daily-themes",
+          "day": "2026-09-05",
+          "input_tokens": 847,
+          "judgment_id": "sep05-political-deadlock-and-prime-minister",
+          "state_characters": 2020,
+          "state_digest": "c8df62b869560a19eb30606fc2142cfd0e4e33fc4a1eed1502ae137bc3d5023c"
+        },
+        {
+          "case_id": "2026-09-05-98171fdf44f8-daily-themes",
+          "day": "2026-09-05",
+          "input_tokens": 790,
+          "judgment_id": "2026-09-05-98171fdf44f8-unrelated-theme-control",
+          "state_characters": 1784,
+          "state_digest": "81d57c128ddcb5a2a0f435be9e699c2ec8a0043c06c1239a35fbb7e9caf5d62e"
+        },
+        {
+          "case_id": "2026-09-05-98171fdf44f8-daily-themes",
+          "day": "2026-09-05",
+          "input_tokens": 847,
+          "judgment_id": "sep05-political-deadlock-events-share-theme",
+          "state_characters": 2020,
+          "state_digest": "b0f07eb463f1ffbdc16167d198bba09fafee1eb8d5413815c19e505687773639"
+        },
+        {
+          "case_id": "2026-09-06-d7435504e45d-daily-themes",
+          "day": "2026-09-06",
+          "input_tokens": 740,
+          "judgment_id": "2026-09-06-d7435504e45d-unrelated-theme-control",
+          "state_characters": 1613,
+          "state_digest": "1847340e83e74f639f3ae2e69d672a7a9e2609020c6082c64e99f652c3b268e1"
+        },
+        {
+          "case_id": "2026-09-06-d7435504e45d-daily-themes",
+          "day": "2026-09-06",
+          "input_tokens": 735,
+          "judgment_id": "sep06-retail-and-motorway-events-differ",
+          "state_characters": 1609,
+          "state_digest": "906a420e10fba7e02ee02c93282dc526ee7d9b1109c510366dbe6a54a4b9ff03"
+        },
+        {
+          "case_id": "sep08-reader-subject-relationships",
+          "day": "2026-09-08",
+          "input_tokens": 710,
+          "judgment_id": "sep08-defense-posture-link",
+          "state_characters": 1843,
+          "state_digest": "2b4f5f729635222c40ca00c067f89903ea36974f3f228babd8335288eb2cdb85"
+        },
+        {
+          "case_id": "sep08-reader-subject-relationships",
+          "day": "2026-09-08",
+          "input_tokens": 766,
+          "judgment_id": "sep08-economic-pressure-link",
+          "state_characters": 1545,
+          "state_digest": "f2d3eb97297dfbfd87b9f02d4d4d7011dacc27d2723a123ef05109379d3d7cd3"
+        },
+        {
+          "case_id": "sep08-reader-subject-relationships",
+          "day": "2026-09-08",
+          "input_tokens": 703,
+          "judgment_id": "sep08-energy-costs-link",
+          "state_characters": 1549,
+          "state_digest": "45b62f06d22307012d0a93d0e804f66a5ad820ca8196d2bdd1b0e8775ffee86a"
+        },
+        {
+          "case_id": "sep08-reader-subject-relationships",
+          "day": "2026-09-08",
+          "input_tokens": 706,
+          "judgment_id": "sep08-governance-energy-separate",
+          "state_characters": 1540,
+          "state_digest": "096c063a266017898cb8081a101d7ee15ba37b489a33dd45530943f315301cbc"
+        },
+        {
+          "case_id": "sep08-reader-subject-relationships",
+          "day": "2026-09-08",
+          "input_tokens": 772,
+          "judgment_id": "sep08-labor-debt-separate",
+          "state_characters": 1574,
+          "state_digest": "659a2b7f23a35bc231efe462155a69209ce299da19b66d2ba7c042e64dc7158a"
+        },
+        {
+          "case_id": "sep08-reader-subject-relationships",
+          "day": "2026-09-08",
+          "input_tokens": 716,
+          "judgment_id": "sep08-politics-economy-separate",
+          "state_characters": 1556,
+          "state_digest": "9f70cb0a855dd707dd9201c94a6aa725af851237bdb5bda8b668b069f6f77f65"
+        },
+        {
+          "case_id": "sep08-reader-subject-relationships",
+          "day": "2026-09-08",
+          "input_tokens": 704,
+          "judgment_id": "sep08-premier-role-link",
+          "state_characters": 1714,
+          "state_digest": "01776812b8c54695b0e9e9a5528f200ad49f4c131e30996d2a328051909c83c3"
+        },
+        {
+          "case_id": "sep08-reader-subject-relationships",
+          "day": "2026-09-08",
+          "input_tokens": 793,
+          "judgment_id": "sep08-roads-politics-separate",
+          "state_characters": 1632,
+          "state_digest": "b57481e0d2c158e87761a369ecf0c9d8a3a133d23861c96b60936b61d89a3308"
+        },
+        {
+          "case_id": "sep08-reader-subject-relationships",
+          "day": "2026-09-08",
+          "input_tokens": 670,
+          "judgment_id": "sep08-tax-policy-link",
+          "state_characters": 1503,
+          "state_digest": "6fc1d583de220cdeb23320fdfbcbafeaf628e0d508cb332f00ff7ef3024dd5a3"
+        },
+        {
+          "case_id": "sep10-reader-subject-relationships",
+          "day": "2026-09-10",
+          "input_tokens": 758,
+          "judgment_id": "2026-09-10-c1369f9a2420-unrelated-theme-control",
+          "state_characters": 1917,
+          "state_digest": "e31fdf72862da3315ba0435653fb40d1524327143ae32ebad6a92081962b0b65"
+        },
+        {
+          "case_id": "sep10-reader-subject-relationships",
+          "day": "2026-09-10",
+          "input_tokens": 737,
+          "judgment_id": "sep10-bet-index-link",
+          "state_characters": 1678,
+          "state_digest": "59596c03a01f832a12a41114aa56a5bb84c7e6e1e01280b60596c8f564925fbe"
+        },
+        {
+          "case_id": "sep10-reader-subject-relationships",
+          "day": "2026-09-10",
+          "input_tokens": 775,
+          "judgment_id": "sep10-bvb-market-link",
+          "state_characters": 1544,
+          "state_digest": "b11eb1757fa7243453a67003ff8eccce9e46da67b86bb810b9b4e0daef34579d"
+        },
+        {
+          "case_id": "sep10-reader-subject-relationships",
+          "day": "2026-09-10",
+          "input_tokens": 753,
+          "judgment_id": "sep10-media-market-separate",
+          "state_characters": 1562,
+          "state_digest": "590797c0d9801f91d948d539acaab44e708ee4e7e91c604384379baa1f1146f5"
+        },
+        {
+          "case_id": "sep10-reader-subject-relationships",
+          "day": "2026-09-10",
+          "input_tokens": 724,
+          "judgment_id": "sep10-metrorex-and-stb-share-public-transport-theme",
+          "state_characters": 1722,
+          "state_digest": "e0b0b3627c9ab8f28322d1612cc4d1727da99af819c6404f817f85235a89e3bd"
+        },
+        {
+          "case_id": "sep10-reader-subject-relationships",
+          "day": "2026-09-10",
+          "input_tokens": 738,
+          "judgment_id": "sep10-politics-currency-separate",
+          "state_characters": 1388,
+          "state_digest": "98178819d427281885c0ece477dcf203d22a56016228732a3f5f172fdaea763c"
+        },
+        {
+          "case_id": "sep10-reader-subject-relationships",
+          "day": "2026-09-10",
+          "input_tokens": 743,
+          "judgment_id": "sep10-politics-rates-separate",
+          "state_characters": 1488,
+          "state_digest": "5ff606b30626ca58cbdb05845aac5d384a0c1d89a345746507f74f66c155974c"
+        },
+        {
+          "case_id": "sep10-reader-subject-relationships",
+          "day": "2026-09-10",
+          "input_tokens": 780,
+          "judgment_id": "sep10-transport-scope-separate",
+          "state_characters": 1882,
+          "state_digest": "f31cc6ee402ed604fe5e80a244c8cd281925fe9f2ad5f6512c8df55cb13d17e3"
+        }
+      ],
+      "source_artifact": "artifacts/jev-aspect-v1/news-daily-theme-live-v1.json",
+      "source_artifact_sha256": "b5660525b58731b2cb62ef732250dac996a9d261185474d2b3bbdccc64ebbdf9",
+      "state_character_statistics": {
+        "max": 2020,
+        "p50": 1609,
+        "p95": 2020,
+        "p99": 2020
+      },
+      "trial_count": 3,
+      "unique_request_count": 27
+    },
+    {
+      "all_trial_cost_usd": "0.008051904",
+      "all_trial_latency_ms": {
+        "max": 886,
+        "p50": 648,
+        "p95": 840,
+        "p99": 886
+      },
+      "concern": "grouping",
+      "daily_statistics": [
+        {
+          "count": 5,
+          "day": "2026-09-02",
+          "max": 2676,
+          "max_utilization_percent": 8.3625,
+          "minimum_headroom_tokens": 29324,
+          "p50": 2085,
+          "p95": 2676,
+          "p99": 2676,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        },
+        {
+          "count": 4,
+          "day": "2026-09-03",
+          "max": 5359,
+          "max_utilization_percent": 16.746875,
+          "minimum_headroom_tokens": 26641,
+          "p50": 1974,
+          "p95": 5359,
+          "p99": 5359,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        },
+        {
+          "count": 3,
+          "day": "2026-09-04",
+          "max": 5244,
+          "max_utilization_percent": 16.3875,
+          "minimum_headroom_tokens": 26756,
+          "p50": 3088,
+          "p95": 5244,
+          "p99": 5244,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        },
+        {
+          "count": 5,
+          "day": "2026-09-05",
+          "max": 4734,
+          "max_utilization_percent": 14.79375,
+          "minimum_headroom_tokens": 27266,
+          "p50": 2312,
+          "p95": 4734,
+          "p99": 4734,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        },
+        {
+          "count": 6,
+          "day": "2026-09-06",
+          "max": 4990,
+          "max_utilization_percent": 15.59375,
+          "minimum_headroom_tokens": 27010,
+          "p50": 1654,
+          "p95": 4990,
+          "p99": 4990,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        }
+      ],
+      "declared_manifest_version": "news-evaluation-2026-09-11-v11",
+      "execution_identity_digest": "2e2dc1f4f17b355c2da914a564517e6a9bec6541ba4e5bdf55004704f61e9936",
+      "request_statistics": {
+        "count": 23,
+        "max": 5359,
+        "max_utilization_percent": 16.746875,
+        "minimum_headroom_tokens": 26641,
+        "p50": 2312,
+        "p95": 5244,
+        "p99": 5359,
+        "thresholds": [
+          {
+            "count_at_or_above": 0,
+            "percent": 50,
+            "share_at_or_above": 0.0,
+            "tokens": 16000
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 75,
+            "share_at_or_above": 0.0,
+            "tokens": 24000
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 90,
+            "share_at_or_above": 0.0,
+            "tokens": 28800
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 100,
+            "share_at_or_above": 0.0,
+            "tokens": 32000
+          }
+        ]
+      },
+      "requests": [
+        {
+          "case_id": "duplicate-digi-coverage-groups",
+          "day": "2026-09-02",
+          "input_tokens": 1294,
+          "judgment_id": "same_news_event",
+          "state_characters": 2544,
+          "state_digest": "6db282ba5000f657ff985047f6c1428bca37eb48d2889152308ad6d1a530368f"
+        },
+        {
+          "case_id": "sep02-government-and-climate-stay-separate",
+          "day": "2026-09-02",
+          "input_tokens": 2676,
+          "judgment_id": "same_news_event",
+          "state_characters": 6775,
+          "state_digest": "6e8b897026f35018aa38c45eb316d1de1b2c6b3865e913d8f120c095594ad16a"
+        },
+        {
+          "case_id": "sep02-political-crisis-coverage-groups",
+          "day": "2026-09-02",
+          "input_tokens": 2600,
+          "judgment_id": "same_news_event",
+          "state_characters": 6562,
+          "state_digest": "44ecd7f2490483d895de6763557ece38cef4f1fd6de20ecb5c0a57c734652135"
+        },
+        {
+          "case_id": "sep02-psd-aur-government-coverage-groups",
+          "day": "2026-09-02",
+          "input_tokens": 1751,
+          "judgment_id": "same_news_event",
+          "state_characters": 3976,
+          "state_digest": "0769714350bbec5d641db26dbef81238e16f9f557a817c67c693d0619664da0b"
+        },
+        {
+          "case_id": "sep03-integrity-law-coverage-groups",
+          "day": "2026-09-03",
+          "input_tokens": 2573,
+          "judgment_id": "same_news_event",
+          "state_characters": 6920,
+          "state_digest": "88cc9c5a3adcb2a2e9d16b78761c32d90cfc75278b28c88232f110b7faedc93b"
+        },
+        {
+          "case_id": "sep03-pnrr-and-ai-stay-separate",
+          "day": "2026-09-03",
+          "input_tokens": 5359,
+          "judgment_id": "same_news_event",
+          "state_characters": 15450,
+          "state_digest": "88596032324b527ad51e14e4de2dcddc0ed6cbc18ccbd11f5f94ac8399a739d2"
+        },
+        {
+          "case_id": "sep03-pnrr-investment-coverage-groups",
+          "day": "2026-09-03",
+          "input_tokens": 1974,
+          "judgment_id": "same_news_event",
+          "state_characters": 4629,
+          "state_digest": "4b3d970a2beac4db62597daff16851859b6759e0122fdd7ddf07b5a20a76b74c"
+        },
+        {
+          "case_id": "sep03-tanczos-deficit-coverage-groups",
+          "day": "2026-09-03",
+          "input_tokens": 1938,
+          "judgment_id": "same_news_event",
+          "state_characters": 4495,
+          "state_digest": "5570c7df86f3a97480a69f68b7b601a71cbf67b10e4b75ad2fcd135b493b2c58"
+        },
+        {
+          "case_id": "sep04-neptun-deep-coverage-groups",
+          "day": "2026-09-04",
+          "input_tokens": 5244,
+          "judgment_id": "same_news_event",
+          "state_characters": 14670,
+          "state_digest": "5270101bc5675e5b758bbacc5ff316ca2266d6e3a6c90879621375761cb09b80"
+        },
+        {
+          "case_id": "sep04-pnrr-salary-law-coverage-groups",
+          "day": "2026-09-04",
+          "input_tokens": 3088,
+          "judgment_id": "same_news_event",
+          "state_characters": 8296,
+          "state_digest": "dda72b451c204c676dc657ee4909030c98795b0cf3c0db62b1b8d61aa62da50e"
+        },
+        {
+          "case_id": "sep04-robor-rate-coverage-groups",
+          "day": "2026-09-04",
+          "input_tokens": 739,
+          "judgment_id": "same_news_event",
+          "state_characters": 909,
+          "state_digest": "0d1bfaa6e4476d7f11541e4a064296b414bb326572b1e8d5bcbf573982c8dad2"
+        },
+        {
+          "case_id": "sep05-energy-storage-coverage-groups",
+          "day": "2026-09-05",
+          "input_tokens": 4112,
+          "judgment_id": "same_news_event",
+          "state_characters": 11270,
+          "state_digest": "ae3d1cbc8c1b9bb90f87f968458528630f6687dcb1b160017c15547bb898cf92"
+        },
+        {
+          "case_id": "sep05-fuel-price-coverage-groups",
+          "day": "2026-09-05",
+          "input_tokens": 2081,
+          "judgment_id": "same_news_event",
+          "state_characters": 4384,
+          "state_digest": "cae28ef65f54df93805bf90c691921e03bb25beba86579a0d9aea166c2894bdf"
+        },
+        {
+          "case_id": "sep05-income-map-coverage-groups",
+          "day": "2026-09-05",
+          "input_tokens": 1876,
+          "judgment_id": "same_news_event",
+          "state_characters": 4164,
+          "state_digest": "b22bc63c7081dfa9bf5c3b2982fd932d2ec74285dd3fd5a8fbf539f6bbdf8ec9"
+        },
+        {
+          "case_id": "sep05-new-prime-minister-coverage-groups",
+          "day": "2026-09-05",
+          "input_tokens": 2312,
+          "judgment_id": "same_news_event",
+          "state_characters": 5834,
+          "state_digest": "02a63cc821eac08fd281891f8e485d578d9f39bdb3705fc4beb67a7be35ee576"
+        },
+        {
+          "case_id": "sep05-political-deadlock-chronology-groups",
+          "day": "2026-09-05",
+          "input_tokens": 4734,
+          "judgment_id": "same_news_event",
+          "state_characters": 12042,
+          "state_digest": "93a517afef74363d756cefe7cb5f7bc512fb7e86ab93042db75040b9475e282a"
+        },
+        {
+          "case_id": "sep06-csat-coverage-control",
+          "day": "2026-09-06",
+          "input_tokens": 3842,
+          "judgment_id": "same_news_event",
+          "state_characters": 10737,
+          "state_digest": "e8c2f1dcf4bb75789ffc49f2f7b82a66c03b2ffcaf0e908f22906720abe306a5"
+        },
+        {
+          "case_id": "sep06-duplicate-csat-convocation-event",
+          "day": "2026-09-06",
+          "input_tokens": 1271,
+          "judgment_id": "same_news_event",
+          "state_characters": 2563,
+          "state_digest": "4a9e95aac28bc7a4975b659adb917927110b935b5bb90df8157ebf5f633f6610"
+        },
+        {
+          "case_id": "sep06-duplicate-csat-modernization-event",
+          "day": "2026-09-06",
+          "input_tokens": 1654,
+          "judgment_id": "same_news_event",
+          "state_characters": 3612,
+          "state_digest": "7b5be341bc991c3193bae826072a7d9a5fd8df5657ecf8eda25cc2ba7aa18d71"
+        },
+        {
+          "case_id": "sep06-pnl-opposition-coverage-control",
+          "day": "2026-09-06",
+          "input_tokens": 1571,
+          "judgment_id": "same_news_event",
+          "state_characters": 3605,
+          "state_digest": "6c231b49ed913897137d550cf2ea90acb6a070f52bb377174142a1a24c0cfadd"
+        },
+        {
+          "case_id": "sep06-prime-minister-coverage-control",
+          "day": "2026-09-06",
+          "input_tokens": 4990,
+          "judgment_id": "same_news_event",
+          "state_characters": 14503,
+          "state_digest": "ba3dfb3e443025842ff43152dc1779866b91e0a5c38e0cbee175e3f4ecc1ded2"
+        },
+        {
+          "case_id": "sep06-tax-pressure-coverage-control",
+          "day": "2026-09-06",
+          "input_tokens": 4140,
+          "judgment_id": "same_news_event",
+          "state_characters": 10402,
+          "state_digest": "a632fd60e93e870218c7bea98ebfcf986426b30587b86c3d2bfc2086192d8b14"
+        },
+        {
+          "case_id": "unrelated-digi-and-admission-stay-separate",
+          "day": "2026-09-02",
+          "input_tokens": 2085,
+          "judgment_id": "same_news_event",
+          "state_characters": 5209,
+          "state_digest": "aec8e5323d5860ca52daeca4ad081dd04c4b83f72bd05afad5a2ba1e3abdc98b"
+        }
+      ],
+      "source_artifact": "artifacts/jev-aspect-v1/news-grouping-live-v1.json",
+      "source_artifact_sha256": "5bbd09968a8462f35ad709a3ee17482c1d1d76d6c954ecb43c57944d9b4634c8",
+      "state_character_statistics": {
+        "max": 15450,
+        "p50": 5834,
+        "p95": 14670,
+        "p99": 15450
+      },
+      "trial_count": 3,
+      "unique_request_count": 23
+    },
+    {
+      "all_trial_cost_usd": "0.027897534",
+      "all_trial_latency_ms": {
+        "max": 1174,
+        "p50": 816,
+        "p95": 1065,
+        "p99": 1174
+      },
+      "concern": "ranking",
+      "daily_statistics": [
+        {
+          "count": 28,
+          "day": "unknown",
+          "max": 18069,
+          "max_utilization_percent": 56.465625,
+          "minimum_headroom_tokens": 13931,
+          "p50": 7169,
+          "p95": 14351,
+          "p99": 18069,
+          "thresholds": [
+            {
+              "count_at_or_above": 1,
+              "percent": 50,
+              "share_at_or_above": 0.035714,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        }
+      ],
+      "declared_manifest_version": "news-evaluation-2026-09-11-v11",
+      "execution_identity_digest": "0148359e774e6b000f62f8993daa179e56d7877bd84873f4b5c3437effd38f2c",
+      "request_statistics": {
+        "count": 28,
+        "max": 18069,
+        "max_utilization_percent": 56.465625,
+        "minimum_headroom_tokens": 13931,
+        "p50": 7169,
+        "p95": 14351,
+        "p99": 18069,
+        "thresholds": [
+          {
+            "count_at_or_above": 1,
+            "percent": 50,
+            "share_at_or_above": 0.035714,
+            "tokens": 16000
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 75,
+            "share_at_or_above": 0.0,
+            "tokens": 24000
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 90,
+            "share_at_or_above": 0.0,
+            "tokens": 28800
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 100,
+            "share_at_or_above": 0.0,
+            "tokens": 32000
+          }
+        ]
+      },
+      "requests": [
+        {
+          "case_id": "current-pnrr-loss-ranks-above-document-fees",
+          "day": null,
+          "input_tokens": 2703,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 6233,
+          "state_digest": "cf502e196fad91ba89bb9bb5a30ea97cdf87c618e4b4861abe94ac1f5f564785"
+        },
+        {
+          "case_id": "pnrr-loss-ranks-above-local-development",
+          "day": null,
+          "input_tokens": 3585,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 8990,
+          "state_digest": "af0a313c860bf2efb7fb53113ae5b58c8686f200c17e5f52f85636d1efc8ec60"
+        },
+        {
+          "case_id": "sep02-government-collapse-ranks-above-questioned-pnl-criticism",
+          "day": null,
+          "input_tokens": 7674,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 20147,
+          "state_digest": "42984a6059b84edd766094cf13d67f28c16f25f41007fe4eb50170e8006953dd"
+        },
+        {
+          "case_id": "sep02-psd-aur-government-ranks-above-tise-party-criticism",
+          "day": null,
+          "input_tokens": 6419,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 17260,
+          "state_digest": "d2cbbf8189b3298981de2269d936265df2157cdecacc3fe9cf386aa92bc13155"
+        },
+        {
+          "case_id": "sep03-deficit-moratorium-ranks-above-opinion-led-commentary",
+          "day": null,
+          "input_tokens": 8804,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 24118,
+          "state_digest": "0b9eabab5cec9f5314fe5a797678da066af41f41409dcd8d3c7838be1a293de0"
+        },
+        {
+          "case_id": "sep03-deficit-moratorium-stays-above-irrelevant-climate-control",
+          "day": null,
+          "input_tokens": 18069,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 51681,
+          "state_digest": "c7f5c98b13959dd4f87d7e3b3d0760ea5402ff959f6ef8b3c3a0d264bb09b9d4"
+        },
+        {
+          "case_id": "sep03-tanczos-deficit-ranks-above-demographic-decline",
+          "day": null,
+          "input_tokens": 8433,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 23026,
+          "state_digest": "8e7b70aa8a1435da5152784338c6403faa6ca15a013da1e48b27eb1518b8fd5b"
+        },
+        {
+          "case_id": "sep04-pnrr-ranks-above-ai-gigafactory",
+          "day": null,
+          "input_tokens": 10840,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 36124,
+          "state_digest": "a45caf43108a882721f435a93735d586b2973529235e344ba595ef2f3d6e70c5"
+        },
+        {
+          "case_id": "sep04-pnrr-ranks-above-atm-withdrawals",
+          "day": null,
+          "input_tokens": 7632,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 21865,
+          "state_digest": "aee3a4ad1bfc533f799eb84e1c157a6b04512bd7a931aae48e9ca0c2d772c3b9"
+        },
+        {
+          "case_id": "sep04-pnrr-ranks-above-neptun-deep",
+          "day": null,
+          "input_tokens": 9692,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 27391,
+          "state_digest": "949e17d297db43ee490bcff1d3b10f2531a23770555cdba5d0bd3148c9512afd"
+        },
+        {
+          "case_id": "sep05-energy-storage-ranks-above-precision-agriculture",
+          "day": null,
+          "input_tokens": 7317,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 20419,
+          "state_digest": "97b13ea0ace7fa8cb24b156c37f27c991b0ffb935c47b60b317738cb62364987"
+        },
+        {
+          "case_id": "sep05-fuel-prices-rank-above-income-map",
+          "day": null,
+          "input_tokens": 7169,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 17595,
+          "state_digest": "76558e8623704e4446ef304c9e54957b30612ae039a7e5b6cd219e3735edac27"
+        },
+        {
+          "case_id": "sep05-fuel-ranks-above-pnrr",
+          "day": null,
+          "input_tokens": 13798,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 36418,
+          "state_digest": "38d78d06a513ee2df2b60a1e345fe0263cb635c41766b29a6f121645195fd43b"
+        },
+        {
+          "case_id": "sep05-pnrr-ranks-above-energy-storage-control",
+          "day": null,
+          "input_tokens": 11788,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 33140,
+          "state_digest": "42564a8638b9cb6baef495f6b614403c15c62ad10cf6b4120f607c08ada5f82a"
+        },
+        {
+          "case_id": "sep05-prime-minister-ranks-above-fuel-control",
+          "day": null,
+          "input_tokens": 9449,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 23921,
+          "state_digest": "dcb2162fd971dde06e5ead478c3593c735aee47741831dd1e93579959c6711d2"
+        },
+        {
+          "case_id": "sep10-bvb-ranks-above-aur-afd",
+          "day": null,
+          "input_tokens": 5605,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 14751,
+          "state_digest": "254f4093f419775ac76e348d4c253397b6e344b1e38a094c7e4f3de0227ebd84"
+        },
+        {
+          "case_id": "sep10-euro-ranks-above-aur-afd",
+          "day": null,
+          "input_tokens": 4682,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 12354,
+          "state_digest": "fc2d0d57314ab8ba60ac8841dd8e7c077e6bb00fc8d9ed203f08c6c117956156"
+        },
+        {
+          "case_id": "sep10-fidelis-ranks-above-aur-afd",
+          "day": null,
+          "input_tokens": 4989,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 13458,
+          "state_digest": "01e14ac1a9c895fbdb7ca81ffcc49a0efdffce15d2dde24cd69876c1acc4bb4b"
+        },
+        {
+          "case_id": "sep10-job-losses-rank-above-aur-afd",
+          "day": null,
+          "input_tokens": 4741,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 12843,
+          "state_digest": "49fdf4d8387d536a5955139a20ef20dadc35c7a727478322351ec0409d562bc8"
+        },
+        {
+          "case_id": "sep10-pisa-ranks-above-aur-afd",
+          "day": null,
+          "input_tokens": 10930,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 31480,
+          "state_digest": "fef10507a34656ec1c1b54591abf0fca17ca61896d37773ae792772f6227e333"
+        },
+        {
+          "case_id": "sep10-pisa-ranks-above-cyber-readiness",
+          "day": null,
+          "input_tokens": 14351,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 46016,
+          "state_digest": "9904e9c9de110bcc5f8419ab19d93aed9077e600b06cc551d9be1c0b943848f1"
+        },
+        {
+          "case_id": "sep10-pnrr-ranks-above-aur-afd",
+          "day": null,
+          "input_tokens": 6574,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 18184,
+          "state_digest": "b546f4c6608a66909baf34bc4b7b0fe519b62786784d9a0273d64be505058169"
+        },
+        {
+          "case_id": "sep10-pnrr-ranks-above-cyber-readiness",
+          "day": null,
+          "input_tokens": 9995,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 32720,
+          "state_digest": "a890bec305d0bf88bd084737d6da9ae380e941fbcfb6276aecba1627c0eef2f5"
+        },
+        {
+          "case_id": "sep10-pnrr-ranks-above-hydropower-law",
+          "day": null,
+          "input_tokens": 4926,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 13209,
+          "state_digest": "a29995e3726152bcab74e62a8f8f6a6dfd9a82a2ba959b663e2803782797417c"
+        },
+        {
+          "case_id": "sep10-pnrr-ranks-above-metrorex",
+          "day": null,
+          "input_tokens": 4732,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 12329,
+          "state_digest": "d8759fb1be33e84186c948c77db4c19dca2971def1d298e1041cab16404654d9"
+        },
+        {
+          "case_id": "sep10-pnrr-ranks-above-research-funding",
+          "day": null,
+          "input_tokens": 6509,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 19914,
+          "state_digest": "9e31b8a50a00793059e3f503655c99b51880f79b52994934dd36ee7924119379"
+        },
+        {
+          "case_id": "sep10-prime-minister-ranks-above-aur-afd",
+          "day": null,
+          "input_tokens": 5502,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 15382,
+          "state_digest": "36cc5c93a32f173465a72601c7cb5a1c934fab2436119f4adbbffa00582ca497"
+        },
+        {
+          "case_id": "sep10-rates-rank-above-aur-afd",
+          "day": null,
+          "input_tokens": 4501,
+          "judgment_id": "a_should_rank_above_b",
+          "state_characters": 12030,
+          "state_digest": "8e8789f5bd65dfc5b012390360c18093556837bac014d0dbb53583af53983e2c"
+        }
+      ],
+      "source_artifact": "artifacts/jev-aspect-v1/news-ranking-live-v1.json",
+      "source_artifact_sha256": "5d994a74920e8bb87c6d9d1b7f978c42ddc065569016bac5c6eb807e2edc47d9",
+      "state_character_statistics": {
+        "max": 51681,
+        "p50": 19914,
+        "p95": 46016,
+        "p99": 51681
+      },
+      "trial_count": 3,
+      "unique_request_count": 28
+    },
+    {
+      "all_trial_cost_usd": "0.090472284",
+      "all_trial_latency_ms": {
+        "max": 1161,
+        "p50": 1018,
+        "p95": 1096,
+        "p99": 1114
+      },
+      "concern": "tier",
+      "daily_statistics": [
+        {
+          "count": 50,
+          "day": "unknown",
+          "max": 14369,
+          "max_utilization_percent": 44.903125,
+          "minimum_headroom_tokens": 17631,
+          "p50": 14361,
+          "p95": 14367,
+          "p99": 14369,
+          "thresholds": [
+            {
+              "count_at_or_above": 0,
+              "percent": 50,
+              "share_at_or_above": 0.0,
+              "tokens": 16000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 75,
+              "share_at_or_above": 0.0,
+              "tokens": 24000
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 90,
+              "share_at_or_above": 0.0,
+              "tokens": 28800
+            },
+            {
+              "count_at_or_above": 0,
+              "percent": 100,
+              "share_at_or_above": 0.0,
+              "tokens": 32000
+            }
+          ]
+        }
+      ],
+      "declared_manifest_version": "news-evaluation-2026-09-11-v11",
+      "execution_identity_digest": "7dcadb5b33c63acd20cb89dc6803d1bbc07f1d7db2abcde81d4e7dcdf50b1215",
+      "request_statistics": {
+        "count": 50,
+        "max": 14369,
+        "max_utilization_percent": 44.903125,
+        "minimum_headroom_tokens": 17631,
+        "p50": 14361,
+        "p95": 14367,
+        "p99": 14369,
+        "thresholds": [
+          {
+            "count_at_or_above": 0,
+            "percent": 50,
+            "share_at_or_above": 0.0,
+            "tokens": 16000
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 75,
+            "share_at_or_above": 0.0,
+            "tokens": 24000
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 90,
+            "share_at_or_above": 0.0,
+            "tokens": 28800
+          },
+          {
+            "count_at_or_above": 0,
+            "percent": 100,
+            "share_at_or_above": 0.0,
+            "tokens": 32000
+          }
+        ]
+      },
+      "requests": [
+        {
+          "case_id": "sep10-subject-01-tier",
+          "day": null,
+          "input_tokens": 14362,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "5e13b291e72a0a3dd86e6d622080452bf3dd697a23101eb7c93ec3947676ebca"
+        },
+        {
+          "case_id": "sep10-subject-01-tier",
+          "day": null,
+          "input_tokens": 14368,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "5e13b291e72a0a3dd86e6d622080452bf3dd697a23101eb7c93ec3947676ebca"
+        },
+        {
+          "case_id": "sep10-subject-02-tier",
+          "day": null,
+          "input_tokens": 14357,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "46bbbf94b0b087bfaf819b6165a29edd29713e0b91bf00b3cd20e4302b8ee1c2"
+        },
+        {
+          "case_id": "sep10-subject-02-tier",
+          "day": null,
+          "input_tokens": 14363,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "46bbbf94b0b087bfaf819b6165a29edd29713e0b91bf00b3cd20e4302b8ee1c2"
+        },
+        {
+          "case_id": "sep10-subject-03-tier",
+          "day": null,
+          "input_tokens": 14359,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "5883e87cf1a78efd3e72bfaaf235c541f1df4c73c9f699126cc4ec6602575d07"
+        },
+        {
+          "case_id": "sep10-subject-03-tier",
+          "day": null,
+          "input_tokens": 14365,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "5883e87cf1a78efd3e72bfaaf235c541f1df4c73c9f699126cc4ec6602575d07"
+        },
+        {
+          "case_id": "sep10-subject-04-tier",
+          "day": null,
+          "input_tokens": 14358,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "dff5eea3aa443fabf67ae8bbf5590b350361e17401bdd5524f210082826a2795"
+        },
+        {
+          "case_id": "sep10-subject-04-tier",
+          "day": null,
+          "input_tokens": 14364,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "dff5eea3aa443fabf67ae8bbf5590b350361e17401bdd5524f210082826a2795"
+        },
+        {
+          "case_id": "sep10-subject-05-tier",
+          "day": null,
+          "input_tokens": 14355,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "1cd84a83a4e0604fdceec1b445ca0056a01154558224c9436848c4fab14c820c"
+        },
+        {
+          "case_id": "sep10-subject-05-tier",
+          "day": null,
+          "input_tokens": 14361,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "1cd84a83a4e0604fdceec1b445ca0056a01154558224c9436848c4fab14c820c"
+        },
+        {
+          "case_id": "sep10-subject-06-tier",
+          "day": null,
+          "input_tokens": 14355,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "f563056efec30823eb2e463d46164d68a0a17d292a3b2934c58ab4cc18cbf3ab"
+        },
+        {
+          "case_id": "sep10-subject-06-tier",
+          "day": null,
+          "input_tokens": 14361,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "f563056efec30823eb2e463d46164d68a0a17d292a3b2934c58ab4cc18cbf3ab"
+        },
+        {
+          "case_id": "sep10-subject-07-tier",
+          "day": null,
+          "input_tokens": 14358,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "6d5c2c313a300b2f602f35b42788dfee8828ebd7d08799f4c1bbcee604f2bb70"
+        },
+        {
+          "case_id": "sep10-subject-07-tier",
+          "day": null,
+          "input_tokens": 14364,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "6d5c2c313a300b2f602f35b42788dfee8828ebd7d08799f4c1bbcee604f2bb70"
+        },
+        {
+          "case_id": "sep10-subject-08-tier",
+          "day": null,
+          "input_tokens": 14361,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "877c4ee0117c01ddb28ed19282b47b2ae47e1d35e380b17423d2dae496af0342"
+        },
+        {
+          "case_id": "sep10-subject-08-tier",
+          "day": null,
+          "input_tokens": 14367,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "877c4ee0117c01ddb28ed19282b47b2ae47e1d35e380b17423d2dae496af0342"
+        },
+        {
+          "case_id": "sep10-subject-09-tier",
+          "day": null,
+          "input_tokens": 14361,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "8b81219e84579bea797ec7df7c1fbe30ec809804d0674623e7a024d3a261fe1e"
+        },
+        {
+          "case_id": "sep10-subject-09-tier",
+          "day": null,
+          "input_tokens": 14367,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "8b81219e84579bea797ec7df7c1fbe30ec809804d0674623e7a024d3a261fe1e"
+        },
+        {
+          "case_id": "sep10-subject-10-tier",
+          "day": null,
+          "input_tokens": 14359,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "f582b54a7079896778df196d71339ba70b99e5fec25e4e5adec3eb838e40ea84"
+        },
+        {
+          "case_id": "sep10-subject-10-tier",
+          "day": null,
+          "input_tokens": 14365,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "f582b54a7079896778df196d71339ba70b99e5fec25e4e5adec3eb838e40ea84"
+        },
+        {
+          "case_id": "sep10-subject-11-tier",
+          "day": null,
+          "input_tokens": 14358,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "d36e77d64ea9da0c752986bdac9398b1d744bac1df82c4f1817ce41655271a86"
+        },
+        {
+          "case_id": "sep10-subject-11-tier",
+          "day": null,
+          "input_tokens": 14364,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "d36e77d64ea9da0c752986bdac9398b1d744bac1df82c4f1817ce41655271a86"
+        },
+        {
+          "case_id": "sep10-subject-12-tier",
+          "day": null,
+          "input_tokens": 14358,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "a8bca2cda7007acdb014e4db8e0a243632a59f66df622238414130548ae3d02d"
+        },
+        {
+          "case_id": "sep10-subject-12-tier",
+          "day": null,
+          "input_tokens": 14364,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "a8bca2cda7007acdb014e4db8e0a243632a59f66df622238414130548ae3d02d"
+        },
+        {
+          "case_id": "sep10-subject-14-tier",
+          "day": null,
+          "input_tokens": 14358,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "0c03ba02b299a198711d451a546e8b0c89efd75b4cda8a7cef3bf5f8f69bfa09"
+        },
+        {
+          "case_id": "sep10-subject-14-tier",
+          "day": null,
+          "input_tokens": 14364,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "0c03ba02b299a198711d451a546e8b0c89efd75b4cda8a7cef3bf5f8f69bfa09"
+        },
+        {
+          "case_id": "sep10-subject-15-tier",
+          "day": null,
+          "input_tokens": 14353,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "36804a5d12f13ea24e574a183556bcba0662858b7ff175a2ff135ec4cc859671"
+        },
+        {
+          "case_id": "sep10-subject-15-tier",
+          "day": null,
+          "input_tokens": 14359,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "36804a5d12f13ea24e574a183556bcba0662858b7ff175a2ff135ec4cc859671"
+        },
+        {
+          "case_id": "sep10-subject-16-tier",
+          "day": null,
+          "input_tokens": 14358,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "fe81519e8a887bcb9e9898d755b2f8e93422cf83faed53f8851c8abb803f9a14"
+        },
+        {
+          "case_id": "sep10-subject-16-tier",
+          "day": null,
+          "input_tokens": 14364,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "fe81519e8a887bcb9e9898d755b2f8e93422cf83faed53f8851c8abb803f9a14"
+        },
+        {
+          "case_id": "sep10-subject-19-tier",
+          "day": null,
+          "input_tokens": 14353,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "24963255b089f62949ce6ebd555cece74b9b70c9064ea199317db47ee5966b97"
+        },
+        {
+          "case_id": "sep10-subject-19-tier",
+          "day": null,
+          "input_tokens": 14359,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "24963255b089f62949ce6ebd555cece74b9b70c9064ea199317db47ee5966b97"
+        },
+        {
+          "case_id": "sep10-subject-20-tier",
+          "day": null,
+          "input_tokens": 14356,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "25ba0c6676a21c14bc8e1462170609a73a7b788744b95d95f04426dc91a50868"
+        },
+        {
+          "case_id": "sep10-subject-20-tier",
+          "day": null,
+          "input_tokens": 14362,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "25ba0c6676a21c14bc8e1462170609a73a7b788744b95d95f04426dc91a50868"
+        },
+        {
+          "case_id": "sep10-subject-22-tier",
+          "day": null,
+          "input_tokens": 14359,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "baf7d5bdb261cdd3875d96c8b735eab94c7305039b4e455792756902b513fea7"
+        },
+        {
+          "case_id": "sep10-subject-22-tier",
+          "day": null,
+          "input_tokens": 14365,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "baf7d5bdb261cdd3875d96c8b735eab94c7305039b4e455792756902b513fea7"
+        },
+        {
+          "case_id": "sep10-subject-23-tier",
+          "day": null,
+          "input_tokens": 14352,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "1f4df258cb0a9ebc48abbf735051808f1ce9672fc4f12a9d8ce7c1e08b6ffd21"
+        },
+        {
+          "case_id": "sep10-subject-23-tier",
+          "day": null,
+          "input_tokens": 14358,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "1f4df258cb0a9ebc48abbf735051808f1ce9672fc4f12a9d8ce7c1e08b6ffd21"
+        },
+        {
+          "case_id": "sep10-subject-24-tier",
+          "day": null,
+          "input_tokens": 14360,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "e43906dc857dcd44a1917386c20406f42564dc06ad48da3a1bf5899782b95a25"
+        },
+        {
+          "case_id": "sep10-subject-24-tier",
+          "day": null,
+          "input_tokens": 14366,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "e43906dc857dcd44a1917386c20406f42564dc06ad48da3a1bf5899782b95a25"
+        },
+        {
+          "case_id": "sep10-subject-25-tier",
+          "day": null,
+          "input_tokens": 14363,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "aed21f1192205fd74c6fac85ba3c911d25d022564ecce8c5ce0260548efaf774"
+        },
+        {
+          "case_id": "sep10-subject-25-tier",
+          "day": null,
+          "input_tokens": 14369,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "aed21f1192205fd74c6fac85ba3c911d25d022564ecce8c5ce0260548efaf774"
+        },
+        {
+          "case_id": "sep10-subject-26-tier",
+          "day": null,
+          "input_tokens": 14355,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "85090b41de12d48d780f5a67a74992307a56141e4160e9bc7912bbfdf414a6ed"
+        },
+        {
+          "case_id": "sep10-subject-26-tier",
+          "day": null,
+          "input_tokens": 14361,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "85090b41de12d48d780f5a67a74992307a56141e4160e9bc7912bbfdf414a6ed"
+        },
+        {
+          "case_id": "sep10-subject-27-tier",
+          "day": null,
+          "input_tokens": 14359,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "c61b69ee39209faa1fcb7c7831fa44dd64fb56ee476680b24eb1bda222c2387f"
+        },
+        {
+          "case_id": "sep10-subject-27-tier",
+          "day": null,
+          "input_tokens": 14365,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "c61b69ee39209faa1fcb7c7831fa44dd64fb56ee476680b24eb1bda222c2387f"
+        },
+        {
+          "case_id": "sep10-subject-28-tier",
+          "day": null,
+          "input_tokens": 14356,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "8137191b610b07ffd711b7b3829a97db02cb7412e95cd68f3a9287a7bdb68e0a"
+        },
+        {
+          "case_id": "sep10-subject-28-tier",
+          "day": null,
+          "input_tokens": 14362,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "8137191b610b07ffd711b7b3829a97db02cb7412e95cd68f3a9287a7bdb68e0a"
+        },
+        {
+          "case_id": "sep10-subject-29-tier",
+          "day": null,
+          "input_tokens": 14359,
+          "judgment_id": "main_subject",
+          "state_characters": 47204,
+          "state_digest": "db76e0a9f15fbccffabc3c70bdb963811f8059d600c1afd8c369daa19a7daf52"
+        },
+        {
+          "case_id": "sep10-subject-29-tier",
+          "day": null,
+          "input_tokens": 14365,
+          "judgment_id": "worth_knowing_if_not_main",
+          "state_characters": 47204,
+          "state_digest": "db76e0a9f15fbccffabc3c70bdb963811f8059d600c1afd8c369daa19a7daf52"
+        }
+      ],
+      "source_artifact": "artifacts/jev-aspect-v1/news-tier-live-v1.json",
+      "source_artifact_sha256": "bf1072beb1dc8c07ef08a98dc650ac52b560cf1d5b11d80d11ea7fa63d316d0f",
+      "state_character_statistics": {
+        "max": 47204,
+        "p50": 47204,
+        "p95": 47204,
+        "p99": 47204
+      },
+      "trial_count": 3,
+      "unique_request_count": 50
+    }
+  ],
+  "effective_single_question_limit_tokens": 32000,
+  "evidence_gaps": [
+    "The reviewed v11 artifacts are not a recent-production-day sample.",
+    "Provider token counts exist only for requests that TypeSafe accepted.",
+    "Pairwise benchmark requests do not establish full-pipeline context fit."
+  ],
+  "generated_from": {
+    "counting_method": "TypeSafe response usage.input_tokens",
+    "deduplication": "case_id, judgment_id, and state_digest across repeated trials",
+    "limit_registry": "src/romanian_news/jev_context_limits.json",
+    "limit_registry_sha256": "6ed18de6785c785f27b7535fac9d91bf53f256a8cfe1d4740118d7c71a7ebf23",
+    "target_id": "typesafe-jev"
+  },
+  "schema_version": "jev-context-headroom/v1"
+}

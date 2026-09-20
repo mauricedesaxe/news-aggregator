@@ -1,0 +1,4906 @@
+{
+  "contains_credentials": false,
+  "contains_provider_output": false,
+  "contains_report_or_article_text": false,
+  "context_policy": {
+    "documented_state_plus_longest_question_tokens": 32000,
+    "fallback": "unchanged full state to incumbent; no clipping or unchanged retry",
+    "formal_tokenizer_bound": false,
+    "roles": [
+      {
+        "affected_production_quality": "not_estimable",
+        "minimum_estimated_production_token_headroom": null,
+        "minimum_observed_reviewed_token_headroom": null,
+        "production": {
+          "affected_provider_requests": 0,
+          "affected_question_requests": 0,
+          "clip_measurement": "character loss only; semantic evidence loss not measured",
+          "maximum_naive_tail_clip_characters": 0,
+          "maximum_naive_tail_clip_fraction": 0.0,
+          "maximum_state_characters": 24181,
+          "minimum_character_headroom_at_guard": 45819,
+          "provider_requests": 496,
+          "question_requests": 496
+        },
+        "role": "relevance",
+        "status": "conditional"
+      },
+      {
+        "affected_production_quality": "not_estimable",
+        "minimum_estimated_production_token_headroom": 11876,
+        "minimum_observed_reviewed_token_headroom": 26641,
+        "production": {
+          "affected_provider_requests": 0,
+          "affected_question_requests": 0,
+          "clip_measurement": "character loss only; semantic evidence loss not measured",
+          "maximum_naive_tail_clip_characters": 0,
+          "maximum_naive_tail_clip_fraction": 0.0,
+          "maximum_state_characters": 24753,
+          "minimum_character_headroom_at_guard": 45247,
+          "provider_requests": 21139,
+          "question_requests": 21139
+        },
+        "role": "grouping",
+        "status": "safe"
+      },
+      {
+        "affected_production_quality": "not_estimable",
+        "minimum_estimated_production_token_headroom": -28927,
+        "minimum_observed_reviewed_token_headroom": 13931,
+        "production": {
+          "affected_provider_requests": 190,
+          "affected_question_requests": 190,
+          "clip_measurement": "character loss only; semantic evidence loss not measured",
+          "maximum_naive_tail_clip_characters": 70493,
+          "maximum_naive_tail_clip_fraction": 0.501755,
+          "maximum_state_characters": 140493,
+          "minimum_character_headroom_at_guard": -70493,
+          "provider_requests": 8367,
+          "question_requests": 8367
+        },
+        "role": "ranking",
+        "status": "conditional"
+      },
+      {
+        "affected_production_quality": "not_estimable",
+        "minimum_estimated_production_token_headroom": -1736,
+        "minimum_observed_reviewed_token_headroom": 17631,
+        "production": {
+          "affected_provider_requests": 197,
+          "affected_question_requests": 394,
+          "clip_measurement": "character loss only; semantic evidence loss not measured",
+          "maximum_naive_tail_clip_characters": 40825,
+          "maximum_naive_tail_clip_fraction": 0.368374,
+          "maximum_state_characters": 110825,
+          "minimum_character_headroom_at_guard": -40825,
+          "provider_requests": 228,
+          "question_requests": 456
+        },
+        "role": "tier",
+        "status": "unsafe"
+      },
+      {
+        "affected_production_quality": "not_estimable",
+        "minimum_estimated_production_token_headroom": 3232,
+        "minimum_observed_reviewed_token_headroom": 29131,
+        "production": {
+          "affected_provider_requests": 0,
+          "affected_question_requests": 0,
+          "clip_measurement": "character loss only; semantic evidence loss not measured",
+          "maximum_naive_tail_clip_characters": 0,
+          "maximum_naive_tail_clip_fraction": 0.0,
+          "maximum_state_characters": 62656,
+          "minimum_character_headroom_at_guard": 7344,
+          "provider_requests": 324,
+          "question_requests": 324
+        },
+        "role": "confidence",
+        "status": "safe"
+      },
+      {
+        "affected_production_quality": "not_estimable",
+        "minimum_estimated_production_token_headroom": 30752,
+        "minimum_observed_reviewed_token_headroom": 31153,
+        "production": {
+          "affected_provider_requests": 0,
+          "affected_question_requests": 0,
+          "clip_measurement": "character loss only; semantic evidence loss not measured",
+          "maximum_naive_tail_clip_characters": 0,
+          "maximum_naive_tail_clip_fraction": 0.0,
+          "maximum_state_characters": 2165,
+          "minimum_character_headroom_at_guard": 67835,
+          "provider_requests": 8367,
+          "question_requests": 8367
+        },
+        "role": "daily_theme",
+        "status": "safe"
+      }
+    ],
+    "state_character_guard": 70000,
+    "tier_batching": {
+      "batched_cost_usd": "0.000245322",
+      "batched_input_tokens": 5841,
+      "input_token_reduction_fraction": 0.491291,
+      "quality_equivalence_evaluated": false,
+      "sample_count": 1,
+      "saved_input_tokens": 5641,
+      "separate_cost_usd": "0.000482244",
+      "separate_input_tokens": 11482,
+      "state_size_reduced": false
+    }
+  },
+  "current_news_cost_baseline": {
+    "accounting_basis": {
+      "cost_source": "news_model_calls.cost_usd",
+      "excluded_operational_spend": "rejected articles, abandoned runs, and attempts without a report-lineage artifact",
+      "lineage": "transitive run inputs excluding prior_output",
+      "per_report_deduplication_key": [
+        "report_version_id",
+        "artifact_version_id"
+      ],
+      "portfolio_unique_key": "artifact_version_id"
+    },
+    "accounting_gap_count": 0,
+    "portfolio": {
+      "attributed_cost_usd": "2.032867430",
+      "maximum_report_reference_count": 1,
+      "report_count": 7,
+      "shared_cost_usd": "0.000000000",
+      "shared_model_output_count": 0,
+      "unique_model_output_count": 1656,
+      "unique_physical_cost_usd": "2.032867430"
+    },
+    "reports": [
+      {
+        "accounting_gaps": [],
+        "breakdown": [
+          {
+            "cost_usd": "0.034476000",
+            "input_tokens": 27873,
+            "latency_ms": 13382,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 3619,
+            "response_count": 1,
+            "stage": "news.assess_daily_subjects",
+            "total_tokens": 31492
+          },
+          {
+            "cost_usd": "0.026795250",
+            "input_tokens": 25792,
+            "latency_ms": 11314,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 1987,
+            "response_count": 2,
+            "stage": "news.construct_daily_themes",
+            "total_tokens": 27779
+          },
+          {
+            "cost_usd": "0.000845820",
+            "input_tokens": 42291,
+            "latency_ms": 81499,
+            "model": "text-embedding-3-small",
+            "model_output_count": 119,
+            "output_tokens": 0,
+            "response_count": 119,
+            "stage": "news.embed",
+            "total_tokens": 42291
+          },
+          {
+            "cost_usd": "0.226116510",
+            "input_tokens": 362387,
+            "latency_ms": 565468,
+            "model": "google/gemini-2.5-flash",
+            "model_output_count": 119,
+            "output_tokens": 47151,
+            "response_count": 239,
+            "stage": "news.relevance.v3",
+            "total_tokens": 409538
+          },
+          {
+            "cost_usd": "0.114532800",
+            "input_tokens": 189084,
+            "latency_ms": 457562,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 72,
+            "output_tokens": 24312,
+            "response_count": 191,
+            "stage": "news.score_group_sentiment",
+            "total_tokens": 213396
+          },
+          {
+            "cost_usd": "0.083964400",
+            "input_tokens": 154967,
+            "latency_ms": 311583,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 72,
+            "output_tokens": 13736,
+            "response_count": 72,
+            "stage": "news.summarize_group",
+            "total_tokens": 168703
+          }
+        ],
+        "cost_usd": "0.486730780",
+        "day": "2026-09-14",
+        "input_tokens": 802394,
+        "latency_ms": 1440808,
+        "lineage_node_count": 699,
+        "model_output_count": 384,
+        "output_tokens": 90805,
+        "report_version_id": "f6fc85b9c6fab8f15d11e8c9cea36ec88f6c0b6e4d3aedd6c429cbbf548f555e",
+        "response_count": 624,
+        "total_tokens": 893199
+      },
+      {
+        "accounting_gaps": [],
+        "breakdown": [
+          {
+            "cost_usd": "0.022462500",
+            "input_tokens": 18095,
+            "latency_ms": 11066,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 2371,
+            "response_count": 1,
+            "stage": "news.assess_daily_subjects",
+            "total_tokens": 20466
+          },
+          {
+            "cost_usd": "0.019449750",
+            "input_tokens": 17483,
+            "latency_ms": 9981,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 1690,
+            "response_count": 2,
+            "stage": "news.construct_daily_themes",
+            "total_tokens": 19173
+          },
+          {
+            "cost_usd": "0.000472900",
+            "input_tokens": 23645,
+            "latency_ms": 43903,
+            "model": "text-embedding-3-small",
+            "model_output_count": 67,
+            "output_tokens": 0,
+            "response_count": 67,
+            "stage": "news.embed",
+            "total_tokens": 23645
+          },
+          {
+            "cost_usd": "0.131081500",
+            "input_tokens": 216005,
+            "latency_ms": 387407,
+            "model": "google/gemini-2.5-flash",
+            "model_output_count": 67,
+            "output_tokens": 26512,
+            "response_count": 135,
+            "stage": "news.relevance.v3",
+            "total_tokens": 242517
+          },
+          {
+            "cost_usd": "0.072411200",
+            "input_tokens": 122596,
+            "latency_ms": 290393,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 50,
+            "output_tokens": 14608,
+            "response_count": 117,
+            "stage": "news.score_group_sentiment",
+            "total_tokens": 137204
+          },
+          {
+            "cost_usd": "0.056148000",
+            "input_tokens": 102482,
+            "latency_ms": 174578,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 50,
+            "output_tokens": 9472,
+            "response_count": 50,
+            "stage": "news.summarize_group",
+            "total_tokens": 111954
+          }
+        ],
+        "cost_usd": "0.302025850",
+        "day": "2026-09-15",
+        "input_tokens": 500306,
+        "latency_ms": 917328,
+        "lineage_node_count": 418,
+        "model_output_count": 236,
+        "output_tokens": 54653,
+        "report_version_id": "b5594aab447f3e5517f12175cc6bf01b3c352ef7f2c6da142179cf9f142eb897",
+        "response_count": 372,
+        "total_tokens": 554959
+      },
+      {
+        "accounting_gaps": [],
+        "breakdown": [
+          {
+            "cost_usd": "0.014158500",
+            "input_tokens": 11558,
+            "latency_ms": 7690,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 1464,
+            "response_count": 1,
+            "stage": "news.assess_daily_subjects",
+            "total_tokens": 13022
+          },
+          {
+            "cost_usd": "0.012683250",
+            "input_tokens": 11361,
+            "latency_ms": 9232,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 1110,
+            "response_count": 2,
+            "stage": "news.construct_daily_themes",
+            "total_tokens": 12471
+          },
+          {
+            "cost_usd": "0.000273680",
+            "input_tokens": 13684,
+            "latency_ms": 33495,
+            "model": "text-embedding-3-small",
+            "model_output_count": 43,
+            "output_tokens": 0,
+            "response_count": 43,
+            "stage": "news.embed",
+            "total_tokens": 13684
+          },
+          {
+            "cost_usd": "0.082027200",
+            "input_tokens": 129624,
+            "latency_ms": 222828,
+            "model": "google/gemini-2.5-flash",
+            "model_output_count": 43,
+            "output_tokens": 17256,
+            "response_count": 88,
+            "stage": "news.relevance.v3",
+            "total_tokens": 146880
+          },
+          {
+            "cost_usd": "0.042654000",
+            "input_tokens": 69227,
+            "latency_ms": 207575,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 34,
+            "output_tokens": 9352,
+            "response_count": 77,
+            "stage": "news.score_group_sentiment",
+            "total_tokens": 78579
+          },
+          {
+            "cost_usd": "0.032998400",
+            "input_tokens": 58192,
+            "latency_ms": 123218,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 34,
+            "output_tokens": 6076,
+            "response_count": 34,
+            "stage": "news.summarize_group",
+            "total_tokens": 64268
+          }
+        ],
+        "cost_usd": "0.184795030",
+        "day": "2026-09-16",
+        "input_tokens": 293646,
+        "latency_ms": 604038,
+        "lineage_node_count": 293,
+        "model_output_count": 156,
+        "output_tokens": 35258,
+        "report_version_id": "49c9e634788c474da7aa339f009663fa3a8a4c516aff0e475d31f6afd640f941",
+        "response_count": 245,
+        "total_tokens": 328904
+      },
+      {
+        "accounting_gaps": [],
+        "breakdown": [
+          {
+            "cost_usd": "0.028790250",
+            "input_tokens": 22367,
+            "latency_ms": 12341,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 3204,
+            "response_count": 1,
+            "stage": "news.assess_daily_subjects",
+            "total_tokens": 25571
+          },
+          {
+            "cost_usd": "0.019136250",
+            "input_tokens": 19345,
+            "latency_ms": 10153,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 1234,
+            "response_count": 2,
+            "stage": "news.construct_daily_themes",
+            "total_tokens": 20579
+          },
+          {
+            "cost_usd": "0.000766000",
+            "input_tokens": 38300,
+            "latency_ms": 68980,
+            "model": "text-embedding-3-small",
+            "model_output_count": 106,
+            "output_tokens": 0,
+            "response_count": 106,
+            "stage": "news.embed",
+            "total_tokens": 38300
+          },
+          {
+            "cost_usd": "0.187334120",
+            "input_tokens": 286192,
+            "latency_ms": 556108,
+            "model": "google/gemini-2.5-flash",
+            "model_output_count": 106,
+            "output_tokens": 40766,
+            "response_count": 212,
+            "stage": "news.relevance.v3",
+            "total_tokens": 326958
+          },
+          {
+            "cost_usd": "0.093926400",
+            "input_tokens": 156684,
+            "latency_ms": 351696,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 56,
+            "output_tokens": 19917,
+            "response_count": 161,
+            "stage": "news.score_group_sentiment",
+            "total_tokens": 176601
+          },
+          {
+            "cost_usd": "0.067352800",
+            "input_tokens": 125578,
+            "latency_ms": 211215,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 56,
+            "output_tokens": 10701,
+            "response_count": 56,
+            "stage": "news.summarize_group",
+            "total_tokens": 136279
+          }
+        ],
+        "cost_usd": "0.397305820",
+        "day": "2026-09-17",
+        "input_tokens": 648466,
+        "latency_ms": 1210493,
+        "lineage_node_count": 601,
+        "model_output_count": 326,
+        "output_tokens": 75822,
+        "report_version_id": "71e799636e9ad0b451ad482b5a94dcff0114cf1f968f4689516f21ebec3e4f81",
+        "response_count": 538,
+        "total_tokens": 724288
+      },
+      {
+        "accounting_gaps": [],
+        "breakdown": [
+          {
+            "cost_usd": "0.023438250",
+            "input_tokens": 19351,
+            "latency_ms": 8998,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 2380,
+            "response_count": 1,
+            "stage": "news.assess_daily_subjects",
+            "total_tokens": 21731
+          },
+          {
+            "cost_usd": "0.016938000",
+            "input_tokens": 17279,
+            "latency_ms": 7303,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 1061,
+            "response_count": 2,
+            "stage": "news.construct_daily_themes",
+            "total_tokens": 18340
+          },
+          {
+            "cost_usd": "0.000578640",
+            "input_tokens": 28932,
+            "latency_ms": 62884,
+            "model": "text-embedding-3-small",
+            "model_output_count": 84,
+            "output_tokens": 0,
+            "response_count": 84,
+            "stage": "news.embed",
+            "total_tokens": 28932
+          },
+          {
+            "cost_usd": "0.156541400",
+            "input_tokens": 250763,
+            "latency_ms": 437134,
+            "model": "google/gemini-2.5-flash",
+            "model_output_count": 84,
+            "output_tokens": 32525,
+            "response_count": 171,
+            "stage": "news.relevance.v3",
+            "total_tokens": 283288
+          },
+          {
+            "cost_usd": "0.081972400",
+            "input_tokens": 136367,
+            "latency_ms": 312152,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 52,
+            "output_tokens": 17141,
+            "response_count": 136,
+            "stage": "news.score_group_sentiment",
+            "total_tokens": 153508
+          },
+          {
+            "cost_usd": "0.060590800",
+            "input_tokens": 111537,
+            "latency_ms": 188401,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 52,
+            "output_tokens": 9985,
+            "response_count": 52,
+            "stage": "news.summarize_group",
+            "total_tokens": 121522
+          }
+        ],
+        "cost_usd": "0.340059490",
+        "day": "2026-09-18",
+        "input_tokens": 564229,
+        "latency_ms": 1016872,
+        "lineage_node_count": 563,
+        "model_output_count": 274,
+        "output_tokens": 63092,
+        "report_version_id": "37a7fa85cdea7c45848ba377f0d1ddac7a884682cc5ec14a3ddf99afec5660d9",
+        "response_count": 446,
+        "total_tokens": 627321
+      },
+      {
+        "accounting_gaps": [],
+        "breakdown": [
+          {
+            "cost_usd": "0.021444000",
+            "input_tokens": 16767,
+            "latency_ms": 9662,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 2365,
+            "response_count": 1,
+            "stage": "news.assess_daily_subjects",
+            "total_tokens": 19132
+          },
+          {
+            "cost_usd": "0.014259000",
+            "input_tokens": 14527,
+            "latency_ms": 8239,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 897,
+            "response_count": 2,
+            "stage": "news.construct_daily_themes",
+            "total_tokens": 15424
+          },
+          {
+            "cost_usd": "0.000460120",
+            "input_tokens": 23006,
+            "latency_ms": 38571,
+            "model": "text-embedding-3-small",
+            "model_output_count": 63,
+            "output_tokens": 0,
+            "response_count": 63,
+            "stage": "news.embed",
+            "total_tokens": 23006
+          },
+          {
+            "cost_usd": "0.118140720",
+            "input_tokens": 183161,
+            "latency_ms": 310092,
+            "model": "google/gemini-2.5-flash",
+            "model_output_count": 63,
+            "output_tokens": 25461,
+            "response_count": 126,
+            "stage": "news.relevance.v3",
+            "total_tokens": 208622
+          },
+          {
+            "cost_usd": "0.062915200",
+            "input_tokens": 103124,
+            "latency_ms": 251475,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 47,
+            "output_tokens": 13541,
+            "response_count": 110,
+            "stage": "news.score_group_sentiment",
+            "total_tokens": 116665
+          },
+          {
+            "cost_usd": "0.048524000",
+            "input_tokens": 86130,
+            "latency_ms": 155256,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 47,
+            "output_tokens": 8795,
+            "response_count": 47,
+            "stage": "news.summarize_group",
+            "total_tokens": 94925
+          }
+        ],
+        "cost_usd": "0.265743040",
+        "day": "2026-09-19",
+        "input_tokens": 426715,
+        "latency_ms": 773295,
+        "lineage_node_count": 402,
+        "model_output_count": 222,
+        "output_tokens": 51059,
+        "report_version_id": "38287cca44e9b485f671fa6b4179b597bf402bbf371bfd53f9dbb7bf718f19d6",
+        "response_count": 349,
+        "total_tokens": 477774
+      },
+      {
+        "accounting_gaps": [],
+        "breakdown": [
+          {
+            "cost_usd": "0.005484000",
+            "input_tokens": 4392,
+            "latency_ms": 5099,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 584,
+            "response_count": 1,
+            "stage": "news.assess_daily_subjects",
+            "total_tokens": 4976
+          },
+          {
+            "cost_usd": "0.006085500",
+            "input_tokens": 5234,
+            "latency_ms": 8010,
+            "model": "google/gemini-3.8-flash",
+            "model_output_count": 1,
+            "output_tokens": 576,
+            "response_count": 3,
+            "stage": "news.construct_daily_themes",
+            "total_tokens": 5810
+          },
+          {
+            "cost_usd": "0.000105320",
+            "input_tokens": 5266,
+            "latency_ms": 9849,
+            "model": "text-embedding-3-small",
+            "model_output_count": 15,
+            "output_tokens": 0,
+            "response_count": 15,
+            "stage": "news.embed",
+            "total_tokens": 5266
+          },
+          {
+            "cost_usd": "0.023829800",
+            "input_tokens": 30241,
+            "latency_ms": 75019,
+            "model": "google/gemini-2.5-flash",
+            "model_output_count": 15,
+            "output_tokens": 5903,
+            "response_count": 30,
+            "stage": "news.relevance.v3",
+            "total_tokens": 36144
+          },
+          {
+            "cost_usd": "0.011250400",
+            "input_tokens": 16834,
+            "latency_ms": 65918,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 13,
+            "output_tokens": 2823,
+            "response_count": 28,
+            "stage": "news.score_group_sentiment",
+            "total_tokens": 19657
+          },
+          {
+            "cost_usd": "0.009452400",
+            "input_tokens": 14731,
+            "latency_ms": 39228,
+            "model": "openai/gpt-4.1-mini",
+            "model_output_count": 13,
+            "output_tokens": 2225,
+            "response_count": 13,
+            "stage": "news.summarize_group",
+            "total_tokens": 16956
+          }
+        ],
+        "cost_usd": "0.056207420",
+        "day": "2026-09-20",
+        "input_tokens": 76698,
+        "latency_ms": 203123,
+        "lineage_node_count": 95,
+        "model_output_count": 58,
+        "output_tokens": 12111,
+        "report_version_id": "009b84f676ea351b63493a45a319e07bcb8cd9c55aa8c6c5369d0cb10abba6df",
+        "response_count": 90,
+        "total_tokens": 88809
+      }
+    ]
+  },
+  "decision_scope": "cross-product research synthesis; no blanket production migration approval",
+  "issue_id": "news-aggregator-vt6.7",
+  "model_catalog": [
+    {
+      "comparative_roles": [
+        "job_relevance",
+        "news_relevance",
+        "grouping",
+        "ranking",
+        "tier",
+        "confidence",
+        "daily_theme"
+      ],
+      "documented_request_token_budget": 64000,
+      "documented_state_plus_longest_question_tokens": 32000,
+      "execution_policy_id": "typesafe-jev-1.13.0-v1",
+      "formal_tokenizer_bound": false,
+      "job_cost_basis": "rate_card",
+      "job_provider": "jev",
+      "local_state_character_guard": 70000,
+      "model": "jev-1.13.0",
+      "news_cost_basis": "estimated-input-rate",
+      "news_provider": "typesafe",
+      "news_target_id": "typesafe-jev"
+    },
+    {
+      "comparative_roles": [
+        "job_relevance",
+        "news_relevance",
+        "grouping",
+        "ranking",
+        "tier",
+        "confidence",
+        "daily_theme"
+      ],
+      "execution_policy_id": "openrouter-gemini-binary-v1",
+      "job_cost_basis": "provider_reported",
+      "job_provider": "openrouter",
+      "model": "google/gemini-2.5-flash",
+      "news_cost_basis": "provider-reported",
+      "news_provider": "openrouter",
+      "news_target_id": "openrouter-gemini-2.5-flash"
+    },
+    {
+      "comparative_roles": [
+        "job_relevance",
+        "news_relevance",
+        "grouping",
+        "ranking",
+        "tier",
+        "confidence",
+        "daily_theme"
+      ],
+      "execution_policy_id": "openrouter-gemini-binary-v1",
+      "job_cost_basis": "provider_reported",
+      "job_provider": "openrouter",
+      "model": "google/gemini-3.8-flash",
+      "news_cost_basis": "provider-reported",
+      "news_provider": "openrouter",
+      "news_target_id": "openrouter-gemini-3.8-flash"
+    },
+    {
+      "comparative_roles": [],
+      "evidence_status": "production cost baseline and unlabeled sentiment incumbent only",
+      "execution_policy_id": null,
+      "job_cost_basis": null,
+      "job_provider": null,
+      "model": "openai/gpt-4.1-mini",
+      "news_cost_basis": "production model-call accounting",
+      "news_provider": "openai",
+      "news_target_id": null
+    }
+  ],
+  "news_aspects": [
+    {
+      "case_count": 23,
+      "concern": "grouping",
+      "context_status": "safe",
+      "deployment_conclusion": "not_established",
+      "evidence_status": "derived_task_only",
+      "limitation": "Pair judgments do not establish a valid complete partition.",
+      "paired_comparisons": [
+        {
+          "both_correct": 19,
+          "both_wrong": 2,
+          "first_only_correct": 2,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.5,
+          "paired_count": 23,
+          "second_only_correct": 0,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 21,
+          "both_wrong": 2,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 23,
+          "second_only_correct": 0,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 19,
+          "both_wrong": 2,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.5,
+          "paired_count": 23,
+          "second_only_correct": 2,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 19,
+          "both_wrong": 2,
+          "first_only_correct": 2,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.5,
+          "paired_count": 23,
+          "second_only_correct": 0,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 21,
+          "both_wrong": 2,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 23,
+          "second_only_correct": 0,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 19,
+          "both_wrong": 2,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.5,
+          "paired_count": 23,
+          "second_only_correct": 2,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 20,
+          "both_wrong": 2,
+          "first_only_correct": 1,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 23,
+          "second_only_correct": 0,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 20,
+          "both_wrong": 2,
+          "first_only_correct": 1,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 23,
+          "second_only_correct": 0,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 19,
+          "both_wrong": 2,
+          "first_only_correct": 1,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 23,
+          "second_only_correct": 1,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        }
+      ],
+      "pareto": {
+        "dimensions": [
+          "worst_trial_errors",
+          "mean_cost_usd",
+          "median_trial_p95_latency_ms"
+        ],
+        "frontier": [
+          "openrouter-gemini-2.5-flash",
+          "typesafe-jev"
+        ],
+        "targets": [
+          {
+            "error_counts_by_trial": [
+              2,
+              2,
+              2
+            ],
+            "mean_cost_usd": 0.01525207,
+            "median_trial_p50_latency_ms": 670.0,
+            "median_trial_p95_latency_ms": 906.5,
+            "non_dominated": true,
+            "target_id": "openrouter-gemini-2.5-flash",
+            "total_attempt_count": 69,
+            "total_cost_usd": 0.04575621,
+            "total_input_tokens": 154449,
+            "total_output_tokens": 345,
+            "worst_trial_errors": 2
+          },
+          {
+            "error_counts_by_trial": [
+              4,
+              4,
+              3
+            ],
+            "mean_cost_usd": 0.07655975,
+            "median_trial_p50_latency_ms": 1658.0,
+            "median_trial_p95_latency_ms": 4695.299999999998,
+            "non_dominated": false,
+            "target_id": "openrouter-gemini-3.8-flash",
+            "total_attempt_count": 69,
+            "total_cost_usd": 0.22967925,
+            "total_input_tokens": 156864,
+            "total_output_tokens": 29875,
+            "worst_trial_errors": 4
+          },
+          {
+            "error_counts_by_trial": [
+              2,
+              2,
+              3
+            ],
+            "mean_cost_usd": 0.002683968,
+            "median_trial_p50_latency_ms": 646.0,
+            "median_trial_p95_latency_ms": 839.8,
+            "non_dominated": true,
+            "target_id": "typesafe-jev",
+            "total_attempt_count": 69,
+            "total_cost_usd": 0.008051904,
+            "total_input_tokens": 191712,
+            "total_output_tokens": 1518,
+            "worst_trial_errors": 3
+          }
+        ]
+      },
+      "recommended_use": "Use only as guarded pairwise evidence or in shadow evaluation; complete partition replacement is not established.",
+      "scored_units_per_trial": 23,
+      "targets": [
+        {
+          "median_trial_p50_latency_ms": 646.0,
+          "median_trial_p95_latency_ms": 839.8,
+          "projected_cost_per_1000_scored_units_usd": "0.116694261",
+          "stability": {
+            "flip_count": 1,
+            "judgment_count": 23,
+            "unanimous_count": 22,
+            "unanimous_rate": 0.9565217391304348,
+            "unavailable_count": 0
+          },
+          "target_id": "typesafe-jev",
+          "total_attempts": 69,
+          "total_cost_usd": "0.008051904",
+          "total_input_tokens": 191712,
+          "total_output_tokens": 1518,
+          "trials": [
+            {
+              "accuracy": 0.9130434782608695,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.7196206640905891,
+                "successes": 21,
+                "total": 23,
+                "upper": 0.989290033962124
+              },
+              "attempts": 23,
+              "completed": 23,
+              "correct": 21,
+              "cost_usd": "0.002683968",
+              "failed": 0,
+              "input_tokens": 63904,
+              "output_tokens": 506,
+              "p50_latency_ms": 646.0,
+              "p95_latency_ms": 800.7,
+              "scored_units": 23,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.9130434782608695,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.7196206640905891,
+                "successes": 21,
+                "total": 23,
+                "upper": 0.989290033962124
+              },
+              "attempts": 23,
+              "completed": 23,
+              "correct": 21,
+              "cost_usd": "0.002683968",
+              "failed": 0,
+              "input_tokens": 63904,
+              "output_tokens": 506,
+              "p50_latency_ms": 641.0,
+              "p95_latency_ms": 839.8,
+              "scored_units": 23,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.8695652173913043,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.6641108624628791,
+                "successes": 20,
+                "total": 23,
+                "upper": 0.9722484925772068
+              },
+              "attempts": 23,
+              "completed": 23,
+              "correct": 20,
+              "cost_usd": "0.002683968",
+              "failed": 0,
+              "input_tokens": 63904,
+              "output_tokens": 506,
+              "p50_latency_ms": 658.0,
+              "p95_latency_ms": 858.1999999999999,
+              "scored_units": 23,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        },
+        {
+          "median_trial_p50_latency_ms": 670.0,
+          "median_trial_p95_latency_ms": 906.5,
+          "projected_cost_per_1000_scored_units_usd": "0.663133478",
+          "stability": {
+            "flip_count": 0,
+            "judgment_count": 23,
+            "unanimous_count": 23,
+            "unanimous_rate": 1.0,
+            "unavailable_count": 0
+          },
+          "target_id": "openrouter-gemini-2.5-flash",
+          "total_attempts": 69,
+          "total_cost_usd": "0.045756210",
+          "total_input_tokens": 154449,
+          "total_output_tokens": 345,
+          "trials": [
+            {
+              "accuracy": 0.9130434782608695,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.7196206640905891,
+                "successes": 21,
+                "total": 23,
+                "upper": 0.989290033962124
+              },
+              "attempts": 23,
+              "completed": 23,
+              "correct": 21,
+              "cost_usd": "0.015732400",
+              "failed": 0,
+              "input_tokens": 51483,
+              "output_tokens": 115,
+              "p50_latency_ms": 703.0,
+              "p95_latency_ms": 1027.5,
+              "scored_units": 23,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.9130434782608695,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.7196206640905891,
+                "successes": 21,
+                "total": 23,
+                "upper": 0.989290033962124
+              },
+              "attempts": 23,
+              "completed": 23,
+              "correct": 21,
+              "cost_usd": "0.015732400",
+              "failed": 0,
+              "input_tokens": 51483,
+              "output_tokens": 115,
+              "p50_latency_ms": 670.0,
+              "p95_latency_ms": 882.8,
+              "scored_units": 23,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.9130434782608695,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.7196206640905891,
+                "successes": 21,
+                "total": 23,
+                "upper": 0.989290033962124
+              },
+              "attempts": 23,
+              "completed": 23,
+              "correct": 21,
+              "cost_usd": "0.014291410",
+              "failed": 0,
+              "input_tokens": 51483,
+              "output_tokens": 115,
+              "p50_latency_ms": 663.0,
+              "p95_latency_ms": 906.5,
+              "scored_units": 23,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        },
+        {
+          "median_trial_p50_latency_ms": 1658.0,
+          "median_trial_p95_latency_ms": 4695.299999999998,
+          "projected_cost_per_1000_scored_units_usd": "3.328684783",
+          "stability": {
+            "flip_count": 1,
+            "judgment_count": 23,
+            "unanimous_count": 22,
+            "unanimous_rate": 0.9565217391304348,
+            "unavailable_count": 0
+          },
+          "target_id": "openrouter-gemini-3.8-flash",
+          "total_attempts": 69,
+          "total_cost_usd": "0.229679250",
+          "total_input_tokens": 156864,
+          "total_output_tokens": 29875,
+          "trials": [
+            {
+              "accuracy": 0.8260869565217391,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.6121881100452025,
+                "successes": 19,
+                "total": 23,
+                "upper": 0.9504923546942066
+              },
+              "attempts": 23,
+              "completed": 23,
+              "correct": 19,
+              "cost_usd": "0.075197250",
+              "failed": 0,
+              "input_tokens": 52288,
+              "output_tokens": 9595,
+              "p50_latency_ms": 1588.0,
+              "p95_latency_ms": 4695.299999999998,
+              "scored_units": 23,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.8260869565217391,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.6121881100452025,
+                "successes": 19,
+                "total": 23,
+                "upper": 0.9504923546942066
+              },
+              "attempts": 23,
+              "completed": 23,
+              "correct": 19,
+              "cost_usd": "0.077792250",
+              "failed": 0,
+              "input_tokens": 52288,
+              "output_tokens": 10287,
+              "p50_latency_ms": 1658.0,
+              "p95_latency_ms": 4927.199999999999,
+              "scored_units": 23,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.8695652173913043,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.6641108624628791,
+                "successes": 20,
+                "total": 23,
+                "upper": 0.9722484925772068
+              },
+              "attempts": 23,
+              "completed": 23,
+              "correct": 20,
+              "cost_usd": "0.076689750",
+              "failed": 0,
+              "input_tokens": 52288,
+              "output_tokens": 9993,
+              "p50_latency_ms": 1837.0,
+              "p95_latency_ms": 4008.0,
+              "scored_units": 23,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        }
+      ],
+      "trial_count": 3
+    },
+    {
+      "case_count": 28,
+      "concern": "ranking",
+      "context_status": "conditional",
+      "deployment_conclusion": "not_established",
+      "evidence_status": "derived_task_only",
+      "limitation": "Pairwise precedence does not establish a coherent global order.",
+      "paired_comparisons": [
+        {
+          "both_correct": 11,
+          "both_wrong": 0,
+          "first_only_correct": 1,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.000274658203125,
+          "paired_count": 28,
+          "second_only_correct": 16,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 10,
+          "both_wrong": 5,
+          "first_only_correct": 2,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.0224609375,
+          "paired_count": 28,
+          "second_only_correct": 11,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 20,
+          "both_wrong": 0,
+          "first_only_correct": 7,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.0703125,
+          "paired_count": 28,
+          "second_only_correct": 1,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 11,
+          "both_wrong": 0,
+          "first_only_correct": 1,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.000274658203125,
+          "paired_count": 28,
+          "second_only_correct": 16,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 10,
+          "both_wrong": 4,
+          "first_only_correct": 2,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.012939453125,
+          "paired_count": 28,
+          "second_only_correct": 12,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 21,
+          "both_wrong": 0,
+          "first_only_correct": 6,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.125,
+          "paired_count": 28,
+          "second_only_correct": 1,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 12,
+          "both_wrong": 3,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.000244140625,
+          "paired_count": 28,
+          "second_only_correct": 13,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 10,
+          "both_wrong": 6,
+          "first_only_correct": 2,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.03857421875,
+          "paired_count": 28,
+          "second_only_correct": 10,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 19,
+          "both_wrong": 2,
+          "first_only_correct": 6,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.125,
+          "paired_count": 28,
+          "second_only_correct": 1,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        }
+      ],
+      "pareto": {
+        "dimensions": [
+          "worst_trial_errors",
+          "mean_cost_usd",
+          "median_trial_p95_latency_ms"
+        ],
+        "frontier": [
+          "openrouter-gemini-3.8-flash",
+          "typesafe-jev"
+        ],
+        "targets": [
+          {
+            "error_counts_by_trial": [
+              16,
+              16,
+              16
+            ],
+            "mean_cost_usd": 0.05250626,
+            "median_trial_p50_latency_ms": 678.5,
+            "median_trial_p95_latency_ms": 1174.2,
+            "non_dominated": false,
+            "target_id": "openrouter-gemini-2.5-flash",
+            "total_attempt_count": 84,
+            "total_cost_usd": 0.15751878,
+            "total_input_tokens": 574677,
+            "total_output_tokens": 420,
+            "worst_trial_errors": 16
+          },
+          {
+            "error_counts_by_trial": [
+              1,
+              1,
+              3
+            ],
+            "mean_cost_usd": 0.17355575,
+            "median_trial_p50_latency_ms": 2467.5,
+            "median_trial_p95_latency_ms": 4863.299999999999,
+            "non_dominated": true,
+            "target_id": "openrouter-gemini-3.8-flash",
+            "total_attempt_count": 84,
+            "total_cost_usd": 0.52066725,
+            "total_input_tokens": 577617,
+            "total_output_tokens": 48280,
+            "worst_trial_errors": 3
+          },
+          {
+            "error_counts_by_trial": [
+              7,
+              6,
+              8
+            ],
+            "mean_cost_usd": 0.009299178,
+            "median_trial_p50_latency_ms": 816.5,
+            "median_trial_p95_latency_ms": 1057.3,
+            "non_dominated": true,
+            "target_id": "typesafe-jev",
+            "total_attempt_count": 84,
+            "total_cost_usd": 0.027897534,
+            "total_input_tokens": 664227,
+            "total_output_tokens": 2100,
+            "worst_trial_errors": 8
+          }
+        ]
+      },
+      "recommended_use": "Use only as guarded pairwise evidence with incumbent fallback; coherent global ordering and over-guard quality are not established.",
+      "scored_units_per_trial": 28,
+      "targets": [
+        {
+          "median_trial_p50_latency_ms": 816.5,
+          "median_trial_p95_latency_ms": 1057.3,
+          "projected_cost_per_1000_scored_units_usd": "0.332113500",
+          "stability": {
+            "flip_count": 3,
+            "judgment_count": 28,
+            "unanimous_count": 26,
+            "unanimous_rate": 0.9285714285714286,
+            "unavailable_count": 0
+          },
+          "target_id": "typesafe-jev",
+          "total_attempts": 84,
+          "total_cost_usd": "0.027897534",
+          "total_input_tokens": 664227,
+          "total_output_tokens": 2100,
+          "trials": [
+            {
+              "accuracy": 0.75,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.5512845484713915,
+                "successes": 21,
+                "total": 28,
+                "upper": 0.8930920081707734
+              },
+              "attempts": 28,
+              "completed": 28,
+              "correct": 21,
+              "cost_usd": "0.009299178",
+              "failed": 0,
+              "input_tokens": 221409,
+              "output_tokens": 700,
+              "p50_latency_ms": 831.5,
+              "p95_latency_ms": 1048.9,
+              "scored_units": 28,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.7857142857142857,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.5904689734941717,
+                "successes": 22,
+                "total": 28,
+                "upper": 0.9170393876123615
+              },
+              "attempts": 28,
+              "completed": 28,
+              "correct": 22,
+              "cost_usd": "0.009299178",
+              "failed": 0,
+              "input_tokens": 221409,
+              "output_tokens": 700,
+              "p50_latency_ms": 816.5,
+              "p95_latency_ms": 1057.3,
+              "scored_units": 28,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.7142857142857143,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.5133316845510594,
+                "successes": 20,
+                "total": 28,
+                "upper": 0.8677634874288749
+              },
+              "attempts": 28,
+              "completed": 28,
+              "correct": 20,
+              "cost_usd": "0.009299178",
+              "failed": 0,
+              "input_tokens": 221409,
+              "output_tokens": 700,
+              "p50_latency_ms": 799.5,
+              "p95_latency_ms": 1095.6499999999999,
+              "scored_units": 28,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        },
+        {
+          "median_trial_p50_latency_ms": 678.5,
+          "median_trial_p95_latency_ms": 1174.2,
+          "projected_cost_per_1000_scored_units_usd": "1.875223571",
+          "stability": {
+            "flip_count": 0,
+            "judgment_count": 28,
+            "unanimous_count": 28,
+            "unanimous_rate": 1.0,
+            "unavailable_count": 0
+          },
+          "target_id": "openrouter-gemini-2.5-flash",
+          "total_attempts": 84,
+          "total_cost_usd": "0.157518780",
+          "total_input_tokens": 574677,
+          "total_output_tokens": 420,
+          "trials": [
+            {
+              "accuracy": 0.42857142857142855,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.24462393630214663,
+                "successes": 12,
+                "total": 28,
+                "upper": 0.628206371387904
+              },
+              "attempts": 28,
+              "completed": 28,
+              "correct": 12,
+              "cost_usd": "0.057817700",
+              "failed": 0,
+              "input_tokens": 191559,
+              "output_tokens": 140,
+              "p50_latency_ms": 678.5,
+              "p95_latency_ms": 1227.3999999999999,
+              "scored_units": 28,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.42857142857142855,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.24462393630214663,
+                "successes": 12,
+                "total": 28,
+                "upper": 0.628206371387904
+              },
+              "attempts": 28,
+              "completed": 28,
+              "correct": 12,
+              "cost_usd": "0.054137870",
+              "failed": 0,
+              "input_tokens": 191559,
+              "output_tokens": 140,
+              "p50_latency_ms": 686.5,
+              "p95_latency_ms": 1071.8,
+              "scored_units": 28,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.42857142857142855,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.24462393630214663,
+                "successes": 12,
+                "total": 28,
+                "upper": 0.628206371387904
+              },
+              "attempts": 28,
+              "completed": 28,
+              "correct": 12,
+              "cost_usd": "0.045563210",
+              "failed": 0,
+              "input_tokens": 191559,
+              "output_tokens": 140,
+              "p50_latency_ms": 677.0,
+              "p95_latency_ms": 1174.2,
+              "scored_units": 28,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        },
+        {
+          "median_trial_p50_latency_ms": 2467.5,
+          "median_trial_p95_latency_ms": 4863.299999999999,
+          "projected_cost_per_1000_scored_units_usd": "6.198419643",
+          "stability": {
+            "flip_count": 4,
+            "judgment_count": 28,
+            "unanimous_count": 24,
+            "unanimous_rate": 0.8571428571428571,
+            "unavailable_count": 0
+          },
+          "target_id": "openrouter-gemini-3.8-flash",
+          "total_attempts": 84,
+          "total_cost_usd": "0.520667250",
+          "total_input_tokens": 577617,
+          "total_output_tokens": 48280,
+          "trials": [
+            {
+              "accuracy": 0.9642857142857143,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.8165224024553763,
+                "successes": 27,
+                "total": 28,
+                "upper": 0.9990962012443418
+              },
+              "attempts": 28,
+              "completed": 28,
+              "correct": 27,
+              "cost_usd": "0.204284250",
+              "failed": 0,
+              "input_tokens": 192539,
+              "output_tokens": 15968,
+              "p50_latency_ms": 2468.0,
+              "p95_latency_ms": 4863.299999999999,
+              "scored_units": 28,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.9642857142857143,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.8165224024553763,
+                "successes": 27,
+                "total": 28,
+                "upper": 0.9990962012443418
+              },
+              "attempts": 28,
+              "completed": 28,
+              "correct": 27,
+              "cost_usd": "0.161730300",
+              "failed": 0,
+              "input_tokens": 192539,
+              "output_tokens": 16366,
+              "p50_latency_ms": 2467.5,
+              "p95_latency_ms": 5418.949999999998,
+              "scored_units": 28,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.8928571428571429,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.7177356042846756,
+                "successes": 25,
+                "total": 28,
+                "upper": 0.9773349093609409
+              },
+              "attempts": 28,
+              "completed": 28,
+              "correct": 25,
+              "cost_usd": "0.154652700",
+              "failed": 0,
+              "input_tokens": 192539,
+              "output_tokens": 15946,
+              "p50_latency_ms": 2392.5,
+              "p95_latency_ms": 4673.849999999999,
+              "scored_units": 28,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        }
+      ],
+      "trial_count": 3
+    },
+    {
+      "case_count": 25,
+      "composed_metrics_by_target": {
+        "openrouter-gemini-2.5-flash": [
+          {
+            "completed_cases": 25,
+            "confusion_matrix": {
+              "excluded": {
+                "excluded": 0,
+                "main": 2,
+                "worth_knowing": 1
+              },
+              "main": {
+                "excluded": 1,
+                "main": 10,
+                "worth_knowing": 2
+              },
+              "worth_knowing": {
+                "excluded": 0,
+                "main": 5,
+                "worth_knowing": 4
+              }
+            },
+            "exact_accuracy": "0.56",
+            "exact_matches": 14,
+            "failed_cases": 0,
+            "per_tier_recall": {
+              "excluded": "0",
+              "main": "0.7692307692307692307692307692",
+              "worth_knowing": "0.4444444444444444444444444444"
+            },
+            "total_cases": 25,
+            "trial_ref": "jev-aspect-v1:trial-001"
+          },
+          {
+            "completed_cases": 25,
+            "confusion_matrix": {
+              "excluded": {
+                "excluded": 0,
+                "main": 2,
+                "worth_knowing": 1
+              },
+              "main": {
+                "excluded": 1,
+                "main": 10,
+                "worth_knowing": 2
+              },
+              "worth_knowing": {
+                "excluded": 0,
+                "main": 5,
+                "worth_knowing": 4
+              }
+            },
+            "exact_accuracy": "0.56",
+            "exact_matches": 14,
+            "failed_cases": 0,
+            "per_tier_recall": {
+              "excluded": "0",
+              "main": "0.7692307692307692307692307692",
+              "worth_knowing": "0.4444444444444444444444444444"
+            },
+            "total_cases": 25,
+            "trial_ref": "jev-aspect-v1:trial-002"
+          },
+          {
+            "completed_cases": 25,
+            "confusion_matrix": {
+              "excluded": {
+                "excluded": 0,
+                "main": 2,
+                "worth_knowing": 1
+              },
+              "main": {
+                "excluded": 1,
+                "main": 10,
+                "worth_knowing": 2
+              },
+              "worth_knowing": {
+                "excluded": 0,
+                "main": 5,
+                "worth_knowing": 4
+              }
+            },
+            "exact_accuracy": "0.56",
+            "exact_matches": 14,
+            "failed_cases": 0,
+            "per_tier_recall": {
+              "excluded": "0",
+              "main": "0.7692307692307692307692307692",
+              "worth_knowing": "0.4444444444444444444444444444"
+            },
+            "total_cases": 25,
+            "trial_ref": "jev-aspect-v1:trial-003"
+          }
+        ],
+        "openrouter-gemini-3.8-flash": [
+          {
+            "completed_cases": 25,
+            "confusion_matrix": {
+              "excluded": {
+                "excluded": 2,
+                "main": 1,
+                "worth_knowing": 0
+              },
+              "main": {
+                "excluded": 6,
+                "main": 5,
+                "worth_knowing": 2
+              },
+              "worth_knowing": {
+                "excluded": 3,
+                "main": 0,
+                "worth_knowing": 6
+              }
+            },
+            "exact_accuracy": "0.52",
+            "exact_matches": 13,
+            "failed_cases": 0,
+            "per_tier_recall": {
+              "excluded": "0.6666666666666666666666666667",
+              "main": "0.3846153846153846153846153846",
+              "worth_knowing": "0.6666666666666666666666666667"
+            },
+            "total_cases": 25,
+            "trial_ref": "jev-aspect-v1:trial-001"
+          },
+          {
+            "completed_cases": 25,
+            "confusion_matrix": {
+              "excluded": {
+                "excluded": 1,
+                "main": 1,
+                "worth_knowing": 1
+              },
+              "main": {
+                "excluded": 5,
+                "main": 5,
+                "worth_knowing": 3
+              },
+              "worth_knowing": {
+                "excluded": 4,
+                "main": 0,
+                "worth_knowing": 5
+              }
+            },
+            "exact_accuracy": "0.44",
+            "exact_matches": 11,
+            "failed_cases": 0,
+            "per_tier_recall": {
+              "excluded": "0.3333333333333333333333333333",
+              "main": "0.3846153846153846153846153846",
+              "worth_knowing": "0.5555555555555555555555555556"
+            },
+            "total_cases": 25,
+            "trial_ref": "jev-aspect-v1:trial-002"
+          },
+          {
+            "completed_cases": 25,
+            "confusion_matrix": {
+              "excluded": {
+                "excluded": 2,
+                "main": 1,
+                "worth_knowing": 0
+              },
+              "main": {
+                "excluded": 6,
+                "main": 5,
+                "worth_knowing": 2
+              },
+              "worth_knowing": {
+                "excluded": 4,
+                "main": 0,
+                "worth_knowing": 5
+              }
+            },
+            "exact_accuracy": "0.48",
+            "exact_matches": 12,
+            "failed_cases": 0,
+            "per_tier_recall": {
+              "excluded": "0.6666666666666666666666666667",
+              "main": "0.3846153846153846153846153846",
+              "worth_knowing": "0.5555555555555555555555555556"
+            },
+            "total_cases": 25,
+            "trial_ref": "jev-aspect-v1:trial-003"
+          }
+        ],
+        "typesafe-jev": [
+          {
+            "completed_cases": 25,
+            "confusion_matrix": {
+              "excluded": {
+                "excluded": 1,
+                "main": 2,
+                "worth_knowing": 0
+              },
+              "main": {
+                "excluded": 0,
+                "main": 5,
+                "worth_knowing": 8
+              },
+              "worth_knowing": {
+                "excluded": 0,
+                "main": 2,
+                "worth_knowing": 7
+              }
+            },
+            "exact_accuracy": "0.52",
+            "exact_matches": 13,
+            "failed_cases": 0,
+            "per_tier_recall": {
+              "excluded": "0.3333333333333333333333333333",
+              "main": "0.3846153846153846153846153846",
+              "worth_knowing": "0.7777777777777777777777777778"
+            },
+            "total_cases": 25,
+            "trial_ref": "jev-aspect-v1:trial-001"
+          },
+          {
+            "completed_cases": 25,
+            "confusion_matrix": {
+              "excluded": {
+                "excluded": 1,
+                "main": 2,
+                "worth_knowing": 0
+              },
+              "main": {
+                "excluded": 0,
+                "main": 5,
+                "worth_knowing": 8
+              },
+              "worth_knowing": {
+                "excluded": 0,
+                "main": 2,
+                "worth_knowing": 7
+              }
+            },
+            "exact_accuracy": "0.52",
+            "exact_matches": 13,
+            "failed_cases": 0,
+            "per_tier_recall": {
+              "excluded": "0.3333333333333333333333333333",
+              "main": "0.3846153846153846153846153846",
+              "worth_knowing": "0.7777777777777777777777777778"
+            },
+            "total_cases": 25,
+            "trial_ref": "jev-aspect-v1:trial-002"
+          },
+          {
+            "completed_cases": 25,
+            "confusion_matrix": {
+              "excluded": {
+                "excluded": 1,
+                "main": 2,
+                "worth_knowing": 0
+              },
+              "main": {
+                "excluded": 0,
+                "main": 5,
+                "worth_knowing": 8
+              },
+              "worth_knowing": {
+                "excluded": 0,
+                "main": 2,
+                "worth_knowing": 7
+              }
+            },
+            "exact_accuracy": "0.52",
+            "exact_matches": 13,
+            "failed_cases": 0,
+            "per_tier_recall": {
+              "excluded": "0.3333333333333333333333333333",
+              "main": "0.3846153846153846153846153846",
+              "worth_knowing": "0.7777777777777777777777777778"
+            },
+            "total_cases": 25,
+            "trial_ref": "jev-aspect-v1:trial-003"
+          }
+        ]
+      },
+      "concern": "tier",
+      "context_status": "unsafe",
+      "deployment_conclusion": "not_established",
+      "evidence_status": "derived_task_only",
+      "limitation": "Composed tier classification does not evaluate complete assessment generation.",
+      "paired_comparisons": [
+        {
+          "both_correct": 16,
+          "both_wrong": 11,
+          "first_only_correct": 9,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.4048728942871094,
+          "paired_count": 50,
+          "second_only_correct": 14,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 18,
+          "both_wrong": 20,
+          "first_only_correct": 7,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.7744140625,
+          "paired_count": 50,
+          "second_only_correct": 5,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 19,
+          "both_wrong": 16,
+          "first_only_correct": 11,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.11846923828125,
+          "paired_count": 50,
+          "second_only_correct": 4,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 15,
+          "both_wrong": 13,
+          "first_only_correct": 10,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.8318119049072266,
+          "paired_count": 50,
+          "second_only_correct": 12,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 18,
+          "both_wrong": 20,
+          "first_only_correct": 7,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.7744140625,
+          "paired_count": 50,
+          "second_only_correct": 5,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 18,
+          "both_wrong": 18,
+          "first_only_correct": 9,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.4239501953125,
+          "paired_count": 50,
+          "second_only_correct": 5,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 15,
+          "both_wrong": 11,
+          "first_only_correct": 10,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.5412561893463135,
+          "paired_count": 50,
+          "second_only_correct": 14,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 18,
+          "both_wrong": 20,
+          "first_only_correct": 7,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.7744140625,
+          "paired_count": 50,
+          "second_only_correct": 5,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 18,
+          "both_wrong": 16,
+          "first_only_correct": 11,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.210113525390625,
+          "paired_count": 50,
+          "second_only_correct": 5,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        }
+      ],
+      "pareto": {
+        "dimensions": [
+          "worst_trial_errors",
+          "mean_cost_usd",
+          "median_trial_p95_latency_ms"
+        ],
+        "frontier": [
+          "openrouter-gemini-2.5-flash",
+          "openrouter-gemini-3.8-flash",
+          "typesafe-jev"
+        ],
+        "targets": [
+          {
+            "error_counts_by_trial": [
+              25,
+              25,
+              25
+            ],
+            "mean_cost_usd": 0.13002313000000001,
+            "median_trial_p50_latency_ms": 769.5,
+            "median_trial_p95_latency_ms": 1420.35,
+            "non_dominated": true,
+            "target_id": "openrouter-gemini-2.5-flash",
+            "total_attempt_count": 150,
+            "total_cost_usd": 0.39006939,
+            "total_input_tokens": 2107539,
+            "total_output_tokens": 750,
+            "worst_trial_errors": 25
+          },
+          {
+            "error_counts_by_trial": [
+              20,
+              23,
+              21
+            ],
+            "mean_cost_usd": 0.55450705,
+            "median_trial_p50_latency_ms": 3238.0,
+            "median_trial_p95_latency_ms": 5005.499999999999,
+            "non_dominated": true,
+            "target_id": "openrouter-gemini-3.8-flash",
+            "total_attempt_count": 150,
+            "total_cost_usd": 1.66352115,
+            "total_input_tokens": 2112789,
+            "total_output_tokens": 107792,
+            "worst_trial_errors": 23
+          },
+          {
+            "error_counts_by_trial": [
+              27,
+              27,
+              27
+            ],
+            "mean_cost_usd": 0.030157428,
+            "median_trial_p50_latency_ms": 1015.5,
+            "median_trial_p95_latency_ms": 1083.1,
+            "non_dominated": true,
+            "target_id": "typesafe-jev",
+            "total_attempt_count": 150,
+            "total_cost_usd": 0.090472284,
+            "total_input_tokens": 2154102,
+            "total_output_tokens": 3525,
+            "worst_trial_errors": 27
+          }
+        ]
+      },
+      "recommended_use": "Retain the incumbent; composed quality is weak and production context is unsafe.",
+      "scored_units_per_trial": 50,
+      "targets": [
+        {
+          "median_trial_p50_latency_ms": 1015.5,
+          "median_trial_p95_latency_ms": 1083.1,
+          "projected_cost_per_1000_scored_units_usd": "0.603148560",
+          "stability": {
+            "flip_count": 0,
+            "judgment_count": 50,
+            "unanimous_count": 50,
+            "unanimous_rate": 1.0,
+            "unavailable_count": 0
+          },
+          "target_id": "typesafe-jev",
+          "total_attempts": 150,
+          "total_cost_usd": "0.090472284",
+          "total_input_tokens": 2154102,
+          "total_output_tokens": 3525,
+          "trials": [
+            {
+              "accuracy": 0.46,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3181491785686088,
+                "successes": 23,
+                "total": 50,
+                "upper": 0.6067580238830779
+              },
+              "attempts": 50,
+              "completed": 50,
+              "correct": 23,
+              "cost_usd": "0.030157428",
+              "failed": 0,
+              "input_tokens": 718034,
+              "output_tokens": 1175,
+              "p50_latency_ms": 1001.0,
+              "p95_latency_ms": 1083.1,
+              "scored_units": 50,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.46,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3181491785686088,
+                "successes": 23,
+                "total": 50,
+                "upper": 0.6067580238830779
+              },
+              "attempts": 50,
+              "completed": 50,
+              "correct": 23,
+              "cost_usd": "0.030157428",
+              "failed": 0,
+              "input_tokens": 718034,
+              "output_tokens": 1175,
+              "p50_latency_ms": 1015.5,
+              "p95_latency_ms": 1080.65,
+              "scored_units": 50,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.46,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3181491785686088,
+                "successes": 23,
+                "total": 50,
+                "upper": 0.6067580238830779
+              },
+              "attempts": 50,
+              "completed": 50,
+              "correct": 23,
+              "cost_usd": "0.030157428",
+              "failed": 0,
+              "input_tokens": 718034,
+              "output_tokens": 1175,
+              "p50_latency_ms": 1024.5,
+              "p95_latency_ms": 1100.1,
+              "scored_units": 50,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        },
+        {
+          "median_trial_p50_latency_ms": 769.5,
+          "median_trial_p95_latency_ms": 1420.35,
+          "projected_cost_per_1000_scored_units_usd": "2.600462600",
+          "stability": {
+            "flip_count": 0,
+            "judgment_count": 50,
+            "unanimous_count": 50,
+            "unanimous_rate": 1.0,
+            "unavailable_count": 0
+          },
+          "target_id": "openrouter-gemini-2.5-flash",
+          "total_attempts": 150,
+          "total_cost_usd": "0.390069390",
+          "total_input_tokens": 2107539,
+          "total_output_tokens": 750,
+          "trials": [
+            {
+              "accuracy": 0.5,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3552729971299078,
+                "successes": 25,
+                "total": 50,
+                "upper": 0.6447270028700922
+              },
+              "attempts": 50,
+              "completed": 50,
+              "correct": 25,
+              "cost_usd": "0.172220800",
+              "failed": 0,
+              "input_tokens": 702513,
+              "output_tokens": 250,
+              "p50_latency_ms": 787.0,
+              "p95_latency_ms": 1420.35,
+              "scored_units": 50,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.5,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3552729971299078,
+                "successes": 25,
+                "total": 50,
+                "upper": 0.6447270028700922
+              },
+              "attempts": 50,
+              "completed": 50,
+              "correct": 25,
+              "cost_usd": "0.138427060",
+              "failed": 0,
+              "input_tokens": 702513,
+              "output_tokens": 250,
+              "p50_latency_ms": 769.5,
+              "p95_latency_ms": 1091.3,
+              "scored_units": 50,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.5,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3552729971299078,
+                "successes": 25,
+                "total": 50,
+                "upper": 0.6447270028700922
+              },
+              "attempts": 50,
+              "completed": 50,
+              "correct": 25,
+              "cost_usd": "0.079421530",
+              "failed": 0,
+              "input_tokens": 702513,
+              "output_tokens": 250,
+              "p50_latency_ms": 764.5,
+              "p95_latency_ms": 1896.4999999999964,
+              "scored_units": 50,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        },
+        {
+          "median_trial_p50_latency_ms": 3238.0,
+          "median_trial_p95_latency_ms": 5005.499999999999,
+          "projected_cost_per_1000_scored_units_usd": "11.090141000",
+          "stability": {
+            "flip_count": 5,
+            "judgment_count": 50,
+            "unanimous_count": 47,
+            "unanimous_rate": 0.94,
+            "unavailable_count": 0
+          },
+          "target_id": "openrouter-gemini-3.8-flash",
+          "total_attempts": 150,
+          "total_cost_usd": "1.663521150",
+          "total_input_tokens": 2112789,
+          "total_output_tokens": 107792,
+          "trials": [
+            {
+              "accuracy": 0.6,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.4517940284791804,
+                "successes": 30,
+                "total": 50,
+                "upper": 0.7359216049054631
+              },
+              "attempts": 50,
+              "completed": 50,
+              "correct": 30,
+              "cost_usd": "0.635071500",
+              "failed": 0,
+              "input_tokens": 704263,
+              "output_tokens": 35851,
+              "p50_latency_ms": 3159.5,
+              "p95_latency_ms": 4711.25,
+              "scored_units": 50,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.54,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.39324197611692213,
+                "successes": 27,
+                "total": 50,
+                "upper": 0.6818508214313912
+              },
+              "attempts": 50,
+              "completed": 50,
+              "correct": 27,
+              "cost_usd": "0.399390300",
+              "failed": 0,
+              "input_tokens": 704263,
+              "output_tokens": 36223,
+              "p50_latency_ms": 3587.5,
+              "p95_latency_ms": 5634.65,
+              "scored_units": 50,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.58,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.4320604350655657,
+                "successes": 29,
+                "total": 50,
+                "upper": 0.7181177588763024
+              },
+              "attempts": 50,
+              "completed": 50,
+              "correct": 29,
+              "cost_usd": "0.629059350",
+              "failed": 0,
+              "input_tokens": 704263,
+              "output_tokens": 35718,
+              "p50_latency_ms": 3238.0,
+              "p95_latency_ms": 5005.499999999999,
+              "scored_units": 50,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        }
+      ],
+      "trial_count": 3
+    },
+    {
+      "case_count": 4,
+      "concern": "confidence",
+      "context_status": "safe",
+      "deployment_conclusion": "not_established",
+      "evidence_status": "descriptive_only",
+      "limitation": "Four cases support descriptive evidence only, not a deployment winner.",
+      "paired_comparisons": [
+        {
+          "both_correct": 3,
+          "both_wrong": 0,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 4,
+          "second_only_correct": 1,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 3,
+          "both_wrong": 0,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 4,
+          "second_only_correct": 1,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 4,
+          "both_wrong": 0,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 4,
+          "second_only_correct": 0,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 3,
+          "both_wrong": 0,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 4,
+          "second_only_correct": 1,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 3,
+          "both_wrong": 0,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 4,
+          "second_only_correct": 1,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 4,
+          "both_wrong": 0,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 4,
+          "second_only_correct": 0,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 3,
+          "both_wrong": 0,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 4,
+          "second_only_correct": 1,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 3,
+          "both_wrong": 0,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 4,
+          "second_only_correct": 1,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 4,
+          "both_wrong": 0,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 4,
+          "second_only_correct": 0,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        }
+      ],
+      "pareto": {
+        "dimensions": [
+          "worst_trial_errors",
+          "mean_cost_usd",
+          "median_trial_p95_latency_ms"
+        ],
+        "frontier": [
+          "typesafe-jev"
+        ],
+        "targets": [
+          {
+            "error_counts_by_trial": [
+              1,
+              1,
+              1
+            ],
+            "mean_cost_usd": 0.00184784,
+            "median_trial_p50_latency_ms": 562.5,
+            "median_trial_p95_latency_ms": 844.3499999999999,
+            "non_dominated": false,
+            "target_id": "openrouter-gemini-2.5-flash",
+            "total_attempt_count": 12,
+            "total_cost_usd": 0.00554352,
+            "total_input_tokens": 19530,
+            "total_output_tokens": 60,
+            "worst_trial_errors": 1
+          },
+          {
+            "error_counts_by_trial": [
+              0,
+              0,
+              0
+            ],
+            "mean_cost_usd": 0.017135,
+            "median_trial_p50_latency_ms": 3492.0,
+            "median_trial_p95_latency_ms": 3816.6499999999996,
+            "non_dominated": false,
+            "target_id": "openrouter-gemini-3.8-flash",
+            "total_attempt_count": 12,
+            "total_cost_usd": 0.051405000000000006,
+            "total_input_tokens": 19950,
+            "total_output_tokens": 9718,
+            "worst_trial_errors": 0
+          },
+          {
+            "error_counts_by_trial": [
+              0,
+              0,
+              0
+            ],
+            "mean_cost_usd": 0.000354606,
+            "median_trial_p50_latency_ms": 625.0,
+            "median_trial_p95_latency_ms": 745.5999999999999,
+            "non_dominated": true,
+            "target_id": "typesafe-jev",
+            "total_attempt_count": 12,
+            "total_cost_usd": 0.001063818,
+            "total_input_tokens": 25329,
+            "total_output_tokens": 312,
+            "worst_trial_errors": 0
+          }
+        ]
+      },
+      "recommended_use": "Retain the incumbent until more than four immutable labeled cases exist.",
+      "scored_units_per_trial": 4,
+      "targets": [
+        {
+          "median_trial_p50_latency_ms": 625.0,
+          "median_trial_p95_latency_ms": 745.5999999999999,
+          "projected_cost_per_1000_scored_units_usd": "0.088651500",
+          "stability": {
+            "flip_count": 0,
+            "judgment_count": 4,
+            "unanimous_count": 4,
+            "unanimous_rate": 1.0,
+            "unavailable_count": 0
+          },
+          "target_id": "typesafe-jev",
+          "total_attempts": 12,
+          "total_cost_usd": "0.001063818",
+          "total_input_tokens": 25329,
+          "total_output_tokens": 312,
+          "trials": [
+            {
+              "accuracy": 1.0,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3976353643835254,
+                "successes": 4,
+                "total": 4,
+                "upper": 1.0
+              },
+              "attempts": 4,
+              "completed": 4,
+              "correct": 4,
+              "cost_usd": "0.000354606",
+              "failed": 0,
+              "input_tokens": 8443,
+              "output_tokens": 104,
+              "p50_latency_ms": 690.0,
+              "p95_latency_ms": 749.2,
+              "scored_units": 4,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 1.0,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3976353643835254,
+                "successes": 4,
+                "total": 4,
+                "upper": 1.0
+              },
+              "attempts": 4,
+              "completed": 4,
+              "correct": 4,
+              "cost_usd": "0.000354606",
+              "failed": 0,
+              "input_tokens": 8443,
+              "output_tokens": 104,
+              "p50_latency_ms": 625.0,
+              "p95_latency_ms": 659.05,
+              "scored_units": 4,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 1.0,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3976353643835254,
+                "successes": 4,
+                "total": 4,
+                "upper": 1.0
+              },
+              "attempts": 4,
+              "completed": 4,
+              "correct": 4,
+              "cost_usd": "0.000354606",
+              "failed": 0,
+              "input_tokens": 8443,
+              "output_tokens": 104,
+              "p50_latency_ms": 619.0,
+              "p95_latency_ms": 745.5999999999999,
+              "scored_units": 4,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        },
+        {
+          "median_trial_p50_latency_ms": 562.5,
+          "median_trial_p95_latency_ms": 844.3499999999999,
+          "projected_cost_per_1000_scored_units_usd": "0.461960000",
+          "stability": {
+            "flip_count": 0,
+            "judgment_count": 4,
+            "unanimous_count": 4,
+            "unanimous_rate": 1.0,
+            "unavailable_count": 0
+          },
+          "target_id": "openrouter-gemini-2.5-flash",
+          "total_attempts": 12,
+          "total_cost_usd": "0.005543520",
+          "total_input_tokens": 19530,
+          "total_output_tokens": 60,
+          "trials": [
+            {
+              "accuracy": 0.75,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.19412044968324343,
+                "successes": 3,
+                "total": 4,
+                "upper": 0.9936905367902902
+              },
+              "attempts": 4,
+              "completed": 4,
+              "correct": 3,
+              "cost_usd": "0.002003000",
+              "failed": 0,
+              "input_tokens": 6510,
+              "output_tokens": 20,
+              "p50_latency_ms": 562.5,
+              "p95_latency_ms": 844.3499999999999,
+              "scored_units": 4,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.75,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.19412044968324343,
+                "successes": 3,
+                "total": 4,
+                "upper": 0.9936905367902902
+              },
+              "attempts": 4,
+              "completed": 4,
+              "correct": 3,
+              "cost_usd": "0.002003000",
+              "failed": 0,
+              "input_tokens": 6510,
+              "output_tokens": 20,
+              "p50_latency_ms": 522.5,
+              "p95_latency_ms": 682.65,
+              "scored_units": 4,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.75,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.19412044968324343,
+                "successes": 3,
+                "total": 4,
+                "upper": 0.9936905367902902
+              },
+              "attempts": 4,
+              "completed": 4,
+              "correct": 3,
+              "cost_usd": "0.001537520",
+              "failed": 0,
+              "input_tokens": 6510,
+              "output_tokens": 20,
+              "p50_latency_ms": 630.0,
+              "p95_latency_ms": 1562.6499999999996,
+              "scored_units": 4,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        },
+        {
+          "median_trial_p50_latency_ms": 3492.0,
+          "median_trial_p95_latency_ms": 3816.6499999999996,
+          "projected_cost_per_1000_scored_units_usd": "4.283750000",
+          "stability": {
+            "flip_count": 0,
+            "judgment_count": 4,
+            "unanimous_count": 4,
+            "unanimous_rate": 1.0,
+            "unavailable_count": 0
+          },
+          "target_id": "openrouter-gemini-3.8-flash",
+          "total_attempts": 12,
+          "total_cost_usd": "0.051405000",
+          "total_input_tokens": 19950,
+          "total_output_tokens": 9718,
+          "trials": [
+            {
+              "accuracy": 1.0,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3976353643835254,
+                "successes": 4,
+                "total": 4,
+                "upper": 1.0
+              },
+              "attempts": 4,
+              "completed": 4,
+              "correct": 4,
+              "cost_usd": "0.015768750",
+              "failed": 0,
+              "input_tokens": 6650,
+              "output_tokens": 2875,
+              "p50_latency_ms": 3107.0,
+              "p95_latency_ms": 3663.1499999999996,
+              "scored_units": 4,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 1.0,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3976353643835254,
+                "successes": 4,
+                "total": 4,
+                "upper": 1.0
+              },
+              "attempts": 4,
+              "completed": 4,
+              "correct": 4,
+              "cost_usd": "0.017842500",
+              "failed": 0,
+              "input_tokens": 6650,
+              "output_tokens": 3428,
+              "p50_latency_ms": 3696.5,
+              "p95_latency_ms": 4222.0,
+              "scored_units": 4,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 1.0,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.3976353643835254,
+                "successes": 4,
+                "total": 4,
+                "upper": 1.0
+              },
+              "attempts": 4,
+              "completed": 4,
+              "correct": 4,
+              "cost_usd": "0.017793750",
+              "failed": 0,
+              "input_tokens": 6650,
+              "output_tokens": 3415,
+              "p50_latency_ms": 3492.0,
+              "p95_latency_ms": 3816.6499999999996,
+              "scored_units": 4,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        }
+      ],
+      "trial_count": 3
+    },
+    {
+      "case_count": 6,
+      "concern": "daily_theme",
+      "context_status": "safe",
+      "deployment_conclusion": "not_established",
+      "evidence_status": "derived_task_only",
+      "jev_constraint_results": [
+        {
+          "must_link_passed": 6,
+          "must_link_total": 13,
+          "must_separate_passed": 14,
+          "must_separate_total": 14
+        },
+        {
+          "must_link_passed": 6,
+          "must_link_total": 13,
+          "must_separate_passed": 14,
+          "must_separate_total": 14
+        },
+        {
+          "must_link_passed": 6,
+          "must_link_total": 13,
+          "must_separate_passed": 14,
+          "must_separate_total": 14
+        }
+      ],
+      "limitation": "Pair judgments do not establish transitivity or report usefulness.",
+      "paired_comparisons": [
+        {
+          "both_correct": 17,
+          "both_wrong": 6,
+          "first_only_correct": 4,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.125,
+          "paired_count": 27,
+          "second_only_correct": 0,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 20,
+          "both_wrong": 6,
+          "first_only_correct": 1,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 27,
+          "second_only_correct": 0,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 17,
+          "both_wrong": 7,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.25,
+          "paired_count": 27,
+          "second_only_correct": 3,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-001",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 17,
+          "both_wrong": 7,
+          "first_only_correct": 3,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.25,
+          "paired_count": 27,
+          "second_only_correct": 0,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 20,
+          "both_wrong": 7,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 27,
+          "second_only_correct": 0,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 17,
+          "both_wrong": 7,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.25,
+          "paired_count": 27,
+          "second_only_correct": 3,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-002",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 17,
+          "both_wrong": 7,
+          "first_only_correct": 3,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.25,
+          "paired_count": 27,
+          "second_only_correct": 0,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 19,
+          "both_wrong": 6,
+          "first_only_correct": 1,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 1.0,
+          "paired_count": 27,
+          "second_only_correct": 1,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        },
+        {
+          "both_correct": 17,
+          "both_wrong": 7,
+          "first_only_correct": 0,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.25,
+          "paired_count": 27,
+          "second_only_correct": 3,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "jev-aspect-v1:trial-003",
+          "unavailable_count": 0
+        }
+      ],
+      "pareto": {
+        "dimensions": [
+          "worst_trial_errors",
+          "mean_cost_usd",
+          "median_trial_p95_latency_ms"
+        ],
+        "frontier": [
+          "typesafe-jev"
+        ],
+        "targets": [
+          {
+            "error_counts_by_trial": [
+              6,
+              7,
+              7
+            ],
+            "mean_cost_usd": 0.004404,
+            "median_trial_p50_latency_ms": 551.0,
+            "median_trial_p95_latency_ms": 916.8,
+            "non_dominated": false,
+            "target_id": "openrouter-gemini-2.5-flash",
+            "total_attempt_count": 81,
+            "total_cost_usd": 0.013212,
+            "total_input_tokens": 40665,
+            "total_output_tokens": 405,
+            "worst_trial_errors": 7
+          },
+          {
+            "error_counts_by_trial": [
+              10,
+              10,
+              10
+            ],
+            "mean_cost_usd": 0.04329125,
+            "median_trial_p50_latency_ms": 1926.0,
+            "median_trial_p95_latency_ms": 3125.3999999999996,
+            "non_dominated": false,
+            "target_id": "openrouter-gemini-3.8-flash",
+            "total_attempt_count": 81,
+            "total_cost_usd": 0.12987375,
+            "total_input_tokens": 43500,
+            "total_output_tokens": 25933,
+            "worst_trial_errors": 10
+          },
+          {
+            "error_counts_by_trial": [
+              7,
+              7,
+              7
+            ],
+            "mean_cost_usd": 0.000850038,
+            "median_trial_p50_latency_ms": 622.0,
+            "median_trial_p95_latency_ms": 694.8,
+            "non_dominated": true,
+            "target_id": "typesafe-jev",
+            "total_attempt_count": 81,
+            "total_cost_usd": 0.002550114,
+            "total_input_tokens": 60717,
+            "total_output_tokens": 1782,
+            "worst_trial_errors": 7
+          }
+        ]
+      },
+      "recommended_use": "Do not replace complete theme generation from pair judgments; transitivity, partition validity, and report usefulness are untested.",
+      "scored_units_per_trial": 27,
+      "targets": [
+        {
+          "median_trial_p50_latency_ms": 622.0,
+          "median_trial_p95_latency_ms": 694.8,
+          "projected_cost_per_1000_scored_units_usd": "0.031482889",
+          "stability": {
+            "flip_count": 0,
+            "judgment_count": 27,
+            "unanimous_count": 27,
+            "unanimous_rate": 1.0,
+            "unavailable_count": 0
+          },
+          "target_id": "typesafe-jev",
+          "total_attempts": 81,
+          "total_cost_usd": "0.002550114",
+          "total_input_tokens": 60717,
+          "total_output_tokens": 1782,
+          "trials": [
+            {
+              "accuracy": 0.7407407407407407,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.5371512577238284,
+                "successes": 20,
+                "total": 27,
+                "upper": 0.8888554371545576
+              },
+              "attempts": 27,
+              "completed": 27,
+              "correct": 20,
+              "cost_usd": "0.000850038",
+              "failed": 0,
+              "input_tokens": 20239,
+              "output_tokens": 594,
+              "p50_latency_ms": 622.0,
+              "p95_latency_ms": 694.8,
+              "scored_units": 27,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.7407407407407407,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.5371512577238284,
+                "successes": 20,
+                "total": 27,
+                "upper": 0.8888554371545576
+              },
+              "attempts": 27,
+              "completed": 27,
+              "correct": 20,
+              "cost_usd": "0.000850038",
+              "failed": 0,
+              "input_tokens": 20239,
+              "output_tokens": 594,
+              "p50_latency_ms": 628.0,
+              "p95_latency_ms": 704.3,
+              "scored_units": 27,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.7407407407407407,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.5371512577238284,
+                "successes": 20,
+                "total": 27,
+                "upper": 0.8888554371545576
+              },
+              "attempts": 27,
+              "completed": 27,
+              "correct": 20,
+              "cost_usd": "0.000850038",
+              "failed": 0,
+              "input_tokens": 20239,
+              "output_tokens": 594,
+              "p50_latency_ms": 612.0,
+              "p95_latency_ms": 692.7,
+              "scored_units": 27,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        },
+        {
+          "median_trial_p50_latency_ms": 551.0,
+          "median_trial_p95_latency_ms": 916.8,
+          "projected_cost_per_1000_scored_units_usd": "0.163111111",
+          "stability": {
+            "flip_count": 3,
+            "judgment_count": 27,
+            "unanimous_count": 24,
+            "unanimous_rate": 0.8888888888888888,
+            "unavailable_count": 0
+          },
+          "target_id": "openrouter-gemini-2.5-flash",
+          "total_attempts": 81,
+          "total_cost_usd": "0.013212000",
+          "total_input_tokens": 40665,
+          "total_output_tokens": 405,
+          "trials": [
+            {
+              "accuracy": 0.7777777777777778,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.5774169399556213,
+                "successes": 21,
+                "total": 27,
+                "upper": 0.9137830600524333
+              },
+              "attempts": 27,
+              "completed": 27,
+              "correct": 21,
+              "cost_usd": "0.004404000",
+              "failed": 0,
+              "input_tokens": 13555,
+              "output_tokens": 135,
+              "p50_latency_ms": 551.0,
+              "p95_latency_ms": 916.8,
+              "scored_units": 27,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.7407407407407407,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.5371512577238284,
+                "successes": 20,
+                "total": 27,
+                "upper": 0.8888554371545576
+              },
+              "attempts": 27,
+              "completed": 27,
+              "correct": 20,
+              "cost_usd": "0.004404000",
+              "failed": 0,
+              "input_tokens": 13555,
+              "output_tokens": 135,
+              "p50_latency_ms": 526.0,
+              "p95_latency_ms": 979.3,
+              "scored_units": 27,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.7407407407407407,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.5371512577238284,
+                "successes": 20,
+                "total": 27,
+                "upper": 0.8888554371545576
+              },
+              "attempts": 27,
+              "completed": 27,
+              "correct": 20,
+              "cost_usd": "0.004404000",
+              "failed": 0,
+              "input_tokens": 13555,
+              "output_tokens": 135,
+              "p50_latency_ms": 561.0,
+              "p95_latency_ms": 902.3,
+              "scored_units": 27,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        },
+        {
+          "median_trial_p50_latency_ms": 1926.0,
+          "median_trial_p95_latency_ms": 3125.3999999999996,
+          "projected_cost_per_1000_scored_units_usd": "1.603379630",
+          "stability": {
+            "flip_count": 0,
+            "judgment_count": 27,
+            "unanimous_count": 27,
+            "unanimous_rate": 1.0,
+            "unavailable_count": 0
+          },
+          "target_id": "openrouter-gemini-3.8-flash",
+          "total_attempts": 81,
+          "total_cost_usd": "0.129873750",
+          "total_input_tokens": 43500,
+          "total_output_tokens": 25933,
+          "trials": [
+            {
+              "accuracy": 0.6296296296296297,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.4236795725042959,
+                "successes": 17,
+                "total": 27,
+                "upper": 0.8059928412848649
+              },
+              "attempts": 27,
+              "completed": 27,
+              "correct": 17,
+              "cost_usd": "0.042378750",
+              "failed": 0,
+              "input_tokens": 14500,
+              "output_tokens": 8401,
+              "p50_latency_ms": 1847.0,
+              "p95_latency_ms": 3527.6999999999994,
+              "scored_units": 27,
+              "trial_ref": "jev-aspect-v1:trial-001"
+            },
+            {
+              "accuracy": 0.6296296296296297,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.4236795725042959,
+                "successes": 17,
+                "total": 27,
+                "upper": 0.8059928412848649
+              },
+              "attempts": 27,
+              "completed": 27,
+              "correct": 17,
+              "cost_usd": "0.042836250",
+              "failed": 0,
+              "input_tokens": 14500,
+              "output_tokens": 8523,
+              "p50_latency_ms": 1926.0,
+              "p95_latency_ms": 3125.3999999999996,
+              "scored_units": 27,
+              "trial_ref": "jev-aspect-v1:trial-002"
+            },
+            {
+              "accuracy": 0.6296296296296297,
+              "accuracy_95_exact_interval": {
+                "confidence_level": 0.95,
+                "lower": 0.4236795725042959,
+                "successes": 17,
+                "total": 27,
+                "upper": 0.8059928412848649
+              },
+              "attempts": 27,
+              "completed": 27,
+              "correct": 17,
+              "cost_usd": "0.044658750",
+              "failed": 0,
+              "input_tokens": 14500,
+              "output_tokens": 9009,
+              "p50_latency_ms": 2057.0,
+              "p95_latency_ms": 2693.2,
+              "scored_units": 27,
+              "trial_ref": "jev-aspect-v1:trial-003"
+            }
+          ]
+        }
+      ],
+      "trial_count": 3
+    }
+  ],
+  "overall": {
+    "production_migration_approved": false,
+    "reason_codes": [
+      "job_relevance_gate_failed",
+      "news_tier_context_unsafe",
+      "news_sentiment_not_evaluable",
+      "derived_aspects_do_not_validate_complete_pipeline_outputs"
+    ]
+  },
+  "product_relevance": [
+    {
+      "case_count": 174,
+      "concern": "relevance",
+      "manifest_version": "news-evaluation-2026-09-11-v11",
+      "paired_comparisons": [
+        {
+          "both_correct": 134,
+          "both_wrong": 13,
+          "first_only_correct": 8,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.052238985896110535,
+          "second_only_correct": 19,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "current-policy-v2-20260919:trial-001"
+        },
+        {
+          "both_correct": 136,
+          "both_wrong": 22,
+          "first_only_correct": 6,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.454498291015625,
+          "second_only_correct": 10,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "current-policy-v2-20260919:trial-001"
+        },
+        {
+          "both_correct": 137,
+          "both_wrong": 12,
+          "first_only_correct": 16,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.2295229434967041,
+          "second_only_correct": 9,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "current-policy-v2-20260919:trial-001"
+        },
+        {
+          "both_correct": 132,
+          "both_wrong": 13,
+          "first_only_correct": 9,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.06142834573984146,
+          "second_only_correct": 20,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "current-policy-v2-20260919:trial-002"
+        },
+        {
+          "both_correct": 136,
+          "both_wrong": 22,
+          "first_only_correct": 5,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.210113525390625,
+          "second_only_correct": 11,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "current-policy-v2-20260919:trial-002"
+        },
+        {
+          "both_correct": 137,
+          "both_wrong": 12,
+          "first_only_correct": 15,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.42435622215270996,
+          "second_only_correct": 10,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "current-policy-v2-20260919:trial-002"
+        },
+        {
+          "both_correct": 132,
+          "both_wrong": 14,
+          "first_only_correct": 8,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.03569813817739487,
+          "second_only_correct": 20,
+          "second_target_id": "openrouter-gemini-3.8-flash",
+          "trial_ref": "current-policy-v2-20260919:trial-003"
+        },
+        {
+          "both_correct": 134,
+          "both_wrong": 22,
+          "first_only_correct": 6,
+          "first_target_id": "openrouter-gemini-2.5-flash",
+          "mcnemar_two_sided_exact_p_value": 0.237884521484375,
+          "second_only_correct": 12,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "current-policy-v2-20260919:trial-003"
+        },
+        {
+          "both_correct": 136,
+          "both_wrong": 12,
+          "first_only_correct": 16,
+          "first_target_id": "openrouter-gemini-3.8-flash",
+          "mcnemar_two_sided_exact_p_value": 0.32693958282470703,
+          "second_only_correct": 10,
+          "second_target_id": "typesafe-jev",
+          "trial_ref": "current-policy-v2-20260919:trial-003"
+        }
+      ],
+      "pareto": {
+        "all_targets_frontier": [
+          "openrouter-gemini-3.8-flash",
+          "typesafe-jev"
+        ],
+        "dimensions": [
+          "worst_trial_quality_errors",
+          "mean_cost_per_article_usd",
+          "median_trial_p95_article_latency_ms"
+        ],
+        "eligible_targets_frontier": [
+          "typesafe-jev"
+        ],
+        "targets": [
+          {
+            "deployment_eligible": false,
+            "mean_cost_per_article_usd": 0.0005101793103448276,
+            "median_trial_p95_article_latency_ms": 857.0,
+            "non_dominated_among_all_targets": false,
+            "non_dominated_among_eligible_targets": false,
+            "target_id": "openrouter-gemini-2.5-flash",
+            "worst_trial_quality_errors": 34
+          },
+          {
+            "deployment_eligible": false,
+            "mean_cost_per_article_usd": 0.003916037356321839,
+            "median_trial_p95_article_latency_ms": 5485.8499999999985,
+            "non_dominated_among_all_targets": true,
+            "non_dominated_among_eligible_targets": false,
+            "target_id": "openrouter-gemini-3.8-flash",
+            "worst_trial_quality_errors": 22
+          },
+          {
+            "deployment_eligible": true,
+            "mean_cost_per_article_usd": 8.817755172413793e-05,
+            "median_trial_p95_article_latency_ms": 824.7,
+            "non_dominated_among_all_targets": true,
+            "non_dominated_among_eligible_targets": true,
+            "target_id": "typesafe-jev",
+            "worst_trial_quality_errors": 28
+          }
+        ]
+      },
+      "product": "news",
+      "recommended_use": "Jev is eligible for guarded relevance use under the registered quality gate; retain full-state incumbent fallback above the context guard or on rejection.",
+      "repeated_trials_are_independent": false,
+      "source_artifact_id": "083d5ae5ba73686511f5eb01ce770dc2e5826de22cf27df76e205bd9b946216a",
+      "targets": [
+        {
+          "cost_basis": "estimated-input-rate",
+          "coverage_pass": true,
+          "deployment_eligible": true,
+          "median_trial_p95_latency_ms": 824.7,
+          "projected_cost_per_1000_articles_usd": "0.088177552",
+          "quality_pass": true,
+          "stability": {
+            "case_count": 174,
+            "flip_count": 8,
+            "unanimous_case_count": 169,
+            "unanimous_verdict_rate": 0.9712643678160919
+          },
+          "target_id": "typesafe-jev",
+          "total_cost_usd": "0.046028682",
+          "total_input_tokens": 1095921,
+          "total_output_tokens": 11484,
+          "total_requests": 522,
+          "trials": [
+            {
+              "accuracy": 0.8390804597701149,
+              "case_count": 174,
+              "completed": 174,
+              "correct": 146,
+              "cost_usd": "0.015342894",
+              "failed": 0,
+              "fn": 0,
+              "fp": 28,
+              "input_tokens": 365307,
+              "output_tokens": 3828,
+              "p50_latency_ms": 642.5,
+              "p95_latency_ms": 824.7,
+              "precision": 0.8145695364238411,
+              "precision_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.7432751277444662,
+                "successes": 123,
+                "total": 151,
+                "upper": 0.8731042984985438
+              },
+              "recall": 1.0,
+              "recall_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.9704543744729277,
+                "successes": 123,
+                "total": 123,
+                "upper": 1.0
+              },
+              "requests": 174,
+              "tn": 23,
+              "tp": 123,
+              "trial_ref": "current-policy-v2-20260919:trial-001"
+            },
+            {
+              "accuracy": 0.8448275862068966,
+              "case_count": 174,
+              "completed": 174,
+              "correct": 147,
+              "cost_usd": "0.015342894",
+              "failed": 0,
+              "fn": 0,
+              "fp": 27,
+              "input_tokens": 365307,
+              "output_tokens": 3828,
+              "p50_latency_ms": 643.0,
+              "p95_latency_ms": 832.05,
+              "precision": 0.82,
+              "precision_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.7490221049939838,
+                "successes": 123,
+                "total": 150,
+                "upper": 0.8779003724223797
+              },
+              "recall": 1.0,
+              "recall_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.9704543744729277,
+                "successes": 123,
+                "total": 123,
+                "upper": 1.0
+              },
+              "requests": 174,
+              "tn": 24,
+              "tp": 123,
+              "trial_ref": "current-policy-v2-20260919:trial-002"
+            },
+            {
+              "accuracy": 0.8390804597701149,
+              "case_count": 174,
+              "completed": 174,
+              "correct": 146,
+              "cost_usd": "0.015342894",
+              "failed": 0,
+              "fn": 0,
+              "fp": 28,
+              "input_tokens": 365307,
+              "output_tokens": 3828,
+              "p50_latency_ms": 636.0,
+              "p95_latency_ms": 820.0,
+              "precision": 0.8145695364238411,
+              "precision_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.7432751277444662,
+                "successes": 123,
+                "total": 151,
+                "upper": 0.8731042984985438
+              },
+              "recall": 1.0,
+              "recall_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.9704543744729277,
+                "successes": 123,
+                "total": 123,
+                "upper": 1.0
+              },
+              "requests": 174,
+              "tn": 23,
+              "tp": 123,
+              "trial_ref": "current-policy-v2-20260919:trial-003"
+            }
+          ]
+        },
+        {
+          "cost_basis": "provider-reported",
+          "coverage_pass": true,
+          "deployment_eligible": false,
+          "median_trial_p95_latency_ms": 857.0,
+          "projected_cost_per_1000_articles_usd": "0.510179310",
+          "quality_pass": false,
+          "stability": {
+            "case_count": 174,
+            "flip_count": 8,
+            "unanimous_case_count": 169,
+            "unanimous_verdict_rate": 0.9712643678160919
+          },
+          "target_id": "openrouter-gemini-2.5-flash",
+          "total_cost_usd": "0.266313600",
+          "total_input_tokens": 865962,
+          "total_output_tokens": 2610,
+          "total_requests": 522,
+          "trials": [
+            {
+              "accuracy": 0.8160919540229885,
+              "case_count": 174,
+              "completed": 174,
+              "correct": 142,
+              "cost_usd": "0.088771200",
+              "failed": 0,
+              "fn": 4,
+              "fp": 28,
+              "input_tokens": 288654,
+              "output_tokens": 870,
+              "p50_latency_ms": 675.0,
+              "p95_latency_ms": 945.2499999999999,
+              "precision": 0.8095238095238095,
+              "precision_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.7366115214461584,
+                "successes": 119,
+                "total": 147,
+                "upper": 0.8695404162198532
+              },
+              "recall": 0.967479674796748,
+              "recall_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.9188274965108265,
+                "successes": 119,
+                "total": 123,
+                "upper": 0.9910695673443501
+              },
+              "requests": 174,
+              "tn": 23,
+              "tp": 119,
+              "trial_ref": "current-policy-v2-20260919:trial-001"
+            },
+            {
+              "accuracy": 0.8103448275862069,
+              "case_count": 174,
+              "completed": 174,
+              "correct": 141,
+              "cost_usd": "0.088771200",
+              "failed": 0,
+              "fn": 5,
+              "fp": 28,
+              "input_tokens": 288654,
+              "output_tokens": 870,
+              "p50_latency_ms": 607.5,
+              "p95_latency_ms": 834.8999999999999,
+              "precision": 0.8082191780821918,
+              "precision_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.7348914154004629,
+                "successes": 118,
+                "total": 146,
+                "upper": 0.8686178978289223
+              },
+              "recall": 0.959349593495935,
+              "recall_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.9076843631171048,
+                "successes": 118,
+                "total": 123,
+                "upper": 0.9866712180315824
+              },
+              "requests": 174,
+              "tn": 23,
+              "tp": 118,
+              "trial_ref": "current-policy-v2-20260919:trial-002"
+            },
+            {
+              "accuracy": 0.8045977011494253,
+              "case_count": 174,
+              "completed": 174,
+              "correct": 140,
+              "cost_usd": "0.088771200",
+              "failed": 0,
+              "fn": 6,
+              "fp": 28,
+              "input_tokens": 288654,
+              "output_tokens": 870,
+              "p50_latency_ms": 620.0,
+              "p95_latency_ms": 857.0,
+              "precision": 0.8068965517241379,
+              "precision_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.7331487792035252,
+                "successes": 117,
+                "total": 145,
+                "upper": 0.8676822194032974
+              },
+              "recall": 0.9512195121951219,
+              "recall_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.896848109840565,
+                "successes": 117,
+                "total": 123,
+                "upper": 0.9818905878470316
+              },
+              "requests": 174,
+              "tn": 23,
+              "tp": 117,
+              "trial_ref": "current-policy-v2-20260919:trial-003"
+            }
+          ]
+        },
+        {
+          "cost_basis": "provider-reported",
+          "coverage_pass": true,
+          "deployment_eligible": false,
+          "median_trial_p95_latency_ms": 5485.8499999999985,
+          "projected_cost_per_1000_articles_usd": "3.916037356",
+          "quality_pass": false,
+          "stability": {
+            "case_count": 174,
+            "flip_count": 11,
+            "unanimous_case_count": 165,
+            "unanimous_verdict_rate": 0.9482758620689655
+          },
+          "target_id": "openrouter-gemini-3.8-flash",
+          "total_cost_usd": "2.044171500",
+          "total_input_tokens": 884232,
+          "total_output_tokens": 368266,
+          "total_requests": 522,
+          "trials": [
+            {
+              "accuracy": 0.8793103448275862,
+              "case_count": 174,
+              "completed": 174,
+              "correct": 153,
+              "cost_usd": "0.681119250",
+              "failed": 0,
+              "fn": 9,
+              "fp": 12,
+              "input_tokens": 294744,
+              "output_tokens": 122683,
+              "p50_latency_ms": 3305.5,
+              "p95_latency_ms": 5485.8499999999985,
+              "precision": 0.9047619047619048,
+              "precision_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.8395473903025874,
+                "successes": 114,
+                "total": 126,
+                "upper": 0.9498147836997546
+              },
+              "recall": 0.926829268292683,
+              "recall_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.8656420256837241,
+                "successes": 114,
+                "total": 123,
+                "upper": 0.9659970822967268
+              },
+              "requests": 174,
+              "tn": 39,
+              "tp": 114,
+              "trial_ref": "current-policy-v2-20260919:trial-001"
+            },
+            {
+              "accuracy": 0.8735632183908046,
+              "case_count": 174,
+              "completed": 174,
+              "correct": 152,
+              "cost_usd": "0.680830500",
+              "failed": 0,
+              "fn": 10,
+              "fp": 12,
+              "input_tokens": 294744,
+              "output_tokens": 122606,
+              "p50_latency_ms": 3235.5,
+              "p95_latency_ms": 5429.7,
+              "precision": 0.904,
+              "precision_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.8383113897831893,
+                "successes": 113,
+                "total": 125,
+                "upper": 0.9494051276485567
+              },
+              "recall": 0.9186991869918699,
+              "recall_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.8555656770814677,
+                "successes": 113,
+                "total": 123,
+                "upper": 0.9603240503354615
+              },
+              "requests": 174,
+              "tn": 39,
+              "tp": 113,
+              "trial_ref": "current-policy-v2-20260919:trial-002"
+            },
+            {
+              "accuracy": 0.8735632183908046,
+              "case_count": 174,
+              "completed": 174,
+              "correct": 152,
+              "cost_usd": "0.682221750",
+              "failed": 0,
+              "fn": 10,
+              "fp": 12,
+              "input_tokens": 294744,
+              "output_tokens": 122977,
+              "p50_latency_ms": 3430.5,
+              "p95_latency_ms": 5993.299999999997,
+              "precision": 0.904,
+              "precision_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.8383113897831893,
+                "successes": 113,
+                "total": 125,
+                "upper": 0.9494051276485567
+              },
+              "recall": 0.9186991869918699,
+              "recall_95_exact_ci": {
+                "confidence_level": 0.95,
+                "lower": 0.8555656770814677,
+                "successes": 113,
+                "total": 123,
+                "upper": 0.9603240503354615
+              },
+              "requests": 174,
+              "tn": 39,
+              "tp": 113,
+              "trial_ref": "current-policy-v2-20260919:trial-003"
+            }
+          ]
+        }
+      ],
+      "trial_count": 3
+    },
+    {
+      "atomic_architecture_evaluated": false,
+      "benchmark_identity_digest": "50fc21b80fff3152dcf8af63abe79aaba0f8313319f67d0f07b3c8ffe97a2a46",
+      "case_entries": 146,
+      "concern": "relevance",
+      "current_policy_only": true,
+      "distinct_urls": 143,
+      "paired_comparisons": [
+        {
+          "a_correct_b_wrong_count": 10,
+          "a_wrong_b_correct_count": 10,
+          "both_correct_count": 96,
+          "both_wrong_count": 5,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "direct",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-2.5-flash",
+          "trial": 1,
+          "trial_ref_a": "66d0eea4fa5ab595fcfa4338153e3ad7285cf93b9291a4524a6fb691a03cda11",
+          "trial_ref_b": "7a07ec8a906e7d39f14cf40626950de8a75246f1b0cc921c46e4c9089ecaa9fc"
+        },
+        {
+          "a_correct_b_wrong_count": 7,
+          "a_wrong_b_correct_count": 5,
+          "both_correct_count": 99,
+          "both_wrong_count": 10,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "0.7744140625",
+          "suite": "direct",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 1,
+          "trial_ref_a": "66d0eea4fa5ab595fcfa4338153e3ad7285cf93b9291a4524a6fb691a03cda11",
+          "trial_ref_b": "e0f0e35487371e95e430df71b8c4f2b1d46b108d47de8e37facbc45ec0717c73"
+        },
+        {
+          "a_correct_b_wrong_count": 10,
+          "a_wrong_b_correct_count": 8,
+          "both_correct_count": 96,
+          "both_wrong_count": 7,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "0.814529418945",
+          "suite": "direct",
+          "target_a": "google-gemini-2.5-flash",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 1,
+          "trial_ref_a": "7a07ec8a906e7d39f14cf40626950de8a75246f1b0cc921c46e4c9089ecaa9fc",
+          "trial_ref_b": "e0f0e35487371e95e430df71b8c4f2b1d46b108d47de8e37facbc45ec0717c73"
+        },
+        {
+          "a_correct_b_wrong_count": 8,
+          "a_wrong_b_correct_count": 10,
+          "both_correct_count": 96,
+          "both_wrong_count": 7,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "0.814529418945",
+          "suite": "direct",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-2.5-flash",
+          "trial": 2,
+          "trial_ref_a": "5d72d8cb2b34190f3f0b52d7498ba4cc52b0be84d31e0879b4fcdd0571af57b7",
+          "trial_ref_b": "e4d42c7b3d406c68bd31c9cd4aff51f3afc2b9f255aadcc227c8920562cbb053"
+        },
+        {
+          "a_correct_b_wrong_count": 6,
+          "a_wrong_b_correct_count": 7,
+          "both_correct_count": 98,
+          "both_wrong_count": 10,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "direct",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 2,
+          "trial_ref_a": "5d72d8cb2b34190f3f0b52d7498ba4cc52b0be84d31e0879b4fcdd0571af57b7",
+          "trial_ref_b": "e1449785f01b90fc9df1fc71587a012fdecd5e4e2305ca47f891700e7ec068b5"
+        },
+        {
+          "a_correct_b_wrong_count": 9,
+          "a_wrong_b_correct_count": 8,
+          "both_correct_count": 97,
+          "both_wrong_count": 7,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "direct",
+          "target_a": "google-gemini-2.5-flash",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 2,
+          "trial_ref_a": "e4d42c7b3d406c68bd31c9cd4aff51f3afc2b9f255aadcc227c8920562cbb053",
+          "trial_ref_b": "e1449785f01b90fc9df1fc71587a012fdecd5e4e2305ca47f891700e7ec068b5"
+        },
+        {
+          "a_correct_b_wrong_count": 10,
+          "a_wrong_b_correct_count": 8,
+          "both_correct_count": 96,
+          "both_wrong_count": 7,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "0.814529418945",
+          "suite": "direct",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-2.5-flash",
+          "trial": 3,
+          "trial_ref_a": "cf32d44758103da9c10a26bedb12a96c566c275263e635b4beef0e6f5d7b9e00",
+          "trial_ref_b": "99aebf508daddba2c87fa1fcdde7c66f03895b778d49f78f9d461b43bf5bda35"
+        },
+        {
+          "a_correct_b_wrong_count": 5,
+          "a_wrong_b_correct_count": 5,
+          "both_correct_count": 101,
+          "both_wrong_count": 10,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "direct",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 3,
+          "trial_ref_a": "cf32d44758103da9c10a26bedb12a96c566c275263e635b4beef0e6f5d7b9e00",
+          "trial_ref_b": "6be50498072efae5669523e727602f81a7b468312ac6c1f0a212824723bc94dc"
+        },
+        {
+          "a_correct_b_wrong_count": 8,
+          "a_wrong_b_correct_count": 10,
+          "both_correct_count": 96,
+          "both_wrong_count": 7,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "0.814529418945",
+          "suite": "direct",
+          "target_a": "google-gemini-2.5-flash",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 3,
+          "trial_ref_a": "99aebf508daddba2c87fa1fcdde7c66f03895b778d49f78f9d461b43bf5bda35",
+          "trial_ref_b": "6be50498072efae5669523e727602f81a7b468312ac6c1f0a212824723bc94dc"
+        },
+        {
+          "a_correct_b_wrong_count": 2,
+          "a_wrong_b_correct_count": 2,
+          "both_correct_count": 21,
+          "both_wrong_count": 0,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "ats",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-2.5-flash",
+          "trial": 1,
+          "trial_ref_a": "97d0b18a0ff83a4f3eda2de61698c4d2d217806cfaa5ba1d181b8f059130da79",
+          "trial_ref_b": "bbaec19ba32fade46250f8de7da4582481265e0175c937472508644d5388642c"
+        },
+        {
+          "a_correct_b_wrong_count": 0,
+          "a_wrong_b_correct_count": 1,
+          "both_correct_count": 23,
+          "both_wrong_count": 1,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "ats",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 1,
+          "trial_ref_a": "97d0b18a0ff83a4f3eda2de61698c4d2d217806cfaa5ba1d181b8f059130da79",
+          "trial_ref_b": "55a00189c89fcbd589495c721548152e54d784f10142dcadef3d42a30555e295"
+        },
+        {
+          "a_correct_b_wrong_count": 1,
+          "a_wrong_b_correct_count": 2,
+          "both_correct_count": 22,
+          "both_wrong_count": 0,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "ats",
+          "target_a": "google-gemini-2.5-flash",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 1,
+          "trial_ref_a": "bbaec19ba32fade46250f8de7da4582481265e0175c937472508644d5388642c",
+          "trial_ref_b": "55a00189c89fcbd589495c721548152e54d784f10142dcadef3d42a30555e295"
+        },
+        {
+          "a_correct_b_wrong_count": 1,
+          "a_wrong_b_correct_count": 2,
+          "both_correct_count": 22,
+          "both_wrong_count": 0,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "ats",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-2.5-flash",
+          "trial": 2,
+          "trial_ref_a": "3374ce53216b334aede61412f8128628249a41fef284f1545893a5e9be498e1f",
+          "trial_ref_b": "bcab140a6b388df8ee182f4e87261d745753d06117d3de6156d3974f95015ad2"
+        },
+        {
+          "a_correct_b_wrong_count": 0,
+          "a_wrong_b_correct_count": 1,
+          "both_correct_count": 23,
+          "both_wrong_count": 1,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "ats",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 2,
+          "trial_ref_a": "3374ce53216b334aede61412f8128628249a41fef284f1545893a5e9be498e1f",
+          "trial_ref_b": "65885e3112c4f6caf67a0e2e2e8436a081a7ecb299a53d3cd1c135e5570a0d4b"
+        },
+        {
+          "a_correct_b_wrong_count": 1,
+          "a_wrong_b_correct_count": 1,
+          "both_correct_count": 23,
+          "both_wrong_count": 0,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "ats",
+          "target_a": "google-gemini-2.5-flash",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 2,
+          "trial_ref_a": "bcab140a6b388df8ee182f4e87261d745753d06117d3de6156d3974f95015ad2",
+          "trial_ref_b": "65885e3112c4f6caf67a0e2e2e8436a081a7ecb299a53d3cd1c135e5570a0d4b"
+        },
+        {
+          "a_correct_b_wrong_count": 1,
+          "a_wrong_b_correct_count": 2,
+          "both_correct_count": 22,
+          "both_wrong_count": 0,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "ats",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-2.5-flash",
+          "trial": 3,
+          "trial_ref_a": "a1348ab77b23bb79137432a7511e5238147c15a0030844b62c04d9aba1316eda",
+          "trial_ref_b": "ced1c9f635a2acff727a7f9f2079ace5fb75de6b64a1c87c68959eda46be8277"
+        },
+        {
+          "a_correct_b_wrong_count": 0,
+          "a_wrong_b_correct_count": 1,
+          "both_correct_count": 23,
+          "both_wrong_count": 1,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "ats",
+          "target_a": "jev-1.13.0",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 3,
+          "trial_ref_a": "a1348ab77b23bb79137432a7511e5238147c15a0030844b62c04d9aba1316eda",
+          "trial_ref_b": "497c15a4b98e1dcae102543d2a05e741e3492eda8e892e24ec4faee9029a9534"
+        },
+        {
+          "a_correct_b_wrong_count": 1,
+          "a_wrong_b_correct_count": 1,
+          "both_correct_count": 23,
+          "both_wrong_count": 0,
+          "excluded_operational_count": 0,
+          "mcnemar_exact_two_sided_p_value": "1",
+          "suite": "ats",
+          "target_a": "google-gemini-2.5-flash",
+          "target_b": "google-gemini-3.8-flash",
+          "trial": 3,
+          "trial_ref_a": "ced1c9f635a2acff727a7f9f2079ace5fb75de6b64a1c87c68959eda46be8277",
+          "trial_ref_b": "497c15a4b98e1dcae102543d2a05e741e3492eda8e892e24ec4faee9029a9534"
+        }
+      ],
+      "pareto": [
+        {
+          "all_targets_dominated_by": [],
+          "all_targets_non_dominated": true,
+          "cost_per_case_usd": "0.0003308344794520547945205479452",
+          "deployment_eligible": false,
+          "eligible_targets_dominated_by": [],
+          "eligible_targets_non_dominated": false,
+          "excluded_reason": "registered gate failure",
+          "p95_case_latency_ms": "4207.90",
+          "quality_error_count": 53,
+          "target": "jev-1.13.0",
+          "trial_refs": [
+            "66d0eea4fa5ab595fcfa4338153e3ad7285cf93b9291a4524a6fb691a03cda11",
+            "5d72d8cb2b34190f3f0b52d7498ba4cc52b0be84d31e0879b4fcdd0571af57b7",
+            "cf32d44758103da9c10a26bedb12a96c566c275263e635b4beef0e6f5d7b9e00",
+            "97d0b18a0ff83a4f3eda2de61698c4d2d217806cfaa5ba1d181b8f059130da79",
+            "3374ce53216b334aede61412f8128628249a41fef284f1545893a5e9be498e1f",
+            "a1348ab77b23bb79137432a7511e5238147c15a0030844b62c04d9aba1316eda"
+          ]
+        },
+        {
+          "all_targets_dominated_by": [],
+          "all_targets_non_dominated": true,
+          "cost_per_case_usd": "0.002179333744292237442922374429",
+          "deployment_eligible": false,
+          "eligible_targets_dominated_by": [],
+          "eligible_targets_non_dominated": false,
+          "excluded_reason": "registered gate failure",
+          "p95_case_latency_ms": "4512.45",
+          "quality_error_count": 51,
+          "target": "google-gemini-2.5-flash",
+          "trial_refs": [
+            "7a07ec8a906e7d39f14cf40626950de8a75246f1b0cc921c46e4c9089ecaa9fc",
+            "e4d42c7b3d406c68bd31c9cd4aff51f3afc2b9f255aadcc227c8920562cbb053",
+            "99aebf508daddba2c87fa1fcdde7c66f03895b778d49f78f9d461b43bf5bda35",
+            "bbaec19ba32fade46250f8de7da4582481265e0175c937472508644d5388642c",
+            "bcab140a6b388df8ee182f4e87261d745753d06117d3de6156d3974f95015ad2",
+            "ced1c9f635a2acff727a7f9f2079ace5fb75de6b64a1c87c68959eda46be8277"
+          ]
+        },
+        {
+          "all_targets_dominated_by": [
+            "google-gemini-2.5-flash"
+          ],
+          "all_targets_non_dominated": false,
+          "cost_per_case_usd": "0.01182556164383561643835616438",
+          "deployment_eligible": false,
+          "eligible_targets_dominated_by": [],
+          "eligible_targets_non_dominated": false,
+          "excluded_reason": "registered gate failure",
+          "p95_case_latency_ms": "32580.70",
+          "quality_error_count": 51,
+          "target": "google-gemini-3.8-flash",
+          "trial_refs": [
+            "e0f0e35487371e95e430df71b8c4f2b1d46b108d47de8e37facbc45ec0717c73",
+            "e1449785f01b90fc9df1fc71587a012fdecd5e4e2305ca47f891700e7ec068b5",
+            "6be50498072efae5669523e727602f81a7b468312ac6c1f0a212824723bc94dc",
+            "55a00189c89fcbd589495c721548152e54d784f10142dcadef3d42a30555e295",
+            "65885e3112c4f6caf67a0e2e2e8436a081a7ecb299a53d3cd1c135e5570a0d4b",
+            "497c15a4b98e1dcae102543d2a05e741e3492eda8e892e24ec4faee9029a9534"
+          ]
+        }
+      ],
+      "product": "job_finder",
+      "recommended_use": "Retain the current Job relevance implementation; no target passed the registered direct-suite gate, and the proposed atomic architecture is untested.",
+      "repeated_trials_are_independent": false,
+      "targets": [
+        {
+          "ats_gate_pass": true,
+          "cost_basis": "rate_card",
+          "coverage_pass": true,
+          "deployment_eligible": false,
+          "direct_gate_pass": false,
+          "suites": [
+            {
+              "case_count_per_trial": 121,
+              "cost_usd": "0.121177182",
+              "criterion_evaluations": 1530,
+              "input_tokens": 2885171,
+              "output_tokens": 36612,
+              "p50_case_latency_ms": "3645.00",
+              "p95_case_latency_ms": "4300.90",
+              "projected_cost_per_1000_usd": "0.3338214380165289256198347107",
+              "requests": 1530,
+              "stability": {
+                "case_count": 121,
+                "flip_count": 4,
+                "unanimous_verdict_count": 119,
+                "unanimous_verdict_rate": "0.9834710743801652892561983471"
+              },
+              "suite": "direct",
+              "trials": [
+                {
+                  "case_count": 121,
+                  "correct": 106,
+                  "cost_usd": "0.040396734",
+                  "criterion_evaluations": 510,
+                  "false_negative_count": 5,
+                  "false_negative_interval_95": {
+                    "lower": "0.0296298418895",
+                    "upper": "0.196193440935"
+                  },
+                  "false_negative_rate": "0.08928571428571428571428571429",
+                  "false_positive_count": 10,
+                  "false_positive_interval_95": {
+                    "lower": "0.0763215784",
+                    "upper": "0.264783508599"
+                  },
+                  "false_positive_rate": "0.1538461538461538461538461538",
+                  "input_tokens": 961827,
+                  "operational_failure_count": 0,
+                  "output_tokens": 12204,
+                  "p50_case_latency_ms": "3645.00",
+                  "p95_case_latency_ms": "4230.00",
+                  "requests": 510,
+                  "trial_ref": "66d0eea4fa5ab595fcfa4338153e3ad7285cf93b9291a4524a6fb691a03cda11"
+                },
+                {
+                  "case_count": 121,
+                  "correct": 104,
+                  "cost_usd": "0.040383714",
+                  "criterion_evaluations": 510,
+                  "false_negative_count": 6,
+                  "false_negative_interval_95": {
+                    "lower": "0.0403479461908",
+                    "upper": "0.218756471845"
+                  },
+                  "false_negative_rate": "0.1071428571428571428571428571",
+                  "false_positive_count": 11,
+                  "false_positive_interval_95": {
+                    "lower": "0.0876260548815",
+                    "upper": "0.282656158496"
+                  },
+                  "false_positive_rate": "0.1692307692307692307692307692",
+                  "input_tokens": 961517,
+                  "operational_failure_count": 0,
+                  "output_tokens": 12204,
+                  "p50_case_latency_ms": "3664.00",
+                  "p95_case_latency_ms": "4308.00",
+                  "requests": 510,
+                  "trial_ref": "5d72d8cb2b34190f3f0b52d7498ba4cc52b0be84d31e0879b4fcdd0571af57b7"
+                },
+                {
+                  "case_count": 121,
+                  "correct": 106,
+                  "cost_usd": "0.040396734",
+                  "criterion_evaluations": 510,
+                  "false_negative_count": 5,
+                  "false_negative_interval_95": {
+                    "lower": "0.0296298418895",
+                    "upper": "0.196193440935"
+                  },
+                  "false_negative_rate": "0.08928571428571428571428571429",
+                  "false_positive_count": 10,
+                  "false_positive_interval_95": {
+                    "lower": "0.0763215784",
+                    "upper": "0.264783508599"
+                  },
+                  "false_positive_rate": "0.1538461538461538461538461538",
+                  "input_tokens": 961827,
+                  "operational_failure_count": 0,
+                  "output_tokens": 12204,
+                  "p50_case_latency_ms": "3635.00",
+                  "p95_case_latency_ms": "4204.00",
+                  "requests": 510,
+                  "trial_ref": "cf32d44758103da9c10a26bedb12a96c566c275263e635b4beef0e6f5d7b9e00"
+                }
+              ]
+            },
+            {
+              "case_count_per_trial": 25,
+              "cost_usd": "0.023728320",
+              "criterion_evaluations": 330,
+              "input_tokens": 564960,
+              "output_tokens": 7821,
+              "p50_case_latency_ms": "2654.00",
+              "p95_case_latency_ms": "3969.80",
+              "projected_cost_per_1000_usd": "0.3163776000",
+              "requests": 330,
+              "stability": {
+                "case_count": 25,
+                "flip_count": 0,
+                "unanimous_verdict_count": 25,
+                "unanimous_verdict_rate": "1"
+              },
+              "suite": "ats",
+              "trials": [
+                {
+                  "case_count": 25,
+                  "correct": 23,
+                  "cost_usd": "0.007909440",
+                  "criterion_evaluations": 110,
+                  "false_negative_count": 1,
+                  "false_negative_interval_95": {
+                    "lower": "0.0028091367466",
+                    "upper": "0.482496514917"
+                  },
+                  "false_negative_rate": "0.1111111111111111111111111111",
+                  "false_positive_count": 1,
+                  "false_positive_interval_95": {
+                    "lower": "0.00158111172277",
+                    "upper": "0.302320738435"
+                  },
+                  "false_positive_rate": "0.0625",
+                  "input_tokens": 188320,
+                  "operational_failure_count": 0,
+                  "output_tokens": 2607,
+                  "p50_case_latency_ms": "2543.00",
+                  "p95_case_latency_ms": "3769.20",
+                  "requests": 110,
+                  "trial_ref": "97d0b18a0ff83a4f3eda2de61698c4d2d217806cfaa5ba1d181b8f059130da79"
+                },
+                {
+                  "case_count": 25,
+                  "correct": 23,
+                  "cost_usd": "0.007909440",
+                  "criterion_evaluations": 110,
+                  "false_negative_count": 1,
+                  "false_negative_interval_95": {
+                    "lower": "0.0028091367466",
+                    "upper": "0.482496514917"
+                  },
+                  "false_negative_rate": "0.1111111111111111111111111111",
+                  "false_positive_count": 1,
+                  "false_positive_interval_95": {
+                    "lower": "0.00158111172277",
+                    "upper": "0.302320738435"
+                  },
+                  "false_positive_rate": "0.0625",
+                  "input_tokens": 188320,
+                  "operational_failure_count": 0,
+                  "output_tokens": 2607,
+                  "p50_case_latency_ms": "2686.00",
+                  "p95_case_latency_ms": "3951.00",
+                  "requests": 110,
+                  "trial_ref": "3374ce53216b334aede61412f8128628249a41fef284f1545893a5e9be498e1f"
+                },
+                {
+                  "case_count": 25,
+                  "correct": 23,
+                  "cost_usd": "0.007909440",
+                  "criterion_evaluations": 110,
+                  "false_negative_count": 1,
+                  "false_negative_interval_95": {
+                    "lower": "0.0028091367466",
+                    "upper": "0.482496514917"
+                  },
+                  "false_negative_rate": "0.1111111111111111111111111111",
+                  "false_positive_count": 1,
+                  "false_positive_interval_95": {
+                    "lower": "0.00158111172277",
+                    "upper": "0.302320738435"
+                  },
+                  "false_positive_rate": "0.0625",
+                  "input_tokens": 188320,
+                  "operational_failure_count": 0,
+                  "output_tokens": 2607,
+                  "p50_case_latency_ms": "2594.00",
+                  "p95_case_latency_ms": "3983.40",
+                  "requests": 110,
+                  "trial_ref": "a1348ab77b23bb79137432a7511e5238147c15a0030844b62c04d9aba1316eda"
+                }
+              ]
+            }
+          ],
+          "target_id": "jev-1.13.0"
+        },
+        {
+          "ats_gate_pass": true,
+          "cost_basis": "provider_reported",
+          "coverage_pass": true,
+          "deployment_eligible": false,
+          "direct_gate_pass": false,
+          "suites": [
+            {
+              "case_count_per_trial": 121,
+              "cost_usd": "0.805769530",
+              "criterion_evaluations": 1538,
+              "input_tokens": 2666834,
+              "output_tokens": 7690,
+              "p50_case_latency_ms": "3438.00",
+              "p95_case_latency_ms": "4640.00",
+              "projected_cost_per_1000_usd": "2.219750771349862258953168044",
+              "requests": 1538,
+              "stability": {
+                "case_count": 121,
+                "flip_count": 6,
+                "unanimous_verdict_count": 116,
+                "unanimous_verdict_rate": "0.9586776859504132231404958678"
+              },
+              "suite": "direct",
+              "trials": [
+                {
+                  "case_count": 121,
+                  "correct": 106,
+                  "cost_usd": "0.269646130",
+                  "criterion_evaluations": 512,
+                  "false_negative_count": 5,
+                  "false_negative_interval_95": {
+                    "lower": "0.0296298418895",
+                    "upper": "0.196193440935"
+                  },
+                  "false_negative_rate": "0.08928571428571428571428571429",
+                  "false_positive_count": 10,
+                  "false_positive_interval_95": {
+                    "lower": "0.0763215784",
+                    "upper": "0.264783508599"
+                  },
+                  "false_positive_rate": "0.1538461538461538461538461538",
+                  "input_tokens": 886902,
+                  "operational_failure_count": 0,
+                  "output_tokens": 2560,
+                  "p50_case_latency_ms": "3372.00",
+                  "p95_case_latency_ms": "3981.00",
+                  "requests": 512,
+                  "trial_ref": "7a07ec8a906e7d39f14cf40626950de8a75246f1b0cc921c46e4c9089ecaa9fc"
+                },
+                {
+                  "case_count": 121,
+                  "correct": 106,
+                  "cost_usd": "0.268195930",
+                  "criterion_evaluations": 512,
+                  "false_negative_count": 5,
+                  "false_negative_interval_95": {
+                    "lower": "0.0296298418895",
+                    "upper": "0.196193440935"
+                  },
+                  "false_negative_rate": "0.08928571428571428571428571429",
+                  "false_positive_count": 10,
+                  "false_positive_interval_95": {
+                    "lower": "0.0763215784",
+                    "upper": "0.264783508599"
+                  },
+                  "false_positive_rate": "0.1538461538461538461538461538",
+                  "input_tokens": 887738,
+                  "operational_failure_count": 0,
+                  "output_tokens": 2560,
+                  "p50_case_latency_ms": "3577.00",
+                  "p95_case_latency_ms": "4912.00",
+                  "requests": 512,
+                  "trial_ref": "e4d42c7b3d406c68bd31c9cd4aff51f3afc2b9f255aadcc227c8920562cbb053"
+                },
+                {
+                  "case_count": 121,
+                  "correct": 104,
+                  "cost_usd": "0.267927470",
+                  "criterion_evaluations": 514,
+                  "false_negative_count": 5,
+                  "false_negative_interval_95": {
+                    "lower": "0.0296298418895",
+                    "upper": "0.196193440935"
+                  },
+                  "false_negative_rate": "0.08928571428571428571428571429",
+                  "false_positive_count": 12,
+                  "false_positive_interval_95": {
+                    "lower": "0.0991996601848",
+                    "upper": "0.300283617395"
+                  },
+                  "false_positive_rate": "0.1846153846153846153846153846",
+                  "input_tokens": 892194,
+                  "operational_failure_count": 0,
+                  "output_tokens": 2570,
+                  "p50_case_latency_ms": "3458.00",
+                  "p95_case_latency_ms": "4305.00",
+                  "requests": 514,
+                  "trial_ref": "99aebf508daddba2c87fa1fcdde7c66f03895b778d49f78f9d461b43bf5bda35"
+                }
+              ]
+            },
+            {
+              "case_count_per_trial": 25,
+              "cost_usd": "0.148778650",
+              "criterion_evaluations": 326,
+              "input_tokens": 497434,
+              "output_tokens": 1630,
+              "p50_case_latency_ms": "2678.00",
+              "p95_case_latency_ms": "4117.10",
+              "projected_cost_per_1000_usd": "1.983715333333333333333333333",
+              "requests": 326,
+              "stability": {
+                "case_count": 25,
+                "flip_count": 3,
+                "unanimous_verdict_count": 22,
+                "unanimous_verdict_rate": "0.88"
+              },
+              "suite": "ats",
+              "trials": [
+                {
+                  "case_count": 25,
+                  "correct": 23,
+                  "cost_usd": "0.049434940",
+                  "criterion_evaluations": 110,
+                  "false_negative_count": 1,
+                  "false_negative_interval_95": {
+                    "lower": "0.0028091367466",
+                    "upper": "0.482496514917"
+                  },
+                  "false_negative_rate": "0.1111111111111111111111111111",
+                  "false_positive_count": 1,
+                  "false_positive_interval_95": {
+                    "lower": "0.00158111172277",
+                    "upper": "0.302320738435"
+                  },
+                  "false_positive_rate": "0.0625",
+                  "input_tokens": 167686,
+                  "operational_failure_count": 0,
+                  "output_tokens": 550,
+                  "p50_case_latency_ms": "2678.00",
+                  "p95_case_latency_ms": "4889.40",
+                  "requests": 110,
+                  "trial_ref": "bbaec19ba32fade46250f8de7da4582481265e0175c937472508644d5388642c"
+                },
+                {
+                  "case_count": 25,
+                  "correct": 24,
+                  "cost_usd": "0.050347260",
+                  "criterion_evaluations": 108,
+                  "false_negative_count": 1,
+                  "false_negative_interval_95": {
+                    "lower": "0.0028091367466",
+                    "upper": "0.482496514917"
+                  },
+                  "false_negative_rate": "0.1111111111111111111111111111",
+                  "false_positive_count": 0,
+                  "false_positive_interval_95": {
+                    "lower": "0",
+                    "upper": "0.205907214208"
+                  },
+                  "false_positive_rate": "0",
+                  "input_tokens": 164874,
+                  "operational_failure_count": 0,
+                  "output_tokens": 540,
+                  "p50_case_latency_ms": "2715.00",
+                  "p95_case_latency_ms": "4209.00",
+                  "requests": 108,
+                  "trial_ref": "bcab140a6b388df8ee182f4e87261d745753d06117d3de6156d3974f95015ad2"
+                },
+                {
+                  "case_count": 25,
+                  "correct": 24,
+                  "cost_usd": "0.048996450",
+                  "criterion_evaluations": 108,
+                  "false_negative_count": 1,
+                  "false_negative_interval_95": {
+                    "lower": "0.0028091367466",
+                    "upper": "0.482496514917"
+                  },
+                  "false_negative_rate": "0.1111111111111111111111111111",
+                  "false_positive_count": 0,
+                  "false_positive_interval_95": {
+                    "lower": "0",
+                    "upper": "0.205907214208"
+                  },
+                  "false_positive_rate": "0",
+                  "input_tokens": 164874,
+                  "operational_failure_count": 0,
+                  "output_tokens": 540,
+                  "p50_case_latency_ms": "2495.00",
+                  "p95_case_latency_ms": "3919.80",
+                  "requests": 108,
+                  "trial_ref": "ced1c9f635a2acff727a7f9f2079ace5fb75de6b64a1c87c68959eda46be8277"
+                }
+              ]
+            }
+          ],
+          "target_id": "google-gemini-2.5-flash"
+        },
+        {
+          "ats_gate_pass": true,
+          "cost_basis": "provider_reported",
+          "coverage_pass": true,
+          "deployment_eligible": false,
+          "direct_gate_pass": false,
+          "suites": [
+            {
+              "case_count_per_trial": 121,
+              "cost_usd": "4.330348500",
+              "criterion_evaluations": 1568,
+              "input_tokens": 2760678,
+              "output_tokens": 602624,
+              "p50_case_latency_ms": "18981.00",
+              "p95_case_latency_ms": "32881.20",
+              "projected_cost_per_1000_usd": "11.92933471074380165289256198",
+              "requests": 1569,
+              "stability": {
+                "case_count": 121,
+                "flip_count": 6,
+                "unanimous_verdict_count": 117,
+                "unanimous_verdict_rate": "0.9669421487603305785123966942"
+              },
+              "suite": "direct",
+              "trials": [
+                {
+                  "case_count": 121,
+                  "correct": 104,
+                  "cost_usd": "1.468118250",
+                  "criterion_evaluations": 522,
+                  "false_negative_count": 7,
+                  "false_negative_interval_95": {
+                    "lower": "0.0517645048792",
+                    "upper": "0.240732579652"
+                  },
+                  "false_negative_rate": "0.125",
+                  "false_positive_count": 10,
+                  "false_positive_interval_95": {
+                    "lower": "0.0763215784",
+                    "upper": "0.264783508599"
+                  },
+                  "false_positive_rate": "0.1538461538461538461538461538",
+                  "input_tokens": 918816,
+                  "operational_failure_count": 0,
+                  "output_tokens": 207735,
+                  "p50_case_latency_ms": "18898.00",
+                  "p95_case_latency_ms": "32572.00",
+                  "requests": 523,
+                  "trial_ref": "e0f0e35487371e95e430df71b8c4f2b1d46b108d47de8e37facbc45ec0717c73"
+                },
+                {
+                  "case_count": 121,
+                  "correct": 105,
+                  "cost_usd": "1.426284750",
+                  "criterion_evaluations": 524,
+                  "false_negative_count": 6,
+                  "false_negative_interval_95": {
+                    "lower": "0.0403479461908",
+                    "upper": "0.218756471845"
+                  },
+                  "false_negative_rate": "0.1071428571428571428571428571",
+                  "false_positive_count": 10,
+                  "false_positive_interval_95": {
+                    "lower": "0.0763215784",
+                    "upper": "0.264783508599"
+                  },
+                  "false_positive_rate": "0.1538461538461538461538461538",
+                  "input_tokens": 922678,
+                  "operational_failure_count": 0,
+                  "output_tokens": 195807,
+                  "p50_case_latency_ms": "18751.00",
+                  "p95_case_latency_ms": "33422.00",
+                  "requests": 524,
+                  "trial_ref": "e1449785f01b90fc9df1fc71587a012fdecd5e4e2305ca47f891700e7ec068b5"
+                },
+                {
+                  "case_count": 121,
+                  "correct": 106,
+                  "cost_usd": "1.435945500",
+                  "criterion_evaluations": 522,
+                  "false_negative_count": 6,
+                  "false_negative_interval_95": {
+                    "lower": "0.0403479461908",
+                    "upper": "0.218756471845"
+                  },
+                  "false_negative_rate": "0.1071428571428571428571428571",
+                  "false_positive_count": 9,
+                  "false_positive_interval_95": {
+                    "lower": "0.0653196240079",
+                    "upper": "0.246638285321"
+                  },
+                  "false_positive_rate": "0.1384615384615384615384615385",
+                  "input_tokens": 919184,
+                  "operational_failure_count": 0,
+                  "output_tokens": 199082,
+                  "p50_case_latency_ms": "19654.00",
+                  "p95_case_latency_ms": "33064.00",
+                  "requests": 522,
+                  "trial_ref": "6be50498072efae5669523e727602f81a7b468312ac6c1f0a212824723bc94dc"
+                }
+              ]
+            },
+            {
+              "case_count_per_trial": 25,
+              "cost_usd": "0.849247500",
+              "criterion_evaluations": 338,
+              "input_tokens": 525600,
+              "output_tokens": 121346,
+              "p50_case_latency_ms": "16921.00",
+              "p95_case_latency_ms": "28802.60",
+              "projected_cost_per_1000_usd": "11.32330000",
+              "requests": 339,
+              "stability": {
+                "case_count": 25,
+                "flip_count": 0,
+                "unanimous_verdict_count": 25,
+                "unanimous_verdict_rate": "1"
+              },
+              "suite": "ats",
+              "trials": [
+                {
+                  "case_count": 25,
+                  "correct": 24,
+                  "cost_usd": "0.282769500",
+                  "criterion_evaluations": 112,
+                  "false_negative_count": 0,
+                  "false_negative_interval_95": {
+                    "lower": "0",
+                    "upper": "0.33626711688"
+                  },
+                  "false_negative_rate": "0",
+                  "false_positive_count": 1,
+                  "false_positive_interval_95": {
+                    "lower": "0.00158111172277",
+                    "upper": "0.302320738435"
+                  },
+                  "false_positive_rate": "0.0625",
+                  "input_tokens": 173636,
+                  "operational_failure_count": 0,
+                  "output_tokens": 40678,
+                  "p50_case_latency_ms": "18874.00",
+                  "p95_case_latency_ms": "28943.60",
+                  "requests": 113,
+                  "trial_ref": "55a00189c89fcbd589495c721548152e54d784f10142dcadef3d42a30555e295"
+                },
+                {
+                  "case_count": 25,
+                  "correct": 24,
+                  "cost_usd": "0.288784500",
+                  "criterion_evaluations": 114,
+                  "false_negative_count": 0,
+                  "false_negative_interval_95": {
+                    "lower": "0",
+                    "upper": "0.33626711688"
+                  },
+                  "false_negative_rate": "0",
+                  "false_positive_count": 1,
+                  "false_positive_interval_95": {
+                    "lower": "0.00158111172277",
+                    "upper": "0.302320738435"
+                  },
+                  "false_positive_rate": "0.0625",
+                  "input_tokens": 178376,
+                  "operational_failure_count": 0,
+                  "output_tokens": 41334,
+                  "p50_case_latency_ms": "15835.00",
+                  "p95_case_latency_ms": "25618.40",
+                  "requests": 114,
+                  "trial_ref": "65885e3112c4f6caf67a0e2e2e8436a081a7ecb299a53d3cd1c135e5570a0d4b"
+                },
+                {
+                  "case_count": 25,
+                  "correct": 24,
+                  "cost_usd": "0.277693500",
+                  "criterion_evaluations": 112,
+                  "false_negative_count": 0,
+                  "false_negative_interval_95": {
+                    "lower": "0",
+                    "upper": "0.33626711688"
+                  },
+                  "false_negative_rate": "0",
+                  "false_positive_count": 1,
+                  "false_positive_interval_95": {
+                    "lower": "0.00158111172277",
+                    "upper": "0.302320738435"
+                  },
+                  "false_positive_rate": "0.0625",
+                  "input_tokens": 173588,
+                  "operational_failure_count": 0,
+                  "output_tokens": 39334,
+                  "p50_case_latency_ms": "15239.00",
+                  "p95_case_latency_ms": "26632.20",
+                  "requests": 112,
+                  "trial_ref": "497c15a4b98e1dcae102543d2a05e741e3492eda8e892e24ec4faee9029a9534"
+                }
+              ]
+            }
+          ],
+          "target_id": "google-gemini-3.8-flash"
+        }
+      ],
+      "trial_count": 3
+    }
+  ],
+  "research_backlog": [
+    {
+      "completion_criterion": "A preregistered target passes every direct and ATS error gate in every trial.",
+      "experiment": "job_atomic_policy",
+      "measurement": "Run frozen atomic questions plus deterministic composition on disjoint labeled direct and ATS cases."
+    },
+    {
+      "completion_criterion": "A frozen disjoint test set has enough labels to report per-class recall and exact intervals.",
+      "experiment": "news_sentiment_labels",
+      "measurement": "Collect blinded, adjudicated four-class labels tied to immutable article and group versions."
+    },
+    {
+      "completion_criterion": "Registered end-to-end structure metrics pass on disjoint immutable reports.",
+      "experiment": "news_complete_structures",
+      "measurement": "Evaluate grouping partitions, coherent global rankings, and complete tier assessments rather than pairwise surrogates."
+    },
+    {
+      "completion_criterion": "Quality deltas and exact intervals exist for the 190 ranking and 197 tier provider-request strata represented by the inventory.",
+      "experiment": "over_guard_routing_quality",
+      "measurement": "Label production-shaped ranking and tier cases above the 70,000-character guard and compare fallback outcomes."
+    },
+    {
+      "completion_criterion": "Equivalence bounds are reported; the existing one-sample 49.1291% input reduction remains transport evidence only.",
+      "experiment": "tier_batch_quality",
+      "measurement": "Compare separate and batched tier answers on a preregistered multi-case sample."
+    },
+    {
+      "completion_criterion": "Confidence exceeds four cases and daily themes pass registered end-to-end usefulness metrics.",
+      "experiment": "confidence_and_theme_coverage",
+      "measurement": "Expand confidence labels and evaluate daily-theme transitivity, partition validity, and report usefulness."
+    }
+  ],
+  "schema_version": "jev-research-snapshot/v1",
+  "sentiment": {
+    "human_article_or_group_labels": 0,
+    "production_recommendation": "Retain the current sentiment implementation. Collect blinded human labels before comparing or replacing its classification component.",
+    "reason": "No immutable human-reviewed article or group sentiment class labels exist.",
+    "status": "not_evaluable"
+  },
+  "sources": [
+    {
+      "path": "artifacts/jev-research-v1/imports/manifest.json",
+      "sha256": "60d3295d43b075a06dc888b08cc22032f26af06f5cba9a23d4b92439ea2ce07f"
+    },
+    {
+      "path": "artifacts/jev-research-v1/imports/job-current-policy-v1-preregistration.json.gz",
+      "sha256": "aa6a5aca52d1798725437f08f3f85053c7d84144a8cfa3c2bf9629d70016ddbd"
+    },
+    {
+      "path": "artifacts/jev-research-v1/imports/job-current-policy-v1-raw.json.gz",
+      "sha256": "e2190975349d12897a9b180d91b8d600484fe6676ceb7bf63b2acc279d39e84d"
+    },
+    {
+      "path": "artifacts/jev-research-v1/imports/job-current-policy-v1-report.json.gz",
+      "sha256": "10b77f3110d853302cc2ab2bea0e03219341dafdad925455dc26b63ed91a3836"
+    },
+    {
+      "path": "artifacts/jev-research-v1/imports/job-current-policy-v1-report.md.gz",
+      "sha256": "2c25715bd854508174a67cec8ae016469bbd8dfc2fe572d7127242f0b3d77d54"
+    },
+    {
+      "path": "artifacts/jev-research-v1/imports/news-relevance-v11-raw.json.gz",
+      "sha256": "8d76c3b01b6cec5726c70159c82f5093ec3cfca36811d10f700b19adea985605"
+    },
+    {
+      "path": "artifacts/jev-research-v1/imports/news-relevance-v11-report.json.gz",
+      "sha256": "2a2afa034d98806d478918921626ddef264cb7a9e35494eed263f76230e50cfd"
+    },
+    {
+      "path": "artifacts/jev-research-v1/imports/news-relevance-v11-report.md.gz",
+      "sha256": "9289221a722a2291b000e5ad9cf54c95a811f61005300e28851febf6af1df45a"
+    },
+    {
+      "path": "src/romanian_news/binary_relevance_preregistration.json",
+      "sha256": "580b0710c3118175ae843bf0612da1d943b8721205bac7e10262ee335aee645a"
+    },
+    {
+      "path": "src/romanian_news/jev_aspect_evaluation_protocol.json",
+      "sha256": "4df85e8d3395f28da8c9e06df70aa78f2fe373529e2064daaca951db4e77aedb"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/news-grouping-live-v1-report.json",
+      "sha256": "d3c159d5a2d36a7497b8fa0757c8b3ac80ca1a87c612f21e6186cf67e238ab06"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/news-ranking-live-v1-report.json",
+      "sha256": "e6a434efe3a98c4f15eb7d8e1e466403b55c6103f864ea3d093cc9191f0452b3"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/news-tier-live-v1-report.json",
+      "sha256": "0b5299071c9576933b2c8d31e7482e800e03807d4a3f59b0c5c344ffab6cf755"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/news-tier-live-v1-composed.json",
+      "sha256": "5fe540fea32975fcca6a3dfa603ed2b7007bf853d0dcf1b130528b73a19bb0c9"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/news-confidence-live-v1-descriptive.json",
+      "sha256": "b7afdde51e6aa7072bebafcf07eb9932452561572bd250611d1451b70ad2f6d0"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/news-daily-theme-live-v1-report.json",
+      "sha256": "ae4fc99d1db978b92d90b948eebe2ee427258977befee428c52ef85511db4c5f"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/news-daily-theme-live-v1-constraints.json",
+      "sha256": "87005952429f4c7a5557f11b5b949c29e0caa29509b65cc72f3590d6a92c2371"
+    },
+    {
+      "path": "src/romanian_news/sentiment_evaluation_result.json",
+      "sha256": "298adf5c391b50ed3e845a81d4f5bf8cd5d674e451a18ca5e813509df3478baf"
+    },
+    {
+      "path": "artifacts/jev-aspect-v1/jev-context-safety-decision-v1.json",
+      "sha256": "400d154709c17c63659512d4ad077bb035d4cb93f708501a435fb54a45ee0549"
+    },
+    {
+      "path": "artifacts/jev-research-v1/news-report-model-cost-v1.json",
+      "sha256": "6c257bb6cf25c13af2a39d6f5cc3a253a6d3e848a4d77ade9582f09b18aa7c39"
+    }
+  ],
+  "task_comparability": [
+    {
+      "complete_pipeline_output_tested": true,
+      "concern": "relevance",
+      "directly_tested": true,
+      "limitation": "The proposed atomic architecture was not evaluated.",
+      "product": "job_finder",
+      "relationship": "current_six_criterion_policy"
+    },
+    {
+      "complete_pipeline_output_tested": false,
+      "concern": "relevance",
+      "directly_tested": true,
+      "limitation": "The benchmark isolates one shared relevance question; trials reuse 174 cases.",
+      "product": "news",
+      "relationship": "shared_monolithic_prompt_model_isolation"
+    },
+    {
+      "complete_pipeline_output_tested": false,
+      "concern": "grouping",
+      "directly_tested": false,
+      "limitation": "Pair labels do not establish a complete partition.",
+      "product": "news",
+      "relationship": "derived_binary_decomposition"
+    },
+    {
+      "complete_pipeline_output_tested": false,
+      "concern": "ranking",
+      "directly_tested": false,
+      "limitation": "Pair precedence does not establish a coherent global order.",
+      "product": "news",
+      "relationship": "derived_binary_decomposition"
+    },
+    {
+      "complete_pipeline_output_tested": false,
+      "concern": "tier",
+      "directly_tested": false,
+      "limitation": "Two binary questions do not evaluate complete assessment generation.",
+      "product": "news",
+      "relationship": "derived_binary_decomposition"
+    },
+    {
+      "complete_pipeline_output_tested": false,
+      "concern": "confidence",
+      "directly_tested": false,
+      "limitation": "Only four evidence-sufficiency labels exist.",
+      "product": "news",
+      "relationship": "derived_binary_decomposition"
+    },
+    {
+      "complete_pipeline_output_tested": false,
+      "concern": "daily_theme",
+      "directly_tested": false,
+      "limitation": "Pair labels do not establish transitivity, partition validity, or report usefulness.",
+      "product": "news",
+      "relationship": "derived_binary_decomposition"
+    },
+    {
+      "complete_pipeline_output_tested": false,
+      "concern": "sentiment",
+      "directly_tested": false,
+      "limitation": "No immutable human-reviewed article or group sentiment labels exist.",
+      "product": "news",
+      "relationship": "not_evaluable"
+    }
+  ]
+}

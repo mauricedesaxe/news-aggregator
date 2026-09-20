@@ -1,0 +1,60 @@
+{
+  "schema_version": "jev-context-limits/v1",
+  "retrieved_at": "2026-09-19",
+  "provider": "typesafe",
+  "requested_model": "jev-1.13.0",
+  "aliases": {
+    "jev-latest": "jev-1.13.0",
+    "jev-preview": "jev-1.13.0"
+  },
+  "endpoint": "POST https://api.typesafe.ai/v1/systemone",
+  "documented_limits": {
+    "request_tokens": 64000,
+    "state_plus_longest_question_tokens": 32000,
+    "single_question_effective_input_tokens": 32000,
+    "approximate_english_characters_for_32000_tokens": 150000
+  },
+  "counting": {
+    "request_scope": "The 64k budget covers state plus all questions.",
+    "single_question_scope": "The 32k budget covers state plus the longest question.",
+    "provider_usage_fields": ["input_tokens", "output_tokens"],
+    "tokenizer": null,
+    "local_exact_counter": null
+  },
+  "output_limit_tokens": null,
+  "over_limit_behavior": null,
+  "uncertainties": [
+    "The provider does not document the tokenizer or an exact local token counter.",
+    "The provider does not document a separate output-token ceiling.",
+    "The provider does not document whether an over-limit request is rejected or truncated.",
+    "The generic API error table does not identify a context-overflow status or error shape."
+  ],
+  "sources": [
+    {
+      "url": "https://docs.typesafe.ai/models",
+      "supports": [
+        "model identity and aliases",
+        "endpoint family",
+        "64k request budget",
+        "32k state plus longest-question budget"
+      ]
+    },
+    {
+      "url": "https://docs.typesafe.ai/api",
+      "supports": [
+        "exact endpoint",
+        "request shape",
+        "provider usage fields",
+        "documented generic errors"
+      ]
+    },
+    {
+      "url": "https://docs.typesafe.ai/primitives",
+      "supports": [
+        "shared state and question budget",
+        "approximately 32000 tokens",
+        "approximately 150000 English characters"
+      ]
+    }
+  ]
+}

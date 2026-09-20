@@ -24,6 +24,7 @@ from romanian_news.storage import read_verified_r2_object
 from romanian_news.themes import (
     AliasedReaderSubjectThemeSet,
     ReaderSubjectDailyThemeSet,
+    SparseDailyThemeSet,
     parse_daily_theme_set,
 )
 
@@ -54,6 +55,9 @@ ASSESSMENT_MAX_TOKENS = 16000
 _TIER_ORDER = {"main": 0, "worth_knowing": 1, "excluded": 2}
 
 Tier = Literal["main", "worth_knowing", "excluded"]
+SubjectAssessmentThemeSet = (
+    SparseDailyThemeSet | ReaderSubjectDailyThemeSet | AliasedReaderSubjectThemeSet
+)
 
 
 class SubjectAssessmentPolicy(NewsModel):
@@ -99,7 +103,7 @@ class SubjectEvidenceInput(NewsModel):
 class DailySubjectAssessmentInput(NewsModel):
     day: date
     themes: ArtifactReference
-    theme_set: ReaderSubjectDailyThemeSet | AliasedReaderSubjectThemeSet
+    theme_set: SubjectAssessmentThemeSet
     summaries: tuple[SubjectSummaryInput, ...]
     relevance: tuple[ArtifactReference, ...]
     evidence: tuple[SubjectEvidenceInput, ...]
@@ -590,7 +594,7 @@ def subject_order_key(assessment: SubjectAssessment) -> tuple[int, int]:
 
 
 def resolve_group_anchor(
-    theme_set: ReaderSubjectDailyThemeSet | AliasedReaderSubjectThemeSet,
+    theme_set: SubjectAssessmentThemeSet,
     group_id: Sha256,
 ) -> Sha256:
     """Resolve one stable group anchor to its trial-specific final reader subject."""
@@ -602,7 +606,7 @@ def resolve_group_anchor(
 
 def compare_subject_anchors(
     assessment_set: DailySubjectAssessmentSet,
-    theme_set: ReaderSubjectDailyThemeSet | AliasedReaderSubjectThemeSet,
+    theme_set: SubjectAssessmentThemeSet,
     higher_group_id: Sha256,
     lower_group_id: Sha256,
 ) -> bool:

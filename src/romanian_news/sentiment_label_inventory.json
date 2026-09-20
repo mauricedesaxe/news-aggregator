@@ -1,0 +1,31 @@
+{
+  "schema_version": "news-sentiment-label-inventory/v1",
+  "audited_at": "2026-09-19",
+  "human_article_sentiment_labels": 0,
+  "human_group_sentiment_labels": 0,
+  "expected_classes": ["negative", "neutral", "positive", "mixed"],
+  "observed_human_class_counts": {},
+  "human_control_count": 0,
+  "provenance": {
+    "feedback_events": "Append-only owner feedback exists, but its rating records reader approval rather than sentiment class.",
+    "evaluation_manifest": "The typed human-review case and disposition unions contain no sentiment concern.",
+    "sentiment_artifacts": "Immutable artifacts retain model-call lineage and therefore represent model outputs, not human annotations."
+  },
+  "leakage_status": "No candidate corpus exists. Reusing persisted sentiment would leak incumbent model outputs into the expected labels.",
+  "valid_for_model_quality_comparison": false,
+  "evidence": {
+    "feedback_rating_semantics": "Reader approval feedback, not sentiment class ground truth.",
+    "evaluation_case_support": "No sentiment concern exists in the immutable evaluation case or disposition unions.",
+    "persisted_sentiment_semantics": "Sentiment artifacts are model-generated outputs with model-call lineage."
+  },
+  "disposition": "not_evaluable",
+  "minimum_future_artifact": [
+    "exact report, group, and article version identities",
+    "human four-class sentiment label",
+    "frozen label definitions and adjudication rules",
+    "annotator and reviewer provenance",
+    "rationale and article evidence quote",
+    "blinded annotation before candidate outputs",
+    "append-only versioning and explicit data split"
+  ]
+}
