@@ -409,7 +409,26 @@ def test_skip_slot_rejects_conflicting_state(monkeypatch: pytest.MonkeyPatch) ->
     assert connection.transaction_count == 1
 
 
-@pytest.mark.parametrize("stage", ["skipped", "failed", "published"])
+def test_claim_slot_returns_persisted_skip_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    reason = SlotSkipReason.UNCHANGED
+    connection = _use_connection(
+        monkeypatch,
+        [("FROM video_digest_slots", _slot_row(stage="skipped", skip_reason=reason.value))],
+    )
+
+    result = video_digest.claim_slot(
+        SLOT.slot_id,
+        EDITION,
+        owner_token="owner-a",
+        now=NOW,
+        lease_duration=timedelta(minutes=10),
+    )
+
+    assert result == SkippedSlot(reason=reason)
+    assert connection.transaction_count == 1
+
+
+@pytest.mark.parametrize("stage", ["failed", "published"])
 def test_claim_slot_returns_terminal_state(
     monkeypatch: pytest.MonkeyPatch,
     stage: str,
