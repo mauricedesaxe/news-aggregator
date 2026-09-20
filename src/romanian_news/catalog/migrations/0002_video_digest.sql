@@ -436,7 +436,7 @@ BEGIN
     IF OLD.lease_owner_token IS NOT NULL
        AND NEW.lease_owner_token IS NOT NULL
        AND NEW.lease_owner_token IS DISTINCT FROM OLD.lease_owner_token
-       AND OLD.lease_expires_at > CURRENT_TIMESTAMP THEN
+       AND OLD.lease_expires_at > clock_timestamp() THEN
         RAISE EXCEPTION 'active video digest slot lease owner cannot change'
             USING ERRCODE = '23000';
     END IF;

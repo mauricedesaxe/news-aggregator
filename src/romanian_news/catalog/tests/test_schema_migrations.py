@@ -52,5 +52,5 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
     )
     assert tuple(migration.sha256 for migration in NEWS_CATALOG_MIGRATIONS) == (
         "fdb4743a172787b87e7cd40b8f4a1701c104e4df527f5d1d9622f8ba0639954a",
-        "c284fe51e77cb2cae74d669bd16373cc0e3087706faa6eb2fa38700eaeabd3ca",
+        "7d36b645f7af54d821b2da1d2eac5ac4da8738c26098d24db56eed2e44f79664",
     )
