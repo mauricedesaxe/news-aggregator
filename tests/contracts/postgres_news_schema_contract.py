@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from typing import Any
 from uuid import uuid4
 
 import psycopg
@@ -13,6 +14,160 @@ import romanian_news.catalog.schema as news_schema
 from romanian_news.catalog.schema import NewsCatalogSchemaError, ensure_news_catalog_schema
 
 TEST_POSTGRES_DSN = os.getenv("NEWS_TEST_POSTGRES_DSN")
+
+
+def _sha256_id(value: int) -> str:
+    return f"{value:064x}"
+
+
+def _record_artifact_versions(
+    connection: psycopg.Connection[Any], start: int, count: int
+) -> tuple[str, ...]:
+    version_ids = tuple(_sha256_id(value) for value in range(start, start + count))
+    for version_id in version_ids:
+        artifact_id = f"artifact-{version_id}"
+        connection.execute(
+            "INSERT INTO artifacts "
+            "(id, kind, title, authority_class, lifecycle_state, visibility, created_at) "
+            "VALUES (%s, 'test', 'Test artifact', 'test', 'active', 'private', CURRENT_TIMESTAMP)",
+            (artifact_id,),
+        )
+        connection.execute(
+            "INSERT INTO artifact_versions "
+            "(id, artifact_id, schema_version, content_digest, created_at) "
+            "VALUES (%s, %s, 1, %s, CURRENT_TIMESTAMP)",
+            (version_id, artifact_id, version_id),
+        )
+    return version_ids
+
+
+def _insert_edition(
+    connection: psycopg.Connection[Any], edition_id: str, report: str, policy: str
+) -> None:
+    connection.execute(
+        "INSERT INTO video_digest_editions "
+        "(edition_id, daily_report_version_id, policy_bundle_version_id, subtitle_state, "
+        "created_at, updated_at) VALUES (%s, %s, %s, 'pending', "
+        "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        (edition_id, report, policy),
+    )
+
+
+def _insert_slot(connection: psycopg.Connection[Any], slot_id: str) -> None:
+    connection.execute(
+        "INSERT INTO video_digest_slots "
+        "(slot_id, name, scheduled_at, bucharest_day, stage, claim_count, "
+        "created_at, updated_at) VALUES (%s, 'morning', CURRENT_TIMESTAMP, "
+        "(CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Bucharest')::DATE, 'scheduled', 0, "
+        "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        (slot_id,),
+    )
+
+
+def _insert_story(
+    connection: psycopg.Connection[Any],
+    story_id: str,
+    edition_id: str,
+    position: int,
+    subject_id: str,
+) -> None:
+    connection.execute(
+        "INSERT INTO video_digest_stories "
+        "(story_id, edition_id, position, report_subject_id, title, mandatory, "
+        "requested_duration_ms, stage, created_at, updated_at) "
+        "VALUES (%s, %s, %s, %s, 'Story', TRUE, 1000, 'planned', "
+        "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        (story_id, edition_id, position, subject_id),
+    )
+
+
+def _insert_generation_request(
+    connection: psycopg.Connection[Any],
+    request_id: str,
+    edition_id: str,
+    request_version: str,
+) -> None:
+    connection.execute(
+        "INSERT INTO video_digest_generation_requests "
+        "(request_id, edition_id, story_position, attempt_index, "
+        "request_artifact_version_id, stage, cost_kind, created_at, updated_at) "
+        "VALUES (%s, %s, 0, 0, %s, 'pending', 'pending', "
+        "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        (request_id, edition_id, request_version),
+    )
+
+
+def _insert_publication_intent(
+    connection: psycopg.Connection[Any],
+    publication_id: str,
+    edition_id: str,
+    video_version: str,
+    subtitle_version: str,
+) -> None:
+    connection.execute(
+        "INSERT INTO video_digest_publication_intents "
+        "(publication_id, edition_id, expected_video_key, video_digest, video_byte_size, "
+        "video_media_type, subtitle_expected_key, subtitle_digest, subtitle_byte_size, "
+        "subtitle_media_type, source_video_artifact_version_id, "
+        "source_subtitle_artifact_version_id, stage, created_at, updated_at) "
+        "VALUES (%s, %s, 'digest.mp4', %s, 100, 'video/mp4', 'digest.vtt', %s, "
+        "10, 'text/vtt', %s, %s, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        (
+            publication_id,
+            edition_id,
+            _sha256_id(900),
+            _sha256_id(901),
+            video_version,
+            subtitle_version,
+        ),
+    )
+
+
+def _advance_story_to_generating(
+    connection: psycopg.Connection[Any], story_id: str, verification_version: str
+) -> None:
+    connection.execute(
+        "UPDATE video_digest_stories SET stage = 'verifying', updated_at = CURRENT_TIMESTAMP "
+        "WHERE story_id = %s",
+        (story_id,),
+    )
+    connection.execute(
+        "UPDATE video_digest_stories SET stage = 'verified', "
+        "verification_evidence_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
+        "WHERE story_id = %s",
+        (verification_version, story_id),
+    )
+    connection.execute(
+        "UPDATE video_digest_stories SET stage = 'generating', updated_at = CURRENT_TIMESTAMP "
+        "WHERE story_id = %s",
+        (story_id,),
+    )
+
+
+def _accept_generation(
+    connection: psycopg.Connection[Any],
+    request_id: str,
+    response_version: str,
+    clip_version: str,
+) -> None:
+    connection.execute(
+        "UPDATE video_digest_generation_requests SET stage = 'submitted', "
+        "provider_receipt_id = 'provider-1', cost_kind = 'estimated', cost_usd = 1, "
+        "updated_at = CURRENT_TIMESTAMP WHERE request_id = %s",
+        (request_id,),
+    )
+    connection.execute(
+        "UPDATE video_digest_generation_requests SET stage = 'processing', "
+        "response_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
+        "WHERE request_id = %s",
+        (response_version, request_id),
+    )
+    connection.execute(
+        "UPDATE video_digest_generation_requests SET stage = 'accepted', "
+        "accepted_clip_artifact_version_id = %s, cost_kind = 'measured', cost_usd = 2, "
+        "updated_at = CURRENT_TIMESTAMP WHERE request_id = %s",
+        (clip_version, request_id),
+    )
 
 
 @pytest.fixture
@@ -48,17 +203,14 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
             ).fetchall()
         }
         migrations = connection.execute(
-            "SELECT version, name, sha256 FROM news_schema_migrations"
+            "SELECT version, name, sha256 FROM news_schema_migrations ORDER BY version"
         ).fetchall()
 
     assert "debt_transcript_projection_items" not in tables
-    assert len(tables) == 41
+    assert len(tables) == 46
     assert migrations == [
-        (
-            1,
-            "initial",
-            news_schema.NEWS_CATALOG_MIGRATIONS[0].sha256,
-        )
+        (1, "initial", news_schema.NEWS_CATALOG_MIGRATIONS[0].sha256),
+        (2, "video_digest", news_schema.NEWS_CATALOG_MIGRATIONS[1].sha256),
     ]
 
 
@@ -80,3 +232,283 @@ def test_news_schema_rejects_disabled_triggers(postgres_news_schema: str) -> Non
 
     with pytest.raises(NewsCatalogSchemaError, match="disabled triggers: runs_protect_identity"):
         ensure_news_catalog_schema()
+
+
+def test_video_digest_inserts_must_start_at_initial_state(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        report, policy, plan, video, verification, request_version = _record_artifact_versions(
+            connection, 1, 6
+        )
+        edition_id, slot_id, story_id, subject_id, request_id, publication_id = (
+            _sha256_id(value) for value in range(20, 26)
+        )
+
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "INSERT INTO video_digest_editions "
+                "(edition_id, daily_report_version_id, policy_bundle_version_id, "
+                "plan_artifact_version_id, subtitle_state, created_at, updated_at) "
+                "VALUES (%s, %s, %s, %s, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                (edition_id, report, policy, plan),
+            )
+        _insert_edition(connection, edition_id, report, policy)
+
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "INSERT INTO video_digest_slots "
+                "(slot_id, name, scheduled_at, bucharest_day, stage, edition_id, "
+                "lease_owner_token, lease_expires_at, claim_count, created_at, updated_at) "
+                "VALUES (%s, 'morning', CURRENT_TIMESTAMP, "
+                "(CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Bucharest')::DATE, 'claimed', %s, "
+                "'owner', CURRENT_TIMESTAMP + INTERVAL '1 hour', 1, "
+                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                (slot_id, edition_id),
+            )
+        _insert_slot(connection, slot_id)
+
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "INSERT INTO video_digest_stories "
+                "(story_id, edition_id, position, report_subject_id, title, mandatory, "
+                "requested_duration_ms, stage, verification_evidence_artifact_version_id, "
+                "created_at, updated_at) VALUES (%s, %s, 0, %s, 'Story', TRUE, 1000, "
+                "'verified', %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                (story_id, edition_id, subject_id, verification),
+            )
+        _insert_story(connection, story_id, edition_id, 0, subject_id)
+
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "INSERT INTO video_digest_generation_requests "
+                "(request_id, edition_id, story_position, attempt_index, "
+                "request_artifact_version_id, stage, provider_receipt_id, cost_kind, "
+                "created_at, updated_at) VALUES (%s, %s, 0, 0, %s, 'submitted', "
+                "'receipt', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                (request_id, edition_id, request_version),
+            )
+        _insert_generation_request(connection, request_id, edition_id, request_version)
+
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "INSERT INTO video_digest_publication_intents "
+                "(publication_id, edition_id, expected_video_key, video_digest, "
+                "video_byte_size, video_media_type, source_video_artifact_version_id, "
+                "stage, created_at, updated_at) VALUES (%s, %s, 'digest.mp4', %s, 100, "
+                "'video/mp4', %s, 'uploading', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                (publication_id, edition_id, _sha256_id(99), video),
+            )
+
+
+def test_video_digest_plan_membership_is_contiguous_and_frozen(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        report, policy, plan = _record_artifact_versions(connection, 100, 3)
+        edition_id, first_story, second_story, late_story = (
+            _sha256_id(value) for value in range(110, 114)
+        )
+        _insert_edition(connection, edition_id, report, policy)
+        _insert_story(connection, second_story, edition_id, 1, _sha256_id(120))
+
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_editions SET plan_artifact_version_id = %s, "
+                "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+                (plan, edition_id),
+            )
+
+        _insert_story(connection, first_story, edition_id, 0, _sha256_id(121))
+        connection.execute(
+            "UPDATE video_digest_editions SET plan_artifact_version_id = %s, "
+            "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+            (plan, edition_id),
+        )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            _insert_story(connection, late_story, edition_id, 2, _sha256_id(122))
+
+
+def test_video_digest_story_acceptance_requires_matching_generation(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        report, policy, verification, request_version, response, clip = _record_artifact_versions(
+            connection, 200, 6
+        )
+        edition_id, story_id, request_id = (_sha256_id(value) for value in range(210, 213))
+        _insert_edition(connection, edition_id, report, policy)
+        _insert_story(connection, story_id, edition_id, 0, _sha256_id(220))
+        _insert_generation_request(connection, request_id, edition_id, request_version)
+        _advance_story_to_generating(connection, story_id, verification)
+
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_stories SET stage = 'accepted', "
+                "accepted_clip_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
+                "WHERE story_id = %s",
+                (clip, story_id),
+            )
+
+        _accept_generation(connection, request_id, response, clip)
+        connection.execute(
+            "UPDATE video_digest_stories SET stage = 'accepted', "
+            "accepted_clip_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
+            "WHERE story_id = %s",
+            (clip, story_id),
+        )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_generation_requests SET cost_kind = 'estimated', "
+                "cost_usd = 1, updated_at = CURRENT_TIMESTAMP WHERE request_id = %s",
+                (request_id,),
+            )
+
+
+def test_video_digest_lease_owner_requires_a_fresh_claim(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        report, policy = _record_artifact_versions(connection, 300, 2)
+        edition_id, slot_id = (_sha256_id(value) for value in range(310, 312))
+        _insert_edition(connection, edition_id, report, policy)
+        _insert_slot(connection, slot_id)
+        connection.execute(
+            "UPDATE video_digest_slots SET stage = 'claimed', edition_id = %s, "
+            "lease_owner_token = 'owner-a', lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', "
+            "claim_count = 1, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (edition_id, slot_id),
+        )
+
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_slots SET lease_owner_token = 'owner-b', claim_count = 2, "
+                "updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+                (slot_id,),
+            )
+
+        connection.execute(
+            "UPDATE video_digest_slots SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second', "
+            "updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (slot_id,),
+        )
+        connection.execute(
+            "UPDATE video_digest_slots SET lease_owner_token = 'owner-b', "
+            "lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', claim_count = 2, "
+            "updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (slot_id,),
+        )
+
+
+def test_video_digest_publication_and_slot_complete_together(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        report, policy, plan, video, subtitles, verification, request_version, response, clip = (
+            _record_artifact_versions(connection, 400, 9)
+        )
+        edition_id, slot_id, story_id, request_id, publication_id = (
+            _sha256_id(value) for value in range(420, 425)
+        )
+        _insert_edition(connection, edition_id, report, policy)
+        _insert_slot(connection, slot_id)
+        _insert_story(connection, story_id, edition_id, 0, _sha256_id(430))
+        _insert_generation_request(connection, request_id, edition_id, request_version)
+        _insert_publication_intent(connection, publication_id, edition_id, video, subtitles)
+        connection.execute(
+            "UPDATE video_digest_editions SET plan_artifact_version_id = %s, "
+            "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+            (plan, edition_id),
+        )
+        connection.execute(
+            "UPDATE video_digest_slots SET stage = 'claimed', edition_id = %s, "
+            "lease_owner_token = 'owner', lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', "
+            "claim_count = 1, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (edition_id, slot_id),
+        )
+        for stage in ("planning", "generating", "assembling", "subtitling"):
+            connection.execute(
+                "UPDATE video_digest_slots SET stage = %s, updated_at = CURRENT_TIMESTAMP "
+                "WHERE slot_id = %s",
+                (stage, slot_id),
+            )
+        _advance_story_to_generating(connection, story_id, verification)
+        _accept_generation(connection, request_id, response, clip)
+        connection.execute(
+            "UPDATE video_digest_stories SET stage = 'accepted', "
+            "accepted_clip_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
+            "WHERE story_id = %s",
+            (clip, story_id),
+        )
+        connection.execute(
+            "UPDATE video_digest_editions SET assembled_video_artifact_version_id = %s, "
+            "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+            (video, edition_id),
+        )
+        for stage in ("uploading", "uploaded", "verified"):
+            connection.execute(
+                "UPDATE video_digest_publication_intents SET stage = %s, "
+                "updated_at = CURRENT_TIMESTAMP WHERE publication_id = %s",
+                (stage, publication_id),
+            )
+
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_publication_intents SET stage = 'published', "
+                "published_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP "
+                "WHERE publication_id = %s",
+                (publication_id,),
+            )
+        connection.execute(
+            "UPDATE video_digest_editions SET subtitle_state = 'available', "
+            "subtitle_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
+            "WHERE edition_id = %s",
+            (subtitles, edition_id),
+        )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_publication_intents SET stage = 'published', "
+                "published_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP "
+                "WHERE publication_id = %s",
+                (publication_id,),
+            )
+
+        connection.execute(
+            "UPDATE video_digest_slots SET stage = 'publishing', updated_at = CURRENT_TIMESTAMP "
+            "WHERE slot_id = %s",
+            (slot_id,),
+        )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_slots SET stage = 'published', lease_owner_token = NULL, "
+                "lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+                (slot_id,),
+            )
+
+        with connection.transaction():
+            connection.execute(
+                "UPDATE video_digest_publication_intents SET stage = 'published', "
+                "published_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP "
+                "WHERE publication_id = %s",
+                (publication_id,),
+            )
+            connection.execute(
+                "UPDATE video_digest_slots SET stage = 'published', lease_owner_token = NULL, "
+                "lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+                (slot_id,),
+            )
