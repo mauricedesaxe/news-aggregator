@@ -1,0 +1,802 @@
+{
+  "article_references": [
+    {
+      "artifact_id": "news:article:103cfb2d8ff769bbece26f7bec90e7d690c4ceb38cc5d440df3825a2aaa04340",
+      "content_digest": "9c667f2012f00bdc8e4e5ed5d38ea121e4e18a47164eadd5b017837177ffc38d",
+      "r2_key": "news/articles/103cfb2d8ff769bbece26f7bec90e7d690c4ceb38cc5d440df3825a2aaa04340/9c667f2012f00bdc8e4e5ed5d38ea121e4e18a47164eadd5b017837177ffc38d.json",
+      "version_id": "1664ff7ed440e4d988987cbcd28580239e71e7163b9f2f5afa2f7dc6752a9437"
+    },
+    {
+      "artifact_id": "news:article:4c76a218150e28f9b5652554f4e69748834177864b6655eb932b0521f66c651a",
+      "content_digest": "db82628d7077e51166cfef63b1f1f695690f2ab0b1250215a27abb94381d9b9d",
+      "r2_key": "news/articles/4c76a218150e28f9b5652554f4e69748834177864b6655eb932b0521f66c651a/db82628d7077e51166cfef63b1f1f695690f2ab0b1250215a27abb94381d9b9d.json",
+      "version_id": "274a7a7b04581808d9a56b6cc57a46d1e3cde559cf0b454c46b4b89800f94acb"
+    },
+    {
+      "artifact_id": "news:article:8bd7849af3641ff2b77fc2b68612f2d897460937f361709ace8ee6de582840c5",
+      "content_digest": "3d1d8aa577f97214c2c96c305cfba1575eb1ca07370ef25a9b02ae928e0dbf72",
+      "r2_key": "news/articles/8bd7849af3641ff2b77fc2b68612f2d897460937f361709ace8ee6de582840c5/3d1d8aa577f97214c2c96c305cfba1575eb1ca07370ef25a9b02ae928e0dbf72.json",
+      "version_id": "2b0df919dc7b396636b7f14b955a3a353f410d4980204ea90f27ef7755b26894"
+    },
+    {
+      "artifact_id": "news:article:ecb4627089af03797a7213a091c9fcf6ee10ac36e853d33a045ef2c46fd3c9ee",
+      "content_digest": "23c7234b2d7d44c9e6bc00771dbc05224503f9c1f7cccb2ed19776ac98255b28",
+      "r2_key": "news/articles/ecb4627089af03797a7213a091c9fcf6ee10ac36e853d33a045ef2c46fd3c9ee/23c7234b2d7d44c9e6bc00771dbc05224503f9c1f7cccb2ed19776ac98255b28.json",
+      "version_id": "2b6f38ed84358f143273ac03dbfc8ef05a76d8df7ccd5091f4d3b91c49e893a7"
+    },
+    {
+      "artifact_id": "news:article:e72742d58de88d54acf528cde8c0939b6f69e7da3b9fb50f9c0e9aa35057c4aa",
+      "content_digest": "45f42350e5e7e89cb67e5061f31db6e046dbb508c3cb85838f6977dd3042cdfe",
+      "r2_key": "news/articles/e72742d58de88d54acf528cde8c0939b6f69e7da3b9fb50f9c0e9aa35057c4aa/45f42350e5e7e89cb67e5061f31db6e046dbb508c3cb85838f6977dd3042cdfe.json",
+      "version_id": "398d4fd2959e1f0d3c2a97b0b8cb53c7cfc6aef1f8786d4d79dc7348c0547631"
+    },
+    {
+      "artifact_id": "news:article:c18707ad03fc0b44a33e18b91e6d61ad482b50a89f971912206cc4371c5bad49",
+      "content_digest": "f546bb0e7174c8bcf4eb4024a15915c588091e24d1f6dce768513a9453a2addc",
+      "r2_key": "news/articles/c18707ad03fc0b44a33e18b91e6d61ad482b50a89f971912206cc4371c5bad49/f546bb0e7174c8bcf4eb4024a15915c588091e24d1f6dce768513a9453a2addc.json",
+      "version_id": "47ee7277582730888cb8f84f57ba312c03ce2c75bc5a23ad06bc54c955bd354c"
+    },
+    {
+      "artifact_id": "news:article:7a40bef008f7c0677ce9d0fc3e328217ebee3d0b924a8f6cf34b588553f07049",
+      "content_digest": "2aa78ca802a9bc3679e9cd4579be4811832ee3b98c373285fe8bb37b55f2bb9a",
+      "r2_key": "news/articles/7a40bef008f7c0677ce9d0fc3e328217ebee3d0b924a8f6cf34b588553f07049/2aa78ca802a9bc3679e9cd4579be4811832ee3b98c373285fe8bb37b55f2bb9a.json",
+      "version_id": "4d1fe449661db8317dae5b8c60bbb1d60366968ba4b9ec9f0e51050f0fb31d28"
+    },
+    {
+      "artifact_id": "news:article:99b1d1130a73c806266c08698f9c73a0808a3b1d08dd06e32318cfe29d9aaedd",
+      "content_digest": "3f857ab03446283c63780d25a806a56e630dc6b801cceeeefa8c3b0a3f5f8c63",
+      "r2_key": "news/articles/99b1d1130a73c806266c08698f9c73a0808a3b1d08dd06e32318cfe29d9aaedd/3f857ab03446283c63780d25a806a56e630dc6b801cceeeefa8c3b0a3f5f8c63.json",
+      "version_id": "4f32056d5999beda3c81db4e8a4227ed2b28b6115741d604b52cf09b2576bb71"
+    },
+    {
+      "artifact_id": "news:article:1bff9ccaad6331e18da20b7e06f13b49c30d30f1e4d03dd75aa417d400f9fa91",
+      "content_digest": "9e9dd31b1d2d31fc3f8796f815b85f2981647d1cb74f4fdcf0fb88e712cf654e",
+      "r2_key": "news/articles/1bff9ccaad6331e18da20b7e06f13b49c30d30f1e4d03dd75aa417d400f9fa91/9e9dd31b1d2d31fc3f8796f815b85f2981647d1cb74f4fdcf0fb88e712cf654e.json",
+      "version_id": "518ab10cdaa611c547f374f19ebcb7eec4c1a2cfd3dafe2f523ea7f347766b3f"
+    },
+    {
+      "artifact_id": "news:article:68f5a523ce27cdfab3495471071ff480fae915ee0cdf726977313d78dfce3efe",
+      "content_digest": "f10307cdaf235a4996f5d7e534f5ad4a0e2b9200626da1cb03187a892bebfefc",
+      "r2_key": "news/articles/68f5a523ce27cdfab3495471071ff480fae915ee0cdf726977313d78dfce3efe/f10307cdaf235a4996f5d7e534f5ad4a0e2b9200626da1cb03187a892bebfefc.json",
+      "version_id": "588c99fcd4ad1e0980694facab1169725dd167b3f46b2e60a79e63c651308469"
+    },
+    {
+      "artifact_id": "news:article:7890c852bce4103a195cb5393b2c03cd11b7e6b4563f1e3822c0237f91db661b",
+      "content_digest": "639fe933d9f345565aec41d96c4c5041942e1bd9bbaf9895357c47653b56d9b5",
+      "r2_key": "news/articles/7890c852bce4103a195cb5393b2c03cd11b7e6b4563f1e3822c0237f91db661b/639fe933d9f345565aec41d96c4c5041942e1bd9bbaf9895357c47653b56d9b5.json",
+      "version_id": "58bd2098fd5e2ee61f7b6bec699662e50ded155dae131a8739588b531a34dce1"
+    },
+    {
+      "artifact_id": "news:article:5a0a9f9326f21a741d246aabd5ef0970a8982941b4cc7ac8ba5e3010f6aff363",
+      "content_digest": "c5bf4807f700ffcbe7ba367516fed5ab39d03eb3d44689835b66ff4ac1535c21",
+      "r2_key": "news/articles/5a0a9f9326f21a741d246aabd5ef0970a8982941b4cc7ac8ba5e3010f6aff363/c5bf4807f700ffcbe7ba367516fed5ab39d03eb3d44689835b66ff4ac1535c21.json",
+      "version_id": "5b9e7802612a4d92602925317ed1f789bea4c4399cc4deb0c37c007edb28d0f3"
+    },
+    {
+      "artifact_id": "news:article:7f6d27405cbcb6c84bdf98030a279b3864f944a92f032bd539cf030fccbf4b2a",
+      "content_digest": "96c41029fdaf449ef07ea4199c5b83a05f6977384946fb40c9c637a5f5de33a4",
+      "r2_key": "news/articles/7f6d27405cbcb6c84bdf98030a279b3864f944a92f032bd539cf030fccbf4b2a/96c41029fdaf449ef07ea4199c5b83a05f6977384946fb40c9c637a5f5de33a4.json",
+      "version_id": "5bd892e04d5046908181a92717fa0b933bd9d5bcd0f742618f4697f2f69ee955"
+    },
+    {
+      "artifact_id": "news:article:558aad86ba7b92907da2ba4d87a9b8f5b6afa014f8a4d91d83931966a42f56e6",
+      "content_digest": "add25ca7ea9e3010d6722d81b0cd1145f6206d72afda7c726ddec77a3396cd3a",
+      "r2_key": "news/articles/558aad86ba7b92907da2ba4d87a9b8f5b6afa014f8a4d91d83931966a42f56e6/add25ca7ea9e3010d6722d81b0cd1145f6206d72afda7c726ddec77a3396cd3a.json",
+      "version_id": "67b88169e2eba77bd1448c4d8918e3e98d05a5ab228013be92a63a5f850b1692"
+    },
+    {
+      "artifact_id": "news:article:ad2d4994945e93a6baa539563e52f2690d44ce941f36d78c6dcd41d7f8c3cc1d",
+      "content_digest": "8eb88d81f4e0bc4148ade845c0d047a032f562dc69d6ce7acff44fd7a31b3dcd",
+      "r2_key": "news/articles/ad2d4994945e93a6baa539563e52f2690d44ce941f36d78c6dcd41d7f8c3cc1d/8eb88d81f4e0bc4148ade845c0d047a032f562dc69d6ce7acff44fd7a31b3dcd.json",
+      "version_id": "6a7c475863b967d2f63c7227ed2c80a885ec3f9ac73a519de4ac062d478ee21d"
+    },
+    {
+      "artifact_id": "news:article:d02aad8deb4de539f76c7701e193ce4b926ace2b76ea0a04a84ad5cdcc8906cb",
+      "content_digest": "aa5bdc4dbc83653641c1c62b7e3c5f9e7fe8777fa65adcffbbf4e77eb1c986a2",
+      "r2_key": "news/articles/d02aad8deb4de539f76c7701e193ce4b926ace2b76ea0a04a84ad5cdcc8906cb/aa5bdc4dbc83653641c1c62b7e3c5f9e7fe8777fa65adcffbbf4e77eb1c986a2.json",
+      "version_id": "718a10a3949914ce3eba9a312dc7152da387784d753672a959eb1e89e41a3d8b"
+    },
+    {
+      "artifact_id": "news:article:597d6b64936048b9ffe135eae6535253ceb6fb0e99bdb86f66b97e3480955195",
+      "content_digest": "af5a5a201c0c978eacd5acdc18901b0d86d429e5ff0a04827c0ab9082447329a",
+      "r2_key": "news/articles/597d6b64936048b9ffe135eae6535253ceb6fb0e99bdb86f66b97e3480955195/af5a5a201c0c978eacd5acdc18901b0d86d429e5ff0a04827c0ab9082447329a.json",
+      "version_id": "7ba522e890ca3cfaa8eae96eb0b041ab78f314ba8ec0e55fa7377a2d98d9d86c"
+    },
+    {
+      "artifact_id": "news:article:4f438194ae69fc7f7cac52b024317c3f1cdc07d7c055df2337c2a7562dc85ed3",
+      "content_digest": "0cdffd21ada90d85243001d5c0ea2733a20ac615cd5b198bf19c3c9a3b2f9d65",
+      "r2_key": "news/articles/4f438194ae69fc7f7cac52b024317c3f1cdc07d7c055df2337c2a7562dc85ed3/0cdffd21ada90d85243001d5c0ea2733a20ac615cd5b198bf19c3c9a3b2f9d65.json",
+      "version_id": "7d01afd34b64965e01ef47896f886b8048ae6565eabf6f67b7ccbfa824b1f20e"
+    },
+    {
+      "artifact_id": "news:article:ace9b10b73b34acd348985e96c8a97374f8f9e4742f67fdd973c979684d6e620",
+      "content_digest": "1652924ee0294fc2855723143e841ceda8f6806e2dd3a4410e2a1038a2451da5",
+      "r2_key": "news/articles/ace9b10b73b34acd348985e96c8a97374f8f9e4742f67fdd973c979684d6e620/1652924ee0294fc2855723143e841ceda8f6806e2dd3a4410e2a1038a2451da5.json",
+      "version_id": "7f98569f5ce4e2061c30159e221d5fe15ce3549312bb0a37d5d46660fef2a31f"
+    },
+    {
+      "artifact_id": "news:article:91677333e125dff0fe9341e460426682218305b6e47d8ce0fe1429725718b82e",
+      "content_digest": "ab31534b264b79dea2923723f6550c490d5768aa0084d5d2264c4462bc258ad1",
+      "r2_key": "news/articles/91677333e125dff0fe9341e460426682218305b6e47d8ce0fe1429725718b82e/ab31534b264b79dea2923723f6550c490d5768aa0084d5d2264c4462bc258ad1.json",
+      "version_id": "88b71a3938ade4bba19ac72d794ad10b74d48f0a3a60182444cb29f4b936ce8d"
+    },
+    {
+      "artifact_id": "news:article:25ba07afcf2a510b6fa460b41c32f487c780cbba827c82dce176aba204bebd61",
+      "content_digest": "fac7b24b756d44f039fcb9d18cef225928193f7ca79cec0d8e5a9a1d95824842",
+      "r2_key": "news/articles/25ba07afcf2a510b6fa460b41c32f487c780cbba827c82dce176aba204bebd61/fac7b24b756d44f039fcb9d18cef225928193f7ca79cec0d8e5a9a1d95824842.json",
+      "version_id": "8f61bf3e204ee53451365d31ecec08ff21168c025565411bf1041e324e694d60"
+    },
+    {
+      "artifact_id": "news:article:30868471cc55bab1be0bdb5d9a077ad616a45e2e62eda33fb72dde8868997ff7",
+      "content_digest": "8c84511f38a294415991ea0974137142c4b7b8a1712f863749d1961046d7f27d",
+      "r2_key": "news/articles/30868471cc55bab1be0bdb5d9a077ad616a45e2e62eda33fb72dde8868997ff7/8c84511f38a294415991ea0974137142c4b7b8a1712f863749d1961046d7f27d.json",
+      "version_id": "954f0bf4a14140397160eaae486d63458ac246e468b369b4079c88ac2177bd71"
+    },
+    {
+      "artifact_id": "news:article:b88c9b4e204acc0b9f25d1ef4d55d4fda8c029bdc4c26d15c104bf01872c1eee",
+      "content_digest": "62390f6be3ad06df98405336129ee76f113571e1a06aa1cb42b3acffc2aa64d9",
+      "r2_key": "news/articles/b88c9b4e204acc0b9f25d1ef4d55d4fda8c029bdc4c26d15c104bf01872c1eee/62390f6be3ad06df98405336129ee76f113571e1a06aa1cb42b3acffc2aa64d9.json",
+      "version_id": "95c540dd8bd875fbf038d837f420db6fa8c489a027ca237cfd9c7e89ab46d062"
+    },
+    {
+      "artifact_id": "news:article:fcf23085f2905a90044a8b0b2e964b6ad336eec4e3ae15d2e129acf3a793989c",
+      "content_digest": "a2409fff55a758f91911b4c9828b88536ac1af8c892e0e1480ef00b0d95bc99b",
+      "r2_key": "news/articles/fcf23085f2905a90044a8b0b2e964b6ad336eec4e3ae15d2e129acf3a793989c/a2409fff55a758f91911b4c9828b88536ac1af8c892e0e1480ef00b0d95bc99b.json",
+      "version_id": "9999eac749a2fa2eb30d59f00baf99c578e4820dd48d52c25fc36808a1254a12"
+    },
+    {
+      "artifact_id": "news:article:5e386cd03690a7e51de1bc23d251b1866d37043131c35bc448cc719c9a6dd785",
+      "content_digest": "197258b79e77a56762409dd44bc286dea1752098a525724c762a1cb316991f0e",
+      "r2_key": "news/articles/5e386cd03690a7e51de1bc23d251b1866d37043131c35bc448cc719c9a6dd785/197258b79e77a56762409dd44bc286dea1752098a525724c762a1cb316991f0e.json",
+      "version_id": "9c6bbafdb08d54a4567e8fbb3f0ea12b95e29abb2c3bb5d5919861e202472e64"
+    },
+    {
+      "artifact_id": "news:article:1a733c31bf26815426b685b126c35576b540e97c8136ce424559e33483765106",
+      "content_digest": "1540eb9c9f0bb4529314eaf92afc159d1102d11389bb491c27f991b66944757c",
+      "r2_key": "news/articles/1a733c31bf26815426b685b126c35576b540e97c8136ce424559e33483765106/1540eb9c9f0bb4529314eaf92afc159d1102d11389bb491c27f991b66944757c.json",
+      "version_id": "9fafb2bafbc6b443e4c882a17b0e3008ca1e8262f7d2eeacf0d96e43579c0f7f"
+    },
+    {
+      "artifact_id": "news:article:51fa95f816dace61be651dad88b18b038bac0cc0e179bd004501f0589ff743a1",
+      "content_digest": "1d8ba8da29eebf48034104463de0e3f0bb24544c197375f9fe767cbf50eb35c3",
+      "r2_key": "news/articles/51fa95f816dace61be651dad88b18b038bac0cc0e179bd004501f0589ff743a1/1d8ba8da29eebf48034104463de0e3f0bb24544c197375f9fe767cbf50eb35c3.json",
+      "version_id": "adb9786b3a1dc492d67eb3e924710bb51c07e9c137c3ad322c012f422bb75631"
+    },
+    {
+      "artifact_id": "news:article:5a7be1b6f88aa5d3e203cc51bf67f7d2b9e898b04092911dba4abba940593229",
+      "content_digest": "7270e762f6420a65dadc936331885556e7e90ddb1166c09dd4bf506a263b21d4",
+      "r2_key": "news/articles/5a7be1b6f88aa5d3e203cc51bf67f7d2b9e898b04092911dba4abba940593229/7270e762f6420a65dadc936331885556e7e90ddb1166c09dd4bf506a263b21d4.json",
+      "version_id": "ae67b296c425cdfccb61405a9b0f48afbe39726920706c66a3b6946befba19af"
+    },
+    {
+      "artifact_id": "news:article:9ccb934f49161da8bb5474c5c984ecabc0e362e7824fc8bf0d7ef43d1089a933",
+      "content_digest": "0cc2589e38f291956ec3ea8bf72af6394056cca1b91a18bf0781b2ccd634a408",
+      "r2_key": "news/articles/9ccb934f49161da8bb5474c5c984ecabc0e362e7824fc8bf0d7ef43d1089a933/0cc2589e38f291956ec3ea8bf72af6394056cca1b91a18bf0781b2ccd634a408.json",
+      "version_id": "bb7c6118429451e59fbfb74565bd5ecefde6ab353a594f679525733236966d05"
+    },
+    {
+      "artifact_id": "news:article:641cbb6e9c56840571d0f315dc122c5d72eeaf0ff6b240d38422c6fe6c3a5536",
+      "content_digest": "29dc265d6309904cf4fd88d25af2364a48e6fde0ec8c65c90aa567772297b1a1",
+      "r2_key": "news/articles/641cbb6e9c56840571d0f315dc122c5d72eeaf0ff6b240d38422c6fe6c3a5536/29dc265d6309904cf4fd88d25af2364a48e6fde0ec8c65c90aa567772297b1a1.json",
+      "version_id": "cc47aaea31bff3e4eee5f8eaf98bbfa64a0fa710abd2e7b85899d28f495ffea5"
+    },
+    {
+      "artifact_id": "news:article:ffbccf289cba3818ab539cc91fbcc50704575e53b8263030dcc030d4c96061bb",
+      "content_digest": "2d3ac590339c2b9796d1bda857421deaa003428e197fe298f25378650272791a",
+      "r2_key": "news/articles/ffbccf289cba3818ab539cc91fbcc50704575e53b8263030dcc030d4c96061bb/2d3ac590339c2b9796d1bda857421deaa003428e197fe298f25378650272791a.json",
+      "version_id": "d19b7e94eba7ec1345fc14090397af680635d0795bb649f4f04bcefc8d7d6019"
+    },
+    {
+      "artifact_id": "news:article:3d3c9679eb725f69669e87c07b145719763acc0bbbf3a3adf8e8f8e500b17169",
+      "content_digest": "1d3b17b0fb5d5ce9c51f9d3d5115955b498ac18641e004cbe277c2c1e6a8182b",
+      "r2_key": "news/articles/3d3c9679eb725f69669e87c07b145719763acc0bbbf3a3adf8e8f8e500b17169/1d3b17b0fb5d5ce9c51f9d3d5115955b498ac18641e004cbe277c2c1e6a8182b.json",
+      "version_id": "d7159786b9615dd400f21e4d95ba317d91875360833f78323ce0d61a333d98d0"
+    },
+    {
+      "artifact_id": "news:article:18c9006e875a37eed9962b5037b19c2dc2b40cd4fa7f7164a7c7533631019fd5",
+      "content_digest": "1867eab4b99c67fe1ac018b79960654f7e800395b22a7301ac961561334b8489",
+      "r2_key": "news/articles/18c9006e875a37eed9962b5037b19c2dc2b40cd4fa7f7164a7c7533631019fd5/1867eab4b99c67fe1ac018b79960654f7e800395b22a7301ac961561334b8489.json",
+      "version_id": "f6c1207cdd1e75c4f141cff2e8471f003c947ad42c154cad26bc2e93e3746a01"
+    },
+    {
+      "artifact_id": "news:article:d224a981eac85cc54a4961924186bcb367f94a23b368c15594463649e0a40295",
+      "content_digest": "26c2ecc9e6dca5abd761dd32f59b204f1ec1323a6503068f9c4d79e7146b84cc",
+      "r2_key": "news/articles/d224a981eac85cc54a4961924186bcb367f94a23b368c15594463649e0a40295/26c2ecc9e6dca5abd761dd32f59b204f1ec1323a6503068f9c4d79e7146b84cc.json",
+      "version_id": "fd7217e15abac3c39d4c5acd6afc0fc3b9f9a7212d02beec0509ae9341dfc05b"
+    }
+  ],
+  "manifest": {
+    "artifact_id": "news:evaluation-manifest:news-evaluation-2026-09-11-v11",
+    "content_digest": "19859f4edb7a7b7f28d02fe22c79e3afd2fdca71d50fec3dc8140a6ee35d1caf",
+    "r2_key": "news/evaluations/manifests/news-evaluation-2026-09-11-v11/19859f4edb7a7b7f28d02fe22c79e3afd2fdca71d50fec3dc8140a6ee35d1caf.json",
+    "version_id": "083d5ae5ba73686511f5eb01ce770dc2e5826de22cf27df76e205bd9b946216a"
+  },
+  "report_lineages": [
+    {
+      "inputs": {
+        "assessments": [],
+        "cluster_set": [
+          {
+            "artifact_id": "news:clusters:2026-09-10",
+            "content_digest": "c16542cb0a7aa5791e01bde994c301099fd129a526f29f4ef70584d287b782af",
+            "r2_key": "news/clusters/2026-09-10/c16542cb0a7aa5791e01bde994c301099fd129a526f29f4ef70584d287b782af.json",
+            "version_id": "8990bb875216d480395cd31c6ea1b5938f7027ef0a2a2eb1e096d8cf399b9612"
+          }
+        ],
+        "relevance": [
+          {
+            "artifact_id": "news:relevance:88e48798b23697fb73c19e776ad9bac265eba33287b36dfebdb6ffcfd7770fa7",
+            "content_digest": "e7aa377f59c6846854c87256ce4e0621beb0d838cbe87920b8573ac78745e3a0",
+            "r2_key": "news/derived/relevance/88e48798b23697fb73c19e776ad9bac265eba33287b36dfebdb6ffcfd7770fa7/e7aa377f59c6846854c87256ce4e0621beb0d838cbe87920b8573ac78745e3a0.json",
+            "version_id": "32f23f31a8b92f1ba9fd6500b69af85a75dde7e26acedb92f4605c4baf0bb5cb"
+          },
+          {
+            "artifact_id": "news:relevance:3d6f1863d022d2db744192e2bea2dab8d5ef2d40fd5d09b6563e840a3c209c65",
+            "content_digest": "7ff0035fc6011b4776fb8ba60dee2cb995b4b00f011b7fd745192715c478dda7",
+            "r2_key": "news/derived/relevance/3d6f1863d022d2db744192e2bea2dab8d5ef2d40fd5d09b6563e840a3c209c65/7ff0035fc6011b4776fb8ba60dee2cb995b4b00f011b7fd745192715c478dda7.json",
+            "version_id": "911757727546b35c4811adc65ad980fc1cb7fadf611e807b4722d647816f740a"
+          },
+          {
+            "artifact_id": "news:relevance:3e4c35d070558603bbdf678f2db26439cb535ff5b04813004d89a8f14f835241",
+            "content_digest": "563023bce6a41886ec7f99db2b2d0ba4049103935370b0506417026246a9cf03",
+            "r2_key": "news/derived/relevance/3e4c35d070558603bbdf678f2db26439cb535ff5b04813004d89a8f14f835241/563023bce6a41886ec7f99db2b2d0ba4049103935370b0506417026246a9cf03.json",
+            "version_id": "6310bafda429e1a184880e7027855fd6f8dce3385ba53ab9ffceaa80fc5740c7"
+          },
+          {
+            "artifact_id": "news:relevance:4dbf5cfd556e70dc56aed591cdb56b42235b65670dffe20fab97e80f9060c314",
+            "content_digest": "7ae2a57cd0b2b6d5fe325aea1896196e5cf87b097c6fbd34b785870ec6f84373",
+            "r2_key": "news/derived/relevance/4dbf5cfd556e70dc56aed591cdb56b42235b65670dffe20fab97e80f9060c314/7ae2a57cd0b2b6d5fe325aea1896196e5cf87b097c6fbd34b785870ec6f84373.json",
+            "version_id": "52bfeab72428f24302ccb390abde53557c0a44bc6e6713ecd443cfd562d18652"
+          },
+          {
+            "artifact_id": "news:relevance:3150d69ae9890d0842d8303d501de527720ee02601f8e70413469af162e2166a",
+            "content_digest": "15ec279ab2fa7c4d40000fdd194d7b1d1873b117dab52650bb9a2dbd316b1411",
+            "r2_key": "news/derived/relevance/3150d69ae9890d0842d8303d501de527720ee02601f8e70413469af162e2166a/15ec279ab2fa7c4d40000fdd194d7b1d1873b117dab52650bb9a2dbd316b1411.json",
+            "version_id": "5e0100ff1278eade7183748fabb200423e38a9b6f5fc23e975f2975008b7e4f5"
+          },
+          {
+            "artifact_id": "news:relevance:282e1cbd67e6a071582610437902b0af7fe2b06fec4db809068546c312d24869",
+            "content_digest": "91e748df4bf64461276f68fd892b63c91c301380f0f547e2442565957fbacb6d",
+            "r2_key": "news/derived/relevance/282e1cbd67e6a071582610437902b0af7fe2b06fec4db809068546c312d24869/91e748df4bf64461276f68fd892b63c91c301380f0f547e2442565957fbacb6d.json",
+            "version_id": "28b73eb208ffb9bad4138b1afb408d2901dadd4afab821b2cabe3a3d764b4118"
+          },
+          {
+            "artifact_id": "news:relevance:eb099bbd76c749fd4d11bfa23b712e86cb94ee91c79a224a093ed89f9ef95eaa",
+            "content_digest": "78e175ed8ffc6f3580b034f4357a3ebd1f6e18d5c425d6771070a62ab7ecc279",
+            "r2_key": "news/derived/relevance/eb099bbd76c749fd4d11bfa23b712e86cb94ee91c79a224a093ed89f9ef95eaa/78e175ed8ffc6f3580b034f4357a3ebd1f6e18d5c425d6771070a62ab7ecc279.json",
+            "version_id": "25475ee07eb7099c6dd63850ab7dd66e4107dccf6c970014a8272815297516c0"
+          },
+          {
+            "artifact_id": "news:relevance:647f2f02129057f314bbca492ee1259a3b89a96da5081d070562468da5edac14",
+            "content_digest": "247121311d1cbc107270a1c57ce7755bf88fbbb150abdde7e4fa38a2e1593659",
+            "r2_key": "news/derived/relevance/647f2f02129057f314bbca492ee1259a3b89a96da5081d070562468da5edac14/247121311d1cbc107270a1c57ce7755bf88fbbb150abdde7e4fa38a2e1593659.json",
+            "version_id": "ab57d17389116c51a17f63ff1bf1b84dc6aabf6ce40a58952d55a92e35996960"
+          },
+          {
+            "artifact_id": "news:relevance:c065d7929204975837ebee6e8ee499ffedff23a4b7a1feb6521284c0c499f03b",
+            "content_digest": "6e7b0fd44874d6e6e56c268bae6c07399826037eeaf9fd497b6049f51b6aff43",
+            "r2_key": "news/derived/relevance/c065d7929204975837ebee6e8ee499ffedff23a4b7a1feb6521284c0c499f03b/6e7b0fd44874d6e6e56c268bae6c07399826037eeaf9fd497b6049f51b6aff43.json",
+            "version_id": "9e51dad04e7091ef48495c10d1d3beaa66c3d685688aa67bfeb7ba04591d9e54"
+          },
+          {
+            "artifact_id": "news:relevance:05e60352191bc7c64dfa9cda7e3daa874e5d8ef589ae569a6f411b6b6979f2ee",
+            "content_digest": "2641bab1d23881b9abfb4b703e4071cc6d62d730fb0cedb4fb16d332c471d8fb",
+            "r2_key": "news/derived/relevance/05e60352191bc7c64dfa9cda7e3daa874e5d8ef589ae569a6f411b6b6979f2ee/2641bab1d23881b9abfb4b703e4071cc6d62d730fb0cedb4fb16d332c471d8fb.json",
+            "version_id": "1766fe1213c3b8ffaa97fafd5a7273c1f2766c759f502b35136f9f8eaed51899"
+          },
+          {
+            "artifact_id": "news:relevance:46d2d6422f5e3b045e62cd50a2d996529e0db01e3eb139d41c7b4ea2b0035d01",
+            "content_digest": "27b71ad9d01d15eb74bf854e469c21271164eb681a2180d865f61fe43ec7c618",
+            "r2_key": "news/derived/relevance/46d2d6422f5e3b045e62cd50a2d996529e0db01e3eb139d41c7b4ea2b0035d01/27b71ad9d01d15eb74bf854e469c21271164eb681a2180d865f61fe43ec7c618.json",
+            "version_id": "b2eb1dde3eaaa92259c4f927af325e9e6f123a08afb61d7c0db638de71d702f5"
+          },
+          {
+            "artifact_id": "news:relevance:7f9369adf4b92b4058380828b48183cf96caaca3db862501355832d60191ff72",
+            "content_digest": "8075a72ac314c8c5e198b96298c66217fb4ef59c2454e5e14283ad6ac3a0302b",
+            "r2_key": "news/derived/relevance/7f9369adf4b92b4058380828b48183cf96caaca3db862501355832d60191ff72/8075a72ac314c8c5e198b96298c66217fb4ef59c2454e5e14283ad6ac3a0302b.json",
+            "version_id": "62c62e25d46e74ceb1dc0bdcad64de9e9d3b862842c0caa35552e54f71a45592"
+          },
+          {
+            "artifact_id": "news:relevance:b726fe0f2e4e635d63d1c7bb5ce06e20cabc6bfb52162883c1cc4d9d94e86ff7",
+            "content_digest": "a6e9bd8f158637e60ad9a2c3a4d14c6a2ef4314b654ac6443c143631c4fb398a",
+            "r2_key": "news/derived/relevance/b726fe0f2e4e635d63d1c7bb5ce06e20cabc6bfb52162883c1cc4d9d94e86ff7/a6e9bd8f158637e60ad9a2c3a4d14c6a2ef4314b654ac6443c143631c4fb398a.json",
+            "version_id": "959e7bb44d91fb269e90d69bf17beafd50cfffa7370060c3af1a9e8e597bbf52"
+          },
+          {
+            "artifact_id": "news:relevance:4406907530ea8a4354b137a6b10d94b7be6c8f56c4a626888f95c205995684bd",
+            "content_digest": "edffbc6a41b291144fc688d1cd070161442cd1d9b5d026ffc792d789c5cf5d7f",
+            "r2_key": "news/derived/relevance/4406907530ea8a4354b137a6b10d94b7be6c8f56c4a626888f95c205995684bd/edffbc6a41b291144fc688d1cd070161442cd1d9b5d026ffc792d789c5cf5d7f.json",
+            "version_id": "e0598ebd5cffd8aaf95a8e360ce5ffc836bed4de840a1f520f45a1cb7edb9c66"
+          },
+          {
+            "artifact_id": "news:relevance:5abb4661c2f54937b030d5010fb28dcdc4ad76cec75d63546e4463349566a9a7",
+            "content_digest": "61c227d0522d2b4eb7526466b5fd0d13c8962c83fc789d74253c6c474b3c65b4",
+            "r2_key": "news/derived/relevance/5abb4661c2f54937b030d5010fb28dcdc4ad76cec75d63546e4463349566a9a7/61c227d0522d2b4eb7526466b5fd0d13c8962c83fc789d74253c6c474b3c65b4.json",
+            "version_id": "ab992b4f9aaa27ec4bcacb6278587d4b9f4485d7578a9e09064b6c7fa1e4344a"
+          },
+          {
+            "artifact_id": "news:relevance:984fe6198e1f7551247058cd623d392d48c59883b28ecb096d5a8d3cb867fc4d",
+            "content_digest": "c58f589710f35bcbe71048ed1057bd43f0c91409eb88b658fdf52f1b99bd308e",
+            "r2_key": "news/derived/relevance/984fe6198e1f7551247058cd623d392d48c59883b28ecb096d5a8d3cb867fc4d/c58f589710f35bcbe71048ed1057bd43f0c91409eb88b658fdf52f1b99bd308e.json",
+            "version_id": "c2a9dfe3fdd569c0559c4e0b0140094b6f74cb772dd2aa44d3c3d57797a0f55d"
+          },
+          {
+            "artifact_id": "news:relevance:4e9e7b071c2862ce80776dd82f2bd3372121ae6226c87cda44329be780331d00",
+            "content_digest": "a795e0aedefb7a66bc7badb65724d3dc057c092e8ff3eb5cb44735f8e1a22985",
+            "r2_key": "news/derived/relevance/4e9e7b071c2862ce80776dd82f2bd3372121ae6226c87cda44329be780331d00/a795e0aedefb7a66bc7badb65724d3dc057c092e8ff3eb5cb44735f8e1a22985.json",
+            "version_id": "39c7d3b0def35ec6cfea34332206cabae8300605fa6509c3d2fb4f4d593b319a"
+          },
+          {
+            "artifact_id": "news:relevance:0a0aa803fa72954a849da651b05b70350f011355de91078cc1eeff7a7425a184",
+            "content_digest": "f5682de42e6f9e8c3bb84cb6ad401656b0febfd567938d8a9f4530ae837fdab4",
+            "r2_key": "news/derived/relevance/0a0aa803fa72954a849da651b05b70350f011355de91078cc1eeff7a7425a184/f5682de42e6f9e8c3bb84cb6ad401656b0febfd567938d8a9f4530ae837fdab4.json",
+            "version_id": "c68b1777bc68deb795f9a368be149246587d9166513ba8f8f711d4cbba6d0e62"
+          },
+          {
+            "artifact_id": "news:relevance:3af48697b7348d6f31909e3e97c6908fee9e1095c1770a51d049b40e4f0ef173",
+            "content_digest": "0e7831f877a8a37766b55b43f6cb0b93b5fe3662f11a6834dae4da6f4a6fbce4",
+            "r2_key": "news/derived/relevance/3af48697b7348d6f31909e3e97c6908fee9e1095c1770a51d049b40e4f0ef173/0e7831f877a8a37766b55b43f6cb0b93b5fe3662f11a6834dae4da6f4a6fbce4.json",
+            "version_id": "ffd97fbeac77fd36912d826c8e51a89b75745ffaa9d9436828464deb50d9bf17"
+          },
+          {
+            "artifact_id": "news:relevance:f1d8b214d6eea2830812a362e2b345bcb04ae3dd67753810ee2cb69225a4f3b5",
+            "content_digest": "3321e2960d7ac37a6d91ed5138073d09c1d90695064ca247d69ccd64bc98c5fc",
+            "r2_key": "news/derived/relevance/f1d8b214d6eea2830812a362e2b345bcb04ae3dd67753810ee2cb69225a4f3b5/3321e2960d7ac37a6d91ed5138073d09c1d90695064ca247d69ccd64bc98c5fc.json",
+            "version_id": "936fb62c666d7fb53986ebd77a470c9b15354e770acf9086bdefc0fa6923328b"
+          },
+          {
+            "artifact_id": "news:relevance:b7feca1d36be3592d5ee763168ec73eaef06cf9b2d0e958462c790bbe92d7fb4",
+            "content_digest": "07c95b4a7417c5d2f646dfec12dc5881e1eaef97fe793bda6db744af1ba5629e",
+            "r2_key": "news/derived/relevance/b7feca1d36be3592d5ee763168ec73eaef06cf9b2d0e958462c790bbe92d7fb4/07c95b4a7417c5d2f646dfec12dc5881e1eaef97fe793bda6db744af1ba5629e.json",
+            "version_id": "4abfc39a50e6b9e3492ec9a63a77e12024ea0def207433502cb3e1d96e754410"
+          },
+          {
+            "artifact_id": "news:relevance:a8b3185efc902a840853b545f8c781490b939ea29884ff85bfe64ee8a840a64f",
+            "content_digest": "344adcaa76009d0a4fb53b1b700b8e408cc10cc5365a10d1964f706e7b1c8c70",
+            "r2_key": "news/derived/relevance/a8b3185efc902a840853b545f8c781490b939ea29884ff85bfe64ee8a840a64f/344adcaa76009d0a4fb53b1b700b8e408cc10cc5365a10d1964f706e7b1c8c70.json",
+            "version_id": "1233693d165f618bb90a344b3ac61c29f60838c08c73b0607ceb3052e7bf3118"
+          },
+          {
+            "artifact_id": "news:relevance:d23d424bccade58ff0f89bddf2077f83abd9c3087bc1fbb3113de1ae4aa20e90",
+            "content_digest": "704d385cc52b851f1ef51f78296be107d744ccdb1b1b92f7333f80420db9d764",
+            "r2_key": "news/derived/relevance/d23d424bccade58ff0f89bddf2077f83abd9c3087bc1fbb3113de1ae4aa20e90/704d385cc52b851f1ef51f78296be107d744ccdb1b1b92f7333f80420db9d764.json",
+            "version_id": "d720424b031e68f0ea267b8f92c09c6829061f5d4753f843823e0f84948cc89a"
+          },
+          {
+            "artifact_id": "news:relevance:174854fb698512f0335ee342f6dff8ae381a566b91465d06062cfbf69cb39dcb",
+            "content_digest": "f15764a3789e598ccbf8d010a215aa0d69ae0af4e52f3bd8f2ef01ae0d8648d1",
+            "r2_key": "news/derived/relevance/174854fb698512f0335ee342f6dff8ae381a566b91465d06062cfbf69cb39dcb/f15764a3789e598ccbf8d010a215aa0d69ae0af4e52f3bd8f2ef01ae0d8648d1.json",
+            "version_id": "255916c7cec65d74de905263e004307711011b03de65fe61e627619cc5c331a5"
+          },
+          {
+            "artifact_id": "news:relevance:7c2d6908307618f8e3715691bd18e1c0ea82b21304921546d90aa0007c31ea28",
+            "content_digest": "9554c8b5d246d4bc3eb6e6166d47c9d7dee01dbcec6b7f2fd606cae4b6b11260",
+            "r2_key": "news/derived/relevance/7c2d6908307618f8e3715691bd18e1c0ea82b21304921546d90aa0007c31ea28/9554c8b5d246d4bc3eb6e6166d47c9d7dee01dbcec6b7f2fd606cae4b6b11260.json",
+            "version_id": "2a39c52d6ec01fe6c0182d42751060e355dfcfd8b7087c589cf1b25af0396c11"
+          },
+          {
+            "artifact_id": "news:relevance:80fa9d8bcfc6eb3b14df4cc449a701d32c34894e482b14f551f774c11b437a28",
+            "content_digest": "965cc108913aaa8fe4fcee29046b008dcc1f07a390378e81eb1f9f97cb2b8766",
+            "r2_key": "news/derived/relevance/80fa9d8bcfc6eb3b14df4cc449a701d32c34894e482b14f551f774c11b437a28/965cc108913aaa8fe4fcee29046b008dcc1f07a390378e81eb1f9f97cb2b8766.json",
+            "version_id": "736d2ac2c094414134904aab176f44cfadebc98e6f7612c30d864e4e77c54954"
+          },
+          {
+            "artifact_id": "news:relevance:62c1137d580aa88d8d27b0c6498ee06ee77603d64b313e9e63c23d4b38b22a23",
+            "content_digest": "f01f1cdf50e9b51ba603843f2697f8e8083d3a8ee109c2fac8383e517b38b18f",
+            "r2_key": "news/derived/relevance/62c1137d580aa88d8d27b0c6498ee06ee77603d64b313e9e63c23d4b38b22a23/f01f1cdf50e9b51ba603843f2697f8e8083d3a8ee109c2fac8383e517b38b18f.json",
+            "version_id": "45f67c80d48c9ac6f28d53bdf51f82c39dc6a1300e66ea5fec42ff42b278018c"
+          },
+          {
+            "artifact_id": "news:relevance:b08b5d02f862c718060f6c4bbfaaa5ecdab1af1ce7af493a3ac5bd30e59c1f88",
+            "content_digest": "c965ebeb25349643d57373e0047071b2ec4e8d08ec0625f460712939cf3c3201",
+            "r2_key": "news/derived/relevance/b08b5d02f862c718060f6c4bbfaaa5ecdab1af1ce7af493a3ac5bd30e59c1f88/c965ebeb25349643d57373e0047071b2ec4e8d08ec0625f460712939cf3c3201.json",
+            "version_id": "0a3ec7e9fd4dea16b08ffbe4f25d7ac08a7f54754ed8f5b8ced45b5b6631b114"
+          },
+          {
+            "artifact_id": "news:relevance:f40a1dfb6d7334c3019d5b63f23c46043ba5bc6332bf94bc7d26295aca52649e",
+            "content_digest": "e5c2962baaa9e6a1d9a72b47508853d3e9ea4537f0eda6d217b027417bd7946d",
+            "r2_key": "news/derived/relevance/f40a1dfb6d7334c3019d5b63f23c46043ba5bc6332bf94bc7d26295aca52649e/e5c2962baaa9e6a1d9a72b47508853d3e9ea4537f0eda6d217b027417bd7946d.json",
+            "version_id": "bfb45a75df4188dc85d57265c0b10cf2d8eeb60bd492841a5882fd3b9eb444d0"
+          },
+          {
+            "artifact_id": "news:relevance:c87f00a510b81e60df4a894c9f7d77da410e4593879c97d622fffb981689e3f6",
+            "content_digest": "cc1c12cb77c212923a2e43b7a73f8d222995307fea8042b6211845ab33c68700",
+            "r2_key": "news/derived/relevance/c87f00a510b81e60df4a894c9f7d77da410e4593879c97d622fffb981689e3f6/cc1c12cb77c212923a2e43b7a73f8d222995307fea8042b6211845ab33c68700.json",
+            "version_id": "67597fbd458ec600863e31bc209840dd0dfdd8f0ab52753962bafdea59c69692"
+          },
+          {
+            "artifact_id": "news:relevance:1aaea7962b5108c62dff6aa2893e95de6f1888b7b6cc660aef69a98bcb62c09f",
+            "content_digest": "4e64001ff48fad8ca93726c8b2663d14032a975f01e5316fbe3cf0078a71f31c",
+            "r2_key": "news/derived/relevance/1aaea7962b5108c62dff6aa2893e95de6f1888b7b6cc660aef69a98bcb62c09f/4e64001ff48fad8ca93726c8b2663d14032a975f01e5316fbe3cf0078a71f31c.json",
+            "version_id": "e79ac84577f7fcb23ebadcec85a181cf1f11c411aa6fc614912c1ea7b1f6370a"
+          },
+          {
+            "artifact_id": "news:relevance:a4e1cf51bb0ddd7ef9950a68bc0787c403441457bd68d99696faf5885dc0fdd7",
+            "content_digest": "35d8389ccd0602764318b534da95588b19e6e8b52ad339315ffde70eb9d21219",
+            "r2_key": "news/derived/relevance/a4e1cf51bb0ddd7ef9950a68bc0787c403441457bd68d99696faf5885dc0fdd7/35d8389ccd0602764318b534da95588b19e6e8b52ad339315ffde70eb9d21219.json",
+            "version_id": "051e8a6ac4149eec520db53b9d129f8006616fe7e8068ff513fae805786455a0"
+          },
+          {
+            "artifact_id": "news:relevance:6c781e463dd5e27032be4b9bd63d50de5ddd5930eee73c9fa0c1c7636cd79812",
+            "content_digest": "0c2bd742b9912593c6418e03eed8a9f63e94ac707af29af12fe6aa0f6a3b36bd",
+            "r2_key": "news/derived/relevance/6c781e463dd5e27032be4b9bd63d50de5ddd5930eee73c9fa0c1c7636cd79812/0c2bd742b9912593c6418e03eed8a9f63e94ac707af29af12fe6aa0f6a3b36bd.json",
+            "version_id": "0c2c42ef61c8d4e8165e922cf0c341d1efcc1f473914da105eab43c980892273"
+          },
+          {
+            "artifact_id": "news:relevance:d7eb520ce8189608610bb56a1ea05c89cd5990a1b9dc5056297f31ebc2190887",
+            "content_digest": "f9bc3c572f349c3fdce94a4d8e4043d7fedc0576e990833b7a2fa32f62b49625",
+            "r2_key": "news/derived/relevance/d7eb520ce8189608610bb56a1ea05c89cd5990a1b9dc5056297f31ebc2190887/f9bc3c572f349c3fdce94a4d8e4043d7fedc0576e990833b7a2fa32f62b49625.json",
+            "version_id": "572dd946f2a210324938b068cc7695dc459181d4d70bcc6ad8c2b7920951041f"
+          }
+        ],
+        "sentiment": [
+          {
+            "artifact_id": "news:sentiment:3784d54c4fa690f453766129228e83618ff879f0ae060bc1e832647f6428465a",
+            "content_digest": "9ee3f0295f368ed41c66050c5ccd3b24ee97a8e556cbf3f24c527c7977e0dd0d",
+            "r2_key": "news/derived/sentiment/3784d54c4fa690f453766129228e83618ff879f0ae060bc1e832647f6428465a/9ee3f0295f368ed41c66050c5ccd3b24ee97a8e556cbf3f24c527c7977e0dd0d.json",
+            "version_id": "79c92514f67a5dec9a9e37e540293128404edf3f4ba9b295c3e104845b694dff"
+          },
+          {
+            "artifact_id": "news:sentiment:17c778c0bfade01b3a45f4058b574c46b6ead1e879ff38bf28f61af7903b0308",
+            "content_digest": "f025ccb9668bff0614a7d2d5bf85f7ef7c7a40d953c125243a1a2020c36f65d7",
+            "r2_key": "news/derived/sentiment/17c778c0bfade01b3a45f4058b574c46b6ead1e879ff38bf28f61af7903b0308/f025ccb9668bff0614a7d2d5bf85f7ef7c7a40d953c125243a1a2020c36f65d7.json",
+            "version_id": "5d20ec512eac2a8bd2196c1f7791ebab01e9a1eac72b6b193788314dbe95f3e5"
+          },
+          {
+            "artifact_id": "news:sentiment:1aedda0159f95afaf46b2a0b4819f70012942c387d8096080fd9c06a1b6f9350",
+            "content_digest": "a15224492bfd9b3924c4c15a6e56b01c7f48818489f203cfc1aec7513016aba6",
+            "r2_key": "news/derived/sentiment/1aedda0159f95afaf46b2a0b4819f70012942c387d8096080fd9c06a1b6f9350/a15224492bfd9b3924c4c15a6e56b01c7f48818489f203cfc1aec7513016aba6.json",
+            "version_id": "57123f2942e150840351a71df4a9bcd4a448aec3af96d6cad9d906a97a670bf0"
+          },
+          {
+            "artifact_id": "news:sentiment:459f6aa1c58aaf09cc473577b7275e40a198358785caf95d0a97c14e490a8eb1",
+            "content_digest": "351da976c2eb892058cf39cdbffeef90ed7e19e87138c45f094da4cf6afe6fcb",
+            "r2_key": "news/derived/sentiment/459f6aa1c58aaf09cc473577b7275e40a198358785caf95d0a97c14e490a8eb1/351da976c2eb892058cf39cdbffeef90ed7e19e87138c45f094da4cf6afe6fcb.json",
+            "version_id": "52e6d8ee0fb78e97547bb0a7c379aa8e1b9ff6a23de65eb3ac669086ec347502"
+          },
+          {
+            "artifact_id": "news:sentiment:ecb87d4d943c95abb0aab44e2e9ffa7f2eabdf9ee258bec02ec111cfc82f973c",
+            "content_digest": "b8507c51d238dbb53aaf92e6a6172b9a9aa7eab8cbfafe9ac892b0f47f0ad8d4",
+            "r2_key": "news/derived/sentiment/ecb87d4d943c95abb0aab44e2e9ffa7f2eabdf9ee258bec02ec111cfc82f973c/b8507c51d238dbb53aaf92e6a6172b9a9aa7eab8cbfafe9ac892b0f47f0ad8d4.json",
+            "version_id": "7026e47713e0f4a81014d5179308845008ce89eda60ebdf13689a098bed6901b"
+          },
+          {
+            "artifact_id": "news:sentiment:3d4af3801ba9a5bdfd10575736cd78cd5122f0ca305d1190889dde4a0b965746",
+            "content_digest": "3db500e03f614f4f34627dea4ec14af70a30ab6c13557949cf0e3cef31e36b00",
+            "r2_key": "news/derived/sentiment/3d4af3801ba9a5bdfd10575736cd78cd5122f0ca305d1190889dde4a0b965746/3db500e03f614f4f34627dea4ec14af70a30ab6c13557949cf0e3cef31e36b00.json",
+            "version_id": "ffcfde920694659cc0d40c6065170b936b71798be7a99dce2a5d8930c448196f"
+          },
+          {
+            "artifact_id": "news:sentiment:6710c865ae2de32c9173d7d51cc55dec3192993b3d45f9fa28484c2a75c288f0",
+            "content_digest": "5f4fd6680d532904c54e4d8265b8cc85e944e9873f09a3f4b86047ef92afc0fa",
+            "r2_key": "news/derived/sentiment/6710c865ae2de32c9173d7d51cc55dec3192993b3d45f9fa28484c2a75c288f0/5f4fd6680d532904c54e4d8265b8cc85e944e9873f09a3f4b86047ef92afc0fa.json",
+            "version_id": "698296bcdbd04a59ff700db126c0812e78b8a1c3c502db1d591501b131e7b326"
+          },
+          {
+            "artifact_id": "news:sentiment:e1ffc7c14ec16ad1f6847004f42d119565c0bd2de96f46d82e92197ed4434e8f",
+            "content_digest": "1a6b894cc45917ce3a03dd351c4b24e55c0c747c6715b4a59b00de03849013e3",
+            "r2_key": "news/derived/sentiment/e1ffc7c14ec16ad1f6847004f42d119565c0bd2de96f46d82e92197ed4434e8f/1a6b894cc45917ce3a03dd351c4b24e55c0c747c6715b4a59b00de03849013e3.json",
+            "version_id": "5c20e49693bd9d002b5d538394930acad092a72a649544fe23e73c85144070ea"
+          },
+          {
+            "artifact_id": "news:sentiment:02fd01d73d9048cb4d976aeca935993340e5b6dfe4294316b434e6fc512ef685",
+            "content_digest": "641ff79a0b069c0a4ba780e8ac5534d9447455fa21662249c12dac71f3ca3d80",
+            "r2_key": "news/derived/sentiment/02fd01d73d9048cb4d976aeca935993340e5b6dfe4294316b434e6fc512ef685/641ff79a0b069c0a4ba780e8ac5534d9447455fa21662249c12dac71f3ca3d80.json",
+            "version_id": "ee48b76c6cbd2cfb5b3df2c7e5f928de907beadd55271c7d73583e5afd6998ec"
+          },
+          {
+            "artifact_id": "news:sentiment:01b85cdb9af81a7ece01bdb6e0ced77480f81244408c3276c85f92e8607cdb2d",
+            "content_digest": "65194f2289d6a0832d1b5c9e4a1c3549077ccba5446e84b17d51758724f6c933",
+            "r2_key": "news/derived/sentiment/01b85cdb9af81a7ece01bdb6e0ced77480f81244408c3276c85f92e8607cdb2d/65194f2289d6a0832d1b5c9e4a1c3549077ccba5446e84b17d51758724f6c933.json",
+            "version_id": "aa3c59150139ce1e9aec9a46413698a5f316386a364b4d067fca1820d79fa06f"
+          },
+          {
+            "artifact_id": "news:sentiment:b0d0416222cec24da2d30858f78b89de7191e1301fe3fe1ef9c4320366019c67",
+            "content_digest": "a9b3932ea5f51df27edbd8b65ad16afbe67255b5fc6b680132473fa8350d8199",
+            "r2_key": "news/derived/sentiment/b0d0416222cec24da2d30858f78b89de7191e1301fe3fe1ef9c4320366019c67/a9b3932ea5f51df27edbd8b65ad16afbe67255b5fc6b680132473fa8350d8199.json",
+            "version_id": "50f31efa4ad2c0da3a5b75eab0599d50fc6903952f6d2ed6f80caf90be4a333b"
+          },
+          {
+            "artifact_id": "news:sentiment:e04b8535a17dad180cb0424edb480af834b567d0be496c78da7e3effc59da4d8",
+            "content_digest": "5c16a0bd1620d31be98c251686c029e60634368617f4687e6eaee143bb1b2898",
+            "r2_key": "news/derived/sentiment/e04b8535a17dad180cb0424edb480af834b567d0be496c78da7e3effc59da4d8/5c16a0bd1620d31be98c251686c029e60634368617f4687e6eaee143bb1b2898.json",
+            "version_id": "209e0005023916356db16d254d4f64c5bc63e7be9b13100be83c302e89791853"
+          },
+          {
+            "artifact_id": "news:sentiment:58487295a47d02d297d3336553725e3167fb15dd4307434806d753578954a315",
+            "content_digest": "af1e5f64cddf360add724b4b89e62a5434da0d0eb632e2fd95cff45739de8d32",
+            "r2_key": "news/derived/sentiment/58487295a47d02d297d3336553725e3167fb15dd4307434806d753578954a315/af1e5f64cddf360add724b4b89e62a5434da0d0eb632e2fd95cff45739de8d32.json",
+            "version_id": "82612ccd86e539fda73c27335b26b7b6071af6dd8a221edcad2a497eaae71c8e"
+          },
+          {
+            "artifact_id": "news:sentiment:1fd41df4896ce6abbcfd2a3bfcc8a147795b12d3acaee5e2ead24f41592eddf9",
+            "content_digest": "d2bd6deb3fa01bc03a887de52784af373fd02d7072846ae80cebd3161171d7dd",
+            "r2_key": "news/derived/sentiment/1fd41df4896ce6abbcfd2a3bfcc8a147795b12d3acaee5e2ead24f41592eddf9/d2bd6deb3fa01bc03a887de52784af373fd02d7072846ae80cebd3161171d7dd.json",
+            "version_id": "2a55448d0765ae51b6fdf3a0ae5f9f9634dd2f55404b0c6452678a9ffb69526c"
+          },
+          {
+            "artifact_id": "news:sentiment:6110bb5a5aa16aca9119b65fbad6cf337363ab63cb508e53d522c6213f7c5081",
+            "content_digest": "e8f95a293af3b567781e29de8c60e69a050941d567edf760f6cf7b4978194d70",
+            "r2_key": "news/derived/sentiment/6110bb5a5aa16aca9119b65fbad6cf337363ab63cb508e53d522c6213f7c5081/e8f95a293af3b567781e29de8c60e69a050941d567edf760f6cf7b4978194d70.json",
+            "version_id": "0f451ed03e4b1a14558e5a714966a6f96869631b5ff5171ff26613363266dda3"
+          },
+          {
+            "artifact_id": "news:sentiment:3829319ed086fd64456939e72ed7904c0d0122fbbbd69952bdf7fb523f40d1aa",
+            "content_digest": "21035c384e15b3eebe9557022805388332173662172c57553f5065f197328627",
+            "r2_key": "news/derived/sentiment/3829319ed086fd64456939e72ed7904c0d0122fbbbd69952bdf7fb523f40d1aa/21035c384e15b3eebe9557022805388332173662172c57553f5065f197328627.json",
+            "version_id": "70c38d1e182459d9cb9cf7651659936609d01cc2e0b82c16bf64e893531ec29f"
+          },
+          {
+            "artifact_id": "news:sentiment:08822ce782c5e9d441b9d92823ee4a557a80693ca11b700798f68fa2fcfb40a1",
+            "content_digest": "c3e494664794f13c04454b019dfaf8cbe4a12dd8fbde77164ef1d5291d68aaaf",
+            "r2_key": "news/derived/sentiment/08822ce782c5e9d441b9d92823ee4a557a80693ca11b700798f68fa2fcfb40a1/c3e494664794f13c04454b019dfaf8cbe4a12dd8fbde77164ef1d5291d68aaaf.json",
+            "version_id": "85a50ccf03b314342dd40f6148853cdad68b04ade35c24e250ec740d8ea3af8d"
+          },
+          {
+            "artifact_id": "news:sentiment:54f25516f286ec6ebc6ba55d54b5514efc792be43f55438b1db36198140a83d2",
+            "content_digest": "93c441d6b1bef9961b43b6115d5628193da97af7ed94839de1655cf95d7f6e7d",
+            "r2_key": "news/derived/sentiment/54f25516f286ec6ebc6ba55d54b5514efc792be43f55438b1db36198140a83d2/93c441d6b1bef9961b43b6115d5628193da97af7ed94839de1655cf95d7f6e7d.json",
+            "version_id": "99bffc7767dfc09fa9586a434f8f828696a0c5fdae3451f26de05ee8bfdc495d"
+          },
+          {
+            "artifact_id": "news:sentiment:422dac62e6e624e02c0b0e562a598a00f738b52bd06c5251927f08d469b8f22f",
+            "content_digest": "75279b5090764b95ba4e835a4843f12fcfab3f8486141cd72add13e4874b279f",
+            "r2_key": "news/derived/sentiment/422dac62e6e624e02c0b0e562a598a00f738b52bd06c5251927f08d469b8f22f/75279b5090764b95ba4e835a4843f12fcfab3f8486141cd72add13e4874b279f.json",
+            "version_id": "aa10de0cb3d5af7595fe30cb3e244f3c133d5c42833260a2044a052b9698d9b6"
+          },
+          {
+            "artifact_id": "news:sentiment:b49d7cd8f71539fb85c251c38c90e83b53b9e1b9327c78ddcf6f779615f0c100",
+            "content_digest": "afb04e37d770c64699036d28e8292a099694b3b40cb4fe3ba92103be44896688",
+            "r2_key": "news/derived/sentiment/b49d7cd8f71539fb85c251c38c90e83b53b9e1b9327c78ddcf6f779615f0c100/afb04e37d770c64699036d28e8292a099694b3b40cb4fe3ba92103be44896688.json",
+            "version_id": "36ae394a40a2a3b5f2939109c564a4bd164c5f511d40017bd87669ba51cf18fa"
+          },
+          {
+            "artifact_id": "news:sentiment:74d1b9b66f3d76bdf897fc9201ef4973f5b6676594a239247e306550bb295e48",
+            "content_digest": "5ed2ba3bc6e5b3ceb99a1953b068770a6788a25e34567025c4b8d28977a0d020",
+            "r2_key": "news/derived/sentiment/74d1b9b66f3d76bdf897fc9201ef4973f5b6676594a239247e306550bb295e48/5ed2ba3bc6e5b3ceb99a1953b068770a6788a25e34567025c4b8d28977a0d020.json",
+            "version_id": "fdc637dc6d685c85fb06aeb63cbb9a9b487b4b31da61df8ab16738616c8d05d2"
+          },
+          {
+            "artifact_id": "news:sentiment:d851e7085581f969724ccace0a075cb293e74c8c9392403883603a3d1e44c9dc",
+            "content_digest": "01b325f262ac07601cbc102ce7f0e1de5592824c740776ebc1bc590ef3f55848",
+            "r2_key": "news/derived/sentiment/d851e7085581f969724ccace0a075cb293e74c8c9392403883603a3d1e44c9dc/01b325f262ac07601cbc102ce7f0e1de5592824c740776ebc1bc590ef3f55848.json",
+            "version_id": "6c1415c5e88eeae06a06f3859fd8209e599d3085a1e549a41442fb3db2833126"
+          },
+          {
+            "artifact_id": "news:sentiment:021eb9722f8a7d6949dc0d59dee2750e4cd2a633f2f4d4dc05e97244574a7be9",
+            "content_digest": "88070966c2f73043168abce73ccbbd3c7727606ff0517a71d9cc85f9b60501fc",
+            "r2_key": "news/derived/sentiment/021eb9722f8a7d6949dc0d59dee2750e4cd2a633f2f4d4dc05e97244574a7be9/88070966c2f73043168abce73ccbbd3c7727606ff0517a71d9cc85f9b60501fc.json",
+            "version_id": "d65ae09adedff580d8c1897f5ec5e78138a388849a8fba0f4fbe49405d5d0d4e"
+          },
+          {
+            "artifact_id": "news:sentiment:7cd7915e8451135c059fc78a7dec4734c055db106ad2f0a7b48282088601c756",
+            "content_digest": "a79a666787f7175416b05fc3c2e50382b40ffcae04d0158f601062a0a7f38c30",
+            "r2_key": "news/derived/sentiment/7cd7915e8451135c059fc78a7dec4734c055db106ad2f0a7b48282088601c756/a79a666787f7175416b05fc3c2e50382b40ffcae04d0158f601062a0a7f38c30.json",
+            "version_id": "e6b7dbd41dfffa13e47f46efc7e628b60eb874e82560061c70d32fbb83d24f3c"
+          },
+          {
+            "artifact_id": "news:sentiment:6b8af63577978adee40f3dc8c63b2d0a2c5f989daec31a9fa135be3d5381748c",
+            "content_digest": "467becd86e9f85a8fa534eb87433296c403da0d8e1657f092ae76dee28464b06",
+            "r2_key": "news/derived/sentiment/6b8af63577978adee40f3dc8c63b2d0a2c5f989daec31a9fa135be3d5381748c/467becd86e9f85a8fa534eb87433296c403da0d8e1657f092ae76dee28464b06.json",
+            "version_id": "f80721d068fa58806aa55ad4701d7bce310c3a0c68cf8815ec1e4daa163a80bd"
+          },
+          {
+            "artifact_id": "news:sentiment:2df29572fc7dc835f61032285dd5ccfbb101b6462328af9e3de5c829057f3340",
+            "content_digest": "ba94fa6b652fe364eaa2dba354e4591912ab06193c15fa84a62098c3a75d88aa",
+            "r2_key": "news/derived/sentiment/2df29572fc7dc835f61032285dd5ccfbb101b6462328af9e3de5c829057f3340/ba94fa6b652fe364eaa2dba354e4591912ab06193c15fa84a62098c3a75d88aa.json",
+            "version_id": "800a7e8c7519c9817c546825465b42b9dbd8af512e91c057a1ddf0cf19ab980c"
+          },
+          {
+            "artifact_id": "news:sentiment:cb042a56b4fec38a728859eb68d4ddb51b86dcadf872c83a0d5a2cab033f0953",
+            "content_digest": "6573b2f648df5914862cc1858d60b57992cd77b81ff4950c03e848c5ff86489a",
+            "r2_key": "news/derived/sentiment/cb042a56b4fec38a728859eb68d4ddb51b86dcadf872c83a0d5a2cab033f0953/6573b2f648df5914862cc1858d60b57992cd77b81ff4950c03e848c5ff86489a.json",
+            "version_id": "06b7c92b530bc646194b5a2e8df62c5d0eb45c8630a45c3fc21b91c9f832b90e"
+          },
+          {
+            "artifact_id": "news:sentiment:34801814eda92fe83f757e9f689f430b5cad91588cf661dd4808843794aa8f33",
+            "content_digest": "da6905b3fb22a2f6e6bdca0b30e9237f8f0e01e9708590b5ea8d1eaa40f03648",
+            "r2_key": "news/derived/sentiment/34801814eda92fe83f757e9f689f430b5cad91588cf661dd4808843794aa8f33/da6905b3fb22a2f6e6bdca0b30e9237f8f0e01e9708590b5ea8d1eaa40f03648.json",
+            "version_id": "4d295cd8d2d4465946f9b1f7ea9217f97312e98d1f313fac4f931fd34fd9bbd2"
+          },
+          {
+            "artifact_id": "news:sentiment:116dfffe5fdad9735e53fae58900e254909d1884061f8f134b608311e3d6fb63",
+            "content_digest": "56348bde3d989b4dc477828352077f28f3af4aa288dc63f2e487d130a22666da",
+            "r2_key": "news/derived/sentiment/116dfffe5fdad9735e53fae58900e254909d1884061f8f134b608311e3d6fb63/56348bde3d989b4dc477828352077f28f3af4aa288dc63f2e487d130a22666da.json",
+            "version_id": "f9395a1f5398ed86421f0b7841b8b254b21bd3a80b621653116116eb68cbf953"
+          }
+        ],
+        "summary": [
+          {
+            "artifact_id": "news:summary:2d1b962c5962fd7077b4305d2faa5a71e2f85a4ce2f1dae451ee75685a5dc88b",
+            "content_digest": "fb6072f0ee23e92098ba6b2a0a2e0c634d7d6a33a663357eb8652ec746b9b4d0",
+            "r2_key": "news/derived/summaries/2d1b962c5962fd7077b4305d2faa5a71e2f85a4ce2f1dae451ee75685a5dc88b/fb6072f0ee23e92098ba6b2a0a2e0c634d7d6a33a663357eb8652ec746b9b4d0.json",
+            "version_id": "a23e263411f7e4711b1b41d2f6598dd5ce66d8050950dedd77e8f4b14f795d25"
+          },
+          {
+            "artifact_id": "news:summary:aee52fa1b954f0612daec81f1449f795b1580b46e83b135aad6891b4ed07e4c5",
+            "content_digest": "a93095f0c2aacda191f4a401928738fbacd0c0908b97a8e7a1ca36c3beadabcf",
+            "r2_key": "news/derived/summaries/aee52fa1b954f0612daec81f1449f795b1580b46e83b135aad6891b4ed07e4c5/a93095f0c2aacda191f4a401928738fbacd0c0908b97a8e7a1ca36c3beadabcf.json",
+            "version_id": "d97697ae60482317382f63baa9342e1deee8c6c8527b3dae3e1d2de5fd1f4e4e"
+          },
+          {
+            "artifact_id": "news:summary:9e07c125df80248591413622119e6ff9ddb88d47ca6d4bfd85da9d64796235b9",
+            "content_digest": "328fe92adae447d75eb83a78df7a9a03c75a15acc238b95ebf740a23c50cb522",
+            "r2_key": "news/derived/summaries/9e07c125df80248591413622119e6ff9ddb88d47ca6d4bfd85da9d64796235b9/328fe92adae447d75eb83a78df7a9a03c75a15acc238b95ebf740a23c50cb522.json",
+            "version_id": "7787c56fd6d65d6acb903b7764627f64cca05dfa6b3311ac2919e023e16cd5d6"
+          },
+          {
+            "artifact_id": "news:summary:d5297c46ad96fd3dabb7b970059d4d9ab2746f5bb158a8af423663490e7d4509",
+            "content_digest": "f05fae4028eb7f53d3b7a1510a0ebdc1d8170b4420aa207fd76e0c3da6a3d488",
+            "r2_key": "news/derived/summaries/d5297c46ad96fd3dabb7b970059d4d9ab2746f5bb158a8af423663490e7d4509/f05fae4028eb7f53d3b7a1510a0ebdc1d8170b4420aa207fd76e0c3da6a3d488.json",
+            "version_id": "98e5756f68742f9a43430c38de21fb19286ce8e87121906370fb1570c18be7b5"
+          },
+          {
+            "artifact_id": "news:summary:0348e603a83109fc76e99ad5510cfac1e09bcd42c914a5ac6594ee4ceaadffcb",
+            "content_digest": "f3eaad3b90790eb19c324a328df721a7b10833f11dcfcc886bd2ce2cb7faf166",
+            "r2_key": "news/derived/summaries/0348e603a83109fc76e99ad5510cfac1e09bcd42c914a5ac6594ee4ceaadffcb/f3eaad3b90790eb19c324a328df721a7b10833f11dcfcc886bd2ce2cb7faf166.json",
+            "version_id": "aa2b85324b15eee064f61766c466007654774d5ca41922c46b2aa10dd8a9703b"
+          },
+          {
+            "artifact_id": "news:summary:0c975f9fc4b006fcb59d4a17e5c69261719dfa99a65d8ecb3f9ba787e5595e31",
+            "content_digest": "f2c83a2a07e601618cd436eba600869a7dc79d12d5b17e3ccb0d6133795fe3d0",
+            "r2_key": "news/derived/summaries/0c975f9fc4b006fcb59d4a17e5c69261719dfa99a65d8ecb3f9ba787e5595e31/f2c83a2a07e601618cd436eba600869a7dc79d12d5b17e3ccb0d6133795fe3d0.json",
+            "version_id": "490820e2c44ca60ea18614d98f42d27d88b9795ff530bd468c20bd1710c14d9f"
+          },
+          {
+            "artifact_id": "news:summary:60bc29eacf7fe4e71ea98f5ac4c83b83671880d44ce4a6fd902665d92ebe89c2",
+            "content_digest": "8ddfb350629447d48f7dbaaa80f3133616eb3dd9d15d7204f9b5279fb85a88fd",
+            "r2_key": "news/derived/summaries/60bc29eacf7fe4e71ea98f5ac4c83b83671880d44ce4a6fd902665d92ebe89c2/8ddfb350629447d48f7dbaaa80f3133616eb3dd9d15d7204f9b5279fb85a88fd.json",
+            "version_id": "7caa7ab68590a96265570692f76a8c72989ff5ab0674a3b5bd51a3c54021cdd2"
+          },
+          {
+            "artifact_id": "news:summary:b07dd12ee21c9a634d6979fbe1693a684207c6c6b2a5b07a51133cf8aa332325",
+            "content_digest": "9897886ec98655f33007320d3f892e74dd9c12fab951121609757c03e5731642",
+            "r2_key": "news/derived/summaries/b07dd12ee21c9a634d6979fbe1693a684207c6c6b2a5b07a51133cf8aa332325/9897886ec98655f33007320d3f892e74dd9c12fab951121609757c03e5731642.json",
+            "version_id": "7a3496aeb9b3ca03a54a4100371b399bc3580f90e2f0e6fb6a8ba337c67e2f01"
+          },
+          {
+            "artifact_id": "news:summary:6051501db9b56d5cb22946b845c61bfadc214ac97bffad9cd1add976dda7ff1b",
+            "content_digest": "4e21b55c2be057ee985ed99323dea65d7f479571b490b82f3dea84831c756ee1",
+            "r2_key": "news/derived/summaries/6051501db9b56d5cb22946b845c61bfadc214ac97bffad9cd1add976dda7ff1b/4e21b55c2be057ee985ed99323dea65d7f479571b490b82f3dea84831c756ee1.json",
+            "version_id": "781b1520baae486a1cea8961c5791598f6b2e060c756ac005df0359b05f3e49b"
+          },
+          {
+            "artifact_id": "news:summary:e4fb4e502e0497c07efd03ed40c9603b6653538c23aa99e51ce5471d0cb4b925",
+            "content_digest": "ef9f24323aeb3d9f2a26250b60f51d165034f5dc308624c499b6b58c5f68da75",
+            "r2_key": "news/derived/summaries/e4fb4e502e0497c07efd03ed40c9603b6653538c23aa99e51ce5471d0cb4b925/ef9f24323aeb3d9f2a26250b60f51d165034f5dc308624c499b6b58c5f68da75.json",
+            "version_id": "4580570a96e5a60caf08982d985cd77394b978af5899977e8b64151dafd2f492"
+          },
+          {
+            "artifact_id": "news:summary:070299d20d2b60a5fee4cf743d3e5a06e0b155cffb540d09fa930e808d52726c",
+            "content_digest": "8f4ec013fd9a243eb51675bff122de7fb3fc0fb8ef627d1dd4e431009d226872",
+            "r2_key": "news/derived/summaries/070299d20d2b60a5fee4cf743d3e5a06e0b155cffb540d09fa930e808d52726c/8f4ec013fd9a243eb51675bff122de7fb3fc0fb8ef627d1dd4e431009d226872.json",
+            "version_id": "8a684f2744502190824d9274e69a75885ece05bd11e72f1b8c29b3bba78d6ac0"
+          },
+          {
+            "artifact_id": "news:summary:690c44c166f7fb512f52c0930664dd40c114266f94e160b420ca96d17d01d9f8",
+            "content_digest": "ea9e7171bc83f47712ecb2bc508c8f6342cb405ab2d102536c0a4c8d76e2b07a",
+            "r2_key": "news/derived/summaries/690c44c166f7fb512f52c0930664dd40c114266f94e160b420ca96d17d01d9f8/ea9e7171bc83f47712ecb2bc508c8f6342cb405ab2d102536c0a4c8d76e2b07a.json",
+            "version_id": "f23c93b8c99aee9d126c08baa19e532596d9e32c3583445683bbd06b741e2a54"
+          },
+          {
+            "artifact_id": "news:summary:9acb9274ec170ec5435095bffe0c73ae3dfea2c6e4781259859f923412122f84",
+            "content_digest": "026879cb3a1103099776129a4c9adf646900c88e3a90d8c885fc9c325996f130",
+            "r2_key": "news/derived/summaries/9acb9274ec170ec5435095bffe0c73ae3dfea2c6e4781259859f923412122f84/026879cb3a1103099776129a4c9adf646900c88e3a90d8c885fc9c325996f130.json",
+            "version_id": "9f4ac06a262a996c2f981b6485d7caeaa06fd8cd786647dbcdfc462508c30030"
+          },
+          {
+            "artifact_id": "news:summary:b1934e2144bffe2ea828f7ebd16f12b8c8db666e1109ec457898d7d194dbc640",
+            "content_digest": "d65e4612dc15565719de43c6fb5ffd2d8baa6d0fc6cc7136e4fd4870c3a9f4c9",
+            "r2_key": "news/derived/summaries/b1934e2144bffe2ea828f7ebd16f12b8c8db666e1109ec457898d7d194dbc640/d65e4612dc15565719de43c6fb5ffd2d8baa6d0fc6cc7136e4fd4870c3a9f4c9.json",
+            "version_id": "b2aecef9dfcf3761fc8b41d7c56bbd4f661ec528bb7b804509c1cee2c58828ee"
+          },
+          {
+            "artifact_id": "news:summary:d2a2bd8929de6e5f76df9c889c03d91ce303ca8667c3f40bab4e723d4c71616b",
+            "content_digest": "b175cbd1e9c73b15ed7efe2f6d358b1ce5189545ac9b112ad5c9e2c48ae9c00c",
+            "r2_key": "news/derived/summaries/d2a2bd8929de6e5f76df9c889c03d91ce303ca8667c3f40bab4e723d4c71616b/b175cbd1e9c73b15ed7efe2f6d358b1ce5189545ac9b112ad5c9e2c48ae9c00c.json",
+            "version_id": "df87175ebb051327c2cf507587436b8a45fae2a72d18cf8b9747a3487e669b6f"
+          },
+          {
+            "artifact_id": "news:summary:2cf3a02d294c54b318844a90b9737c00695def67901103c1dd0f586c5acc700c",
+            "content_digest": "6d5a1b5af55601c52b96042001cc1206a57c7452e305b15dea7cfa7344fe9379",
+            "r2_key": "news/derived/summaries/2cf3a02d294c54b318844a90b9737c00695def67901103c1dd0f586c5acc700c/6d5a1b5af55601c52b96042001cc1206a57c7452e305b15dea7cfa7344fe9379.json",
+            "version_id": "cdf8e772e8b171212321e0b47157bf75f6a2a09153d1a3aa7e34f5c5d54edaaf"
+          },
+          {
+            "artifact_id": "news:summary:8450747051296d8d8afe62925923b1cd4f138687fb1472a56ae78a7d3218d6a9",
+            "content_digest": "944ec97cfe6628f5bfeda75aabd8976172419096037905f15dd0f90b2b2c783a",
+            "r2_key": "news/derived/summaries/8450747051296d8d8afe62925923b1cd4f138687fb1472a56ae78a7d3218d6a9/944ec97cfe6628f5bfeda75aabd8976172419096037905f15dd0f90b2b2c783a.json",
+            "version_id": "5cf47fb438b01c1a23fb5b041c1d3a4f366568df5a7831ddc59836cf0e1f563e"
+          },
+          {
+            "artifact_id": "news:summary:438454b8217a82ca0a4730da2f648acf3dc3a652bbc50e84de28b4d1648f5abb",
+            "content_digest": "f24a0a32830e741b8b4e2d0acff0863356e2c90b5245d3a2f8f9a797cdb5fdaa",
+            "r2_key": "news/derived/summaries/438454b8217a82ca0a4730da2f648acf3dc3a652bbc50e84de28b4d1648f5abb/f24a0a32830e741b8b4e2d0acff0863356e2c90b5245d3a2f8f9a797cdb5fdaa.json",
+            "version_id": "13cd55d445e40b7ab7e3cdd23511b8816f0c20b94384caa8c1d6430ed257a5ca"
+          },
+          {
+            "artifact_id": "news:summary:df3f20cbe97c65caeaa8c9c336cc462d78a8a3421f221e6f0ba9e2083a6d9f9b",
+            "content_digest": "0a4995f85209bf07f07f4aeeed1b9be3c58153165b1084063ef06619a1a5e567",
+            "r2_key": "news/derived/summaries/df3f20cbe97c65caeaa8c9c336cc462d78a8a3421f221e6f0ba9e2083a6d9f9b/0a4995f85209bf07f07f4aeeed1b9be3c58153165b1084063ef06619a1a5e567.json",
+            "version_id": "60e77bf579fab0d43b4243c537de4d41e0a11171e111e25077a88107ae3d6c22"
+          },
+          {
+            "artifact_id": "news:summary:44200f1c63456ab4754e4f2b8f88f56246c42bd7e549401a15de15450d3c464f",
+            "content_digest": "7a71d277cbe29b86a4d9e5417baefeab5028d3d07c27a52f7d26bea331ef0133",
+            "r2_key": "news/derived/summaries/44200f1c63456ab4754e4f2b8f88f56246c42bd7e549401a15de15450d3c464f/7a71d277cbe29b86a4d9e5417baefeab5028d3d07c27a52f7d26bea331ef0133.json",
+            "version_id": "70b9ebd764c7896b11211b783fa0e9f08afd18a9fe506d37f7964426de5e8822"
+          },
+          {
+            "artifact_id": "news:summary:4f9ce60d98e63d887c45fa6188656152b1dd516b3e98aa53771b5cbca976226c",
+            "content_digest": "d141cc5fc8e9138036f4c02e26c6966af3ec995e9197390dc37715f5e7f42157",
+            "r2_key": "news/derived/summaries/4f9ce60d98e63d887c45fa6188656152b1dd516b3e98aa53771b5cbca976226c/d141cc5fc8e9138036f4c02e26c6966af3ec995e9197390dc37715f5e7f42157.json",
+            "version_id": "9c9193fbd48522dbcb512fec5c52822a02847f99e0d4ce51d95f232f896d9e9c"
+          },
+          {
+            "artifact_id": "news:summary:f2f1506a3206c5041bbe7b965fa14b9d0e91c420fa2c77eecac0fe48d381e6da",
+            "content_digest": "f8e0d79e76ba7b76ddd9364498a6ae43acb76f6d3fceb824fd4132d64d048bcb",
+            "r2_key": "news/derived/summaries/f2f1506a3206c5041bbe7b965fa14b9d0e91c420fa2c77eecac0fe48d381e6da/f8e0d79e76ba7b76ddd9364498a6ae43acb76f6d3fceb824fd4132d64d048bcb.json",
+            "version_id": "6342d2143c809dfa99f8bc1cb0f780e743f904293a3d51ee6df38b2e65b7244b"
+          },
+          {
+            "artifact_id": "news:summary:7c36a214391c4323ba2b50f7e2d674547a3837659a91ee46ece20cd6c64fbe9e",
+            "content_digest": "f00a21f8c6208b79e85e5953030907c8ec88a892553310becc414c51b51ad0c5",
+            "r2_key": "news/derived/summaries/7c36a214391c4323ba2b50f7e2d674547a3837659a91ee46ece20cd6c64fbe9e/f00a21f8c6208b79e85e5953030907c8ec88a892553310becc414c51b51ad0c5.json",
+            "version_id": "209683e5eea695b178a63c31cb80d36d946d7991c707d318d2ccbff985c604f1"
+          },
+          {
+            "artifact_id": "news:summary:8279b61f4027d54d77b052ea30197b67e909f33bfaac6858d2c0ea8e9d4c40f2",
+            "content_digest": "f38001249f4914594d4b556c1d97e65fec510b073dcfc0ceb5058365cdfa4512",
+            "r2_key": "news/derived/summaries/8279b61f4027d54d77b052ea30197b67e909f33bfaac6858d2c0ea8e9d4c40f2/f38001249f4914594d4b556c1d97e65fec510b073dcfc0ceb5058365cdfa4512.json",
+            "version_id": "2483d8703006ea0736a1641f7eb5f22e2df7919a53b8cad2ce8523814d29b681"
+          },
+          {
+            "artifact_id": "news:summary:da542bada6183556a03d265a38c4be0be0ce6a52bcdbba045c59cb24e1864a05",
+            "content_digest": "598edf9b6f9ffa24ef271a607f6126399e744154f2e17226c2c4699a39a0e266",
+            "r2_key": "news/derived/summaries/da542bada6183556a03d265a38c4be0be0ce6a52bcdbba045c59cb24e1864a05/598edf9b6f9ffa24ef271a607f6126399e744154f2e17226c2c4699a39a0e266.json",
+            "version_id": "22577bda8726b4e98a2c3cd758018e14f34f22b5322e0e9333a3c82ddaa0f7b9"
+          },
+          {
+            "artifact_id": "news:summary:d3e08df62c7c773de014edcd2138f847f4c9d97c5d2a166c15a59640dabb512b",
+            "content_digest": "a7ccf77279cc1456b33a405d9fafb2369a7c681da730fa7a7775a2c4f3dae330",
+            "r2_key": "news/derived/summaries/d3e08df62c7c773de014edcd2138f847f4c9d97c5d2a166c15a59640dabb512b/a7ccf77279cc1456b33a405d9fafb2369a7c681da730fa7a7775a2c4f3dae330.json",
+            "version_id": "6ff58b979990cfa736ab9509e1feba1d4a5d84bebf1144131e05161e7b2bd9fb"
+          },
+          {
+            "artifact_id": "news:summary:2ec3e8a1d4a595cb65be0ae4e8778c9088cb7f10588b8fb243e741b4d3b12fd4",
+            "content_digest": "c687c557474f9766457062bc64b733a4382a2779f6e1dea42ec1f68c1181d6c6",
+            "r2_key": "news/derived/summaries/2ec3e8a1d4a595cb65be0ae4e8778c9088cb7f10588b8fb243e741b4d3b12fd4/c687c557474f9766457062bc64b733a4382a2779f6e1dea42ec1f68c1181d6c6.json",
+            "version_id": "677d3744e0ebe5205213fc7d14a1d6f87bda109190db0689bfd18d4dfc4ce34f"
+          },
+          {
+            "artifact_id": "news:summary:70adbe4a4ce3a9d0a8a9d4eb86ced1cbbe7a883ad00107eb8d03661f57fabbbe",
+            "content_digest": "f0e99d21669863e341c4431b9418dcf0593af86532677d84578bcc13be1b3cb6",
+            "r2_key": "news/derived/summaries/70adbe4a4ce3a9d0a8a9d4eb86ced1cbbe7a883ad00107eb8d03661f57fabbbe/f0e99d21669863e341c4431b9418dcf0593af86532677d84578bcc13be1b3cb6.json",
+            "version_id": "42c7f952d159d76b8054009496cb3dcb88b0fc5b50149d2686f363688225f433"
+          },
+          {
+            "artifact_id": "news:summary:4af81e008101d8af1e771410269f5364b08f3da15dbdfcda19f7c8681ce1a97f",
+            "content_digest": "25ffba260b71fcd54b1a0b98ed77bd76b368dd01e90b1cc48c9ca30a77ab362c",
+            "r2_key": "news/derived/summaries/4af81e008101d8af1e771410269f5364b08f3da15dbdfcda19f7c8681ce1a97f/25ffba260b71fcd54b1a0b98ed77bd76b368dd01e90b1cc48c9ca30a77ab362c.json",
+            "version_id": "05a6631d5555d1fc7bec14e17e83805c89f2017109cca93d3e3ef19ca50a2210"
+          }
+        ],
+        "themes": [
+          {
+            "artifact_id": "news:themes:2026-09-10",
+            "content_digest": "5247242a52e4df7a128330aecc00a64c84144678574a1b1410d05b0d262cd99c",
+            "r2_key": "news/derived/themes/2026-09-10/5247242a52e4df7a128330aecc00a64c84144678574a1b1410d05b0d262cd99c.json",
+            "version_id": "1937abb01ab206d63712a0e232c20217e89caafae508592c1f43aae90b9b4907"
+          }
+        ]
+      },
+      "report": {
+        "artifact_id": "news:daily:2026-09-10",
+        "content_digest": "4682275f72c6f3ac1e6e1d50a72aaa5175a82f256cf1217275d69f0c0b0fe30e",
+        "r2_key": "news/reports/daily/2026-09-10/4682275f72c6f3ac1e6e1d50a72aaa5175a82f256cf1217275d69f0c0b0fe30e.json",
+        "version_id": "c1369f9a24202a111dfc07e29a7194c73cb22dd491958093932a5d3b9b270d72"
+      }
+    }
+  ],
+  "schema_version": "split-subject-assessment-source-v1"
+}
