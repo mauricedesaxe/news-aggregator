@@ -301,7 +301,6 @@ class SlotSkipReason(StrEnum):
 
 
 class TerminalSlotState(StrEnum):
-    SKIPPED = "skipped"
     FAILED = "failed"
     PUBLISHED = "published"
 

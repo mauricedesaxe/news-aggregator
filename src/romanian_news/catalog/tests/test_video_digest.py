@@ -532,7 +532,26 @@ def test_skip_slot_rejects_conflicting_state(monkeypatch: pytest.MonkeyPatch) ->
     assert connection.transaction_count == 1
 
 
-@pytest.mark.parametrize("stage", ["skipped", "failed", "published"])
+def test_claim_slot_returns_persisted_skip_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    reason = SlotSkipReason.UNCHANGED
+    connection = _use_connection(
+        monkeypatch,
+        [("FROM video_digest_slots", _slot_row(stage="skipped", skip_reason=reason.value))],
+    )
+
+    result = video_digest.claim_slot(
+        SLOT.slot_id,
+        EDITION,
+        owner_token="owner-a",
+        now=NOW,
+        lease_duration=timedelta(minutes=10),
+    )
+
+    assert result == SkippedSlot(reason=reason)
+    assert connection.transaction_count == 1
+
+
+@pytest.mark.parametrize("stage", ["failed", "published"])
 def test_claim_slot_returns_terminal_state(
     monkeypatch: pytest.MonkeyPatch,
     stage: str,
@@ -1804,6 +1823,43 @@ def test_publication_progress_rejects_skipped_stage(
     assert connection.steps == []
 
 
+def test_publication_progress_rejects_mismatched_replay_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="publishing")),
+            (
+                "FROM video_digest_publication_intents",
+                _publication_row(
+                    stage="verified",
+                    verification_evidence_artifact_version_id="0" * 64,
+                ),
+            ),
+        ],
+    )
+
+    with pytest.raises(VideoDigestCheckpointConflictError, match="evidence conflicts"):
+        video_digest.checkpoint_publication_progress(
+            _lease(),
+            PUBLICATION_ID,
+            VerifiedPublication(
+                evidence_artifact_version_id=VERIFICATION_FILE.version_id,
+                video=VerifiedPublicObject(
+                    content_digest=PUBLICATION.video_digest,
+                    byte_size=PUBLICATION.video_byte_size,
+                    media_type=PUBLICATION.video_media_type,
+                    source_artifact_version_id=PUBLICATION.source_video_version_id,
+                ),
+            ),
+            evidence_file=VERIFICATION_FILE,
+            recorded_at=NOW,
+        )
+
+    assert connection.steps == []
+
+
 def test_publication_completion_updates_intent_before_terminal_slot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1869,6 +1925,57 @@ def test_publication_completion_replays_original_terminal_timestamp(
     assert connection.steps == []
 
 
+def test_publication_progress_replays_verified_after_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verified = VerifiedPublication(
+        evidence_artifact_version_id=VERIFICATION_FILE.version_id,
+        video=VerifiedPublicObject(
+            content_digest=PUBLICATION.video_digest,
+            byte_size=PUBLICATION.video_byte_size,
+            media_type=PUBLICATION.video_media_type,
+            source_artifact_version_id=PUBLICATION.source_video_version_id,
+        ),
+    )
+    connection = _use_connection(
+        monkeypatch,
+        [
+            (
+                "FROM video_digest_slots",
+                _slot_row(
+                    stage="published",
+                    edition_id=EDITION.edition_id,
+                    claim_count=1,
+                    terminal_lease_owner_token="owner-a",
+                    terminal_lease_expires_at=NOW + timedelta(hours=1),
+                    terminal_claim_count=1,
+                ),
+            ),
+            (
+                "FROM video_digest_publication_intents",
+                _publication_row(
+                    stage="published",
+                    upload_evidence_artifact_version_id=UPLOAD_FILE.version_id,
+                    verification_evidence_artifact_version_id=VERIFICATION_FILE.version_id,
+                    published_at=NOW,
+                ),
+            ),
+            ("FROM artifacts AS artifact", _artifact_row(VERIFICATION_FILE)),
+        ],
+    )
+
+    status = video_digest.checkpoint_publication_progress(
+        _lease(),
+        PUBLICATION_ID,
+        verified,
+        evidence_file=VERIFICATION_FILE,
+        recorded_at=NOW,
+    )
+
+    assert status.stage is PublicationState.PUBLISHED
+    assert connection.steps == []
+
+
 def test_publication_failure_terminalizes_intent_before_slot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1900,6 +2007,47 @@ def test_publication_failure_terminalizes_intent_before_slot(
     assert terminal == TerminalSlot(state=TerminalSlotState.FAILED)
     assert "video_digest_publication_intents" in connection.statements[-2]
     assert "video_digest_slots" in connection.statements[-1]
+
+
+def test_publication_failure_replays_matching_terminal_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            (
+                "FROM video_digest_slots",
+                _slot_row(
+                    stage="failed",
+                    edition_id=EDITION.edition_id,
+                    claim_count=1,
+                    terminal_lease_owner_token="owner-a",
+                    terminal_lease_expires_at=NOW + timedelta(hours=1),
+                    terminal_claim_count=1,
+                    failure_evidence_artifact_version_id=PUBLICATION_FAILURE_FILE.version_id,
+                ),
+            ),
+            ("FROM artifacts AS artifact", _artifact_row(PUBLICATION_FAILURE_FILE)),
+            (
+                "FROM video_digest_publication_intents",
+                _publication_row(
+                    stage="conflict",
+                    failure_evidence_artifact_version_id=PUBLICATION_FAILURE_FILE.version_id,
+                ),
+            ),
+        ],
+    )
+
+    terminal = video_digest.fail_publication(
+        _lease(),
+        PUBLICATION_ID,
+        state=PublicationState.CONFLICT,
+        evidence_file=PUBLICATION_FAILURE_FILE,
+        recorded_at=NOW,
+    )
+
+    assert terminal == TerminalSlot(state=TerminalSlotState.FAILED)
+    assert connection.steps == []
 
 
 def test_generic_slot_failure_rejects_active_generation(
@@ -2024,6 +2172,55 @@ def test_published_reads_reject_non_origin_media_url_before_query(
             SLOT.bucharest_day,
             public_media_base_url="https://media.example.com/path",
         )
+
+
+def test_published_reads_reject_malformed_legacy_object_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        video_digest,
+        "catalog_query",
+        lambda *_args, **_kwargs: [
+            {
+                "publication_id": PUBLICATION_ID,
+                "edition_id": EDITION.edition_id,
+                "expected_video_key": "legacy/video.mp4?download=1",
+                "video_digest": PUBLICATION.video_digest,
+                "video_byte_size": PUBLICATION.video_byte_size,
+                "video_media_type": PUBLICATION.video_media_type,
+                "subtitle_expected_key": None,
+                "subtitle_digest": None,
+                "subtitle_byte_size": None,
+                "subtitle_media_type": None,
+                "published_at": NOW,
+                "daily_report_version_id": REPORT_ID,
+                "subtitle_state": "failed",
+                "slot_name": "morning",
+                "scheduled_at": SCHEDULED_AT,
+                "day": SLOT.bucharest_day,
+            }
+        ],
+    )
+
+    with pytest.raises(ResearchCatalogError, match="object key"):
+        video_digest.list_published_editions(
+            SLOT.bucharest_day,
+            public_media_base_url="https://media.example.com",
+        )
+
+
+def test_read_published_edition_returns_none_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(video_digest, "catalog_query", lambda *_args, **_kwargs: [])
+
+    assert (
+        video_digest.read_published_edition(
+            EDITION.edition_id,
+            public_media_base_url="https://media.example.com",
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(

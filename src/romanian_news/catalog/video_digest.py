@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -162,6 +163,8 @@ def claim_slot(
         current = _database_now(connection)
         expires_at = current + duration
         stage = SlotStage(str(row["stage"]))
+        if stage == SlotStage.SKIPPED:
+            return SkippedSlot(reason=SlotSkipReason(str(row["skip_reason"])))
         if stage in _TERMINAL_STAGES:
             return TerminalSlot(state=TerminalSlotState(stage.value))
         if stage in _ACTIVE_STAGES:
@@ -1161,6 +1164,7 @@ def record_publication_intent(
 
     def checkpoint(connection: CatalogConnection) -> PublicationStatus:
         slot_row = _lock_slot(connection, lease.slot_id)
+        current: datetime | None = None
         terminal = str(slot_row["stage"]) in {
             SlotStage.FAILED.value,
             SlotStage.PUBLISHED.value,
@@ -1168,7 +1172,6 @@ def record_publication_intent(
         if terminal:
             if not _terminal_fence_matches(slot_row, lease):
                 raise VideoDigestLeaseLostError("Video digest slot lease was lost")
-            current = _utc(recorded_at, "recorded_at")
         else:
             current = _validate_locked_lease(connection, slot_row, lease)
             if str(slot_row["stage"]) != SlotStage.PUBLISHING.value:
@@ -1179,6 +1182,7 @@ def record_publication_intent(
         edition_row = _lock_edition_outputs(connection, lease.edition_id)
         _validate_intent_sources(connection, intent, edition_row)
         if not terminal:
+            assert current is not None
             subtitle = intent.subtitle
             connection.execute(
                 """
@@ -1248,8 +1252,16 @@ def checkpoint_publication_progress(
             raise ValueError("Publication progress evidence identity is invalid")
 
     def checkpoint(connection: CatalogConnection) -> PublicationStatus:
-        slot_row, current = _lock_slot_for_lease(connection, lease)
-        if str(slot_row["stage"]) != SlotStage.PUBLISHING.value:
+        slot_row = _lock_slot(connection, lease.slot_id)
+        slot_stage = SlotStage(str(slot_row["stage"]))
+        terminal_replay = slot_stage == SlotStage.PUBLISHED
+        if terminal_replay:
+            if not _terminal_fence_matches(slot_row, lease):
+                raise VideoDigestLeaseLostError("Video digest slot lease was lost")
+            current = None
+        else:
+            current = _validate_locked_lease(connection, slot_row, lease)
+        if slot_stage not in {SlotStage.PUBLISHING, SlotStage.PUBLISHED}:
             raise VideoDigestCheckpointConflictError(
                 "Stored video digest slot conflicts with publication progress"
             )
@@ -1257,6 +1269,13 @@ def checkpoint_publication_progress(
         if isinstance(progress, VerifiedPublication):
             _validate_verified_publication(progress, row)
         current_stage = PublicationState(str(row["stage"]))
+        if terminal_replay:
+            if current_stage != PublicationState.PUBLISHED:
+                raise VideoDigestCheckpointConflictError(
+                    "Stored publication completion conflicts with progress"
+                )
+            _require_progress_evidence(connection, row, progress, evidence_file)
+            return _publication_status(row)
         ranks = {
             PublicationState.PENDING: 0,
             PublicationState.UPLOADING: 1,
@@ -1275,6 +1294,7 @@ def checkpoint_publication_progress(
                 "Publication progress cannot skip a checkpoint"
             )
 
+        assert current is not None
         if evidence_file is not None:
             _register_artifact(connection, evidence_file, current)
         upload_version = (
@@ -1954,7 +1974,7 @@ def _public_media_origin(value: str) -> str:
 def _published_summary(row: Mapping[str, Any], base_url: str) -> PublishedEditionSummary:
     video = PublishedMedia.model_validate(
         {
-            "url": f"{base_url}/{row['expected_video_key']}",
+            "url": _public_media_url(base_url, row["expected_video_key"]),
             "content_digest": row["video_digest"],
             "byte_size": row["video_byte_size"],
             "media_type": row["video_media_type"],
@@ -1965,7 +1985,7 @@ def _published_summary(row: Mapping[str, Any], base_url: str) -> PublishedEditio
         subtitle = PublishedSubtitleAvailable(
             media=PublishedMedia.model_validate(
                 {
-                    "url": f"{base_url}/{row['subtitle_expected_key']}",
+                    "url": _public_media_url(base_url, row["subtitle_expected_key"]),
                     "content_digest": row["subtitle_digest"],
                     "byte_size": row["subtitle_byte_size"],
                     "media_type": row["subtitle_media_type"],
@@ -1988,6 +2008,18 @@ def _published_summary(row: Mapping[str, Any], base_url: str) -> PublishedEditio
         video=video,
         subtitle=subtitle,
     )
+
+
+def _public_media_url(base_url: str, raw_key: object) -> str:
+    key = str(raw_key)
+    if (
+        re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", key) is None
+        or key.endswith("/")
+        or "//" in key
+        or any(segment in {".", ".."} for segment in key.split("/"))
+    ):
+        raise ResearchCatalogError("Published video digest has an invalid object key")
+    return f"{base_url}/{key}"
 
 
 def _claim_active_slot(

@@ -316,6 +316,11 @@ def test_claim_result_parses_each_discriminated_variant() -> None:
         adapter.validate_python({"kind": "waiting"})
 
 
+def test_terminal_slot_cannot_discard_a_skip_reason() -> None:
+    with pytest.raises(ValueError):
+        TerminalSlotState("skipped")
+
+
 def test_subtitle_outcome_has_only_available_and_failed_variants() -> None:
     adapter = TypeAdapter(SubtitleOutcome)
 
