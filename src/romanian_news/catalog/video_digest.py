@@ -103,6 +103,10 @@ class PlanningAttemptReference(NewsModel):
     accepted_plan_artifact_version_id: Sha256 | None
 
 
+class AcceptedClipReference(ArtifactReference):
+    byte_size: Annotated[int, Field(gt=0)]
+
+
 class GenerationAttemptReference(NewsModel):
     request: GenerationRequestIdentity
     stage: GenerationStage
@@ -111,6 +115,8 @@ class GenerationAttemptReference(NewsModel):
     request_evidence: ArtifactReference
     receipt_evidence: ArtifactReference | None
     response_evidence: ArtifactReference | None
+    accepted_clip: AcceptedClipReference | None = None
+    validation_evidence: ArtifactReference | None = None
 
 
 def read_generation_attempts(edition_id: EditionId) -> tuple[GenerationAttemptReference, ...]:
@@ -126,10 +132,19 @@ def read_generation_attempts(edition_id: EditionId) -> tuple[GenerationAttemptRe
                receipt_version.id AS receipt_artifact_version_id,
                receipt_file.content_digest AS receipt_content_digest,
                receipt_file.r2_key AS receipt_r2_key,
-               response_artifact.id AS response_artifact_id,
-               response_file.content_digest AS response_content_digest,
-               response_file.r2_key AS response_r2_key,
-               request.response_artifact_version_id
+                response_artifact.id AS response_artifact_id,
+                response_file.content_digest AS response_content_digest,
+                response_file.r2_key AS response_r2_key,
+                request.response_artifact_version_id,
+                clip_artifact.id AS clip_artifact_id,
+                clip_file.content_digest AS clip_content_digest,
+                clip_file.r2_key AS clip_r2_key,
+                clip_file.byte_size AS clip_byte_size,
+                validation_artifact.id AS validation_artifact_id,
+                validation_file.content_digest AS validation_content_digest,
+                validation_file.r2_key AS validation_r2_key,
+                request.accepted_clip_artifact_version_id,
+                request.validation_evidence_artifact_version_id
         FROM video_digest_generation_requests AS request
         JOIN artifact_versions AS request_version
           ON request_version.id = request.request_artifact_version_id
@@ -148,6 +163,17 @@ def read_generation_attempts(edition_id: EditionId) -> tuple[GenerationAttemptRe
           ON response_artifact.id = response_version.artifact_id
         LEFT JOIN artifact_files AS response_file
           ON response_file.artifact_version_id = response_version.id
+        LEFT JOIN artifact_versions AS clip_version
+          ON clip_version.id = request.accepted_clip_artifact_version_id
+        LEFT JOIN artifacts AS clip_artifact ON clip_artifact.id = clip_version.artifact_id
+        LEFT JOIN artifact_files AS clip_file
+          ON clip_file.artifact_version_id = clip_version.id
+        LEFT JOIN artifact_versions AS validation_version
+          ON validation_version.id = request.validation_evidence_artifact_version_id
+        LEFT JOIN artifacts AS validation_artifact
+          ON validation_artifact.id = validation_version.artifact_id
+        LEFT JOIN artifact_files AS validation_file
+          ON validation_file.artifact_version_id = validation_version.id
         WHERE request.edition_id = %s
         ORDER BY request.story_position, request.attempt_index
         """,
@@ -1040,12 +1066,18 @@ def checkpoint_generation_acceptance(
     request_id: GenerationRequestId,
     *,
     clip_file: ArtifactFile,
+    validation_file: ArtifactFile,
     cost: MeasuredAttemptCost | UnknownAttemptCost,
     recorded_at: datetime,
 ) -> GenerationRequestState:
     _utc(recorded_at, "recorded_at")
     if clip_file.artifact_kind != "video_digest_accepted_clip":
         raise ValueError("Accepted clip artifact kind is invalid")
+    if (
+        validation_file.artifact_id != f"{request_id}:validation"
+        or validation_file.artifact_kind != "video_digest_candidate_validation"
+    ):
+        raise ValueError("Candidate validation artifact identity is invalid")
 
     def checkpoint(connection: CatalogConnection) -> GenerationRequestState:
         slot_row, current = _lock_slot_for_lease(connection, lease)
@@ -1056,9 +1088,11 @@ def checkpoint_generation_acceptance(
         if str(row["stage"]) == GenerationStage.ACCEPTED.value:
             if (
                 row["accepted_clip_artifact_version_id"] == clip_file.version_id
+                and row["validation_evidence_artifact_version_id"] == validation_file.version_id
                 and story["accepted_clip_artifact_version_id"] == clip_file.version_id
                 and _cost_from_row(row) == cost
                 and _stored_artifact_matches(connection, clip_file)
+                and _stored_artifact_matches(connection, validation_file)
             ):
                 return _generation_state(row)
             raise VideoDigestCheckpointConflictError(
@@ -1075,12 +1109,14 @@ def checkpoint_generation_acceptance(
             )
 
         _register_artifact(connection, clip_file, current)
+        _register_artifact(connection, validation_file, current)
         cost_kind, cost_usd, unknown_reason = _cost_columns(cost)
         _execute_returning(
             connection,
             """
             UPDATE video_digest_generation_requests
             SET stage = 'accepted', accepted_clip_artifact_version_id = %s,
+                validation_evidence_artifact_version_id = %s,
                 cost_kind = %s, cost_usd = %s, cost_unknown_reason = %s, updated_at = %s
             WHERE request_id = %s AND edition_id = %s AND stage = 'processing'
               AND response_artifact_version_id IS NOT NULL
@@ -1090,6 +1126,7 @@ def checkpoint_generation_acceptance(
             """,
             (
                 clip_file.version_id,
+                validation_file.version_id,
                 cost_kind,
                 cost_usd,
                 unknown_reason,
@@ -1336,6 +1373,7 @@ def checkpoint_assembled_video(
     lease: SlotLease,
     *,
     video_file: ArtifactFile,
+    manifest_file: ArtifactFile,
     recorded_at: datetime,
 ) -> AssembledVideo:
     _utc(recorded_at, "recorded_at")
@@ -1344,14 +1382,23 @@ def checkpoint_assembled_video(
         or video_file.artifact_kind != "video_digest_assembled_video"
     ):
         raise ValueError("Assembled video artifact identity is invalid")
+    if (
+        manifest_file.artifact_id != f"{lease.edition_id}:assembly-manifest"
+        or manifest_file.artifact_kind != "video_digest_assembly_manifest"
+    ):
+        raise ValueError("Assembly manifest artifact identity is invalid")
 
     def checkpoint(connection: CatalogConnection) -> AssembledVideo:
         slot_row, current = _lock_slot_for_lease(connection, lease)
         edition_row = _lock_edition_outputs(connection, lease.edition_id)
         stored_version = edition_row["assembled_video_artifact_version_id"]
+        stored_manifest = edition_row["assembly_manifest_artifact_version_id"]
         if stored_version is not None:
-            if stored_version == video_file.version_id and _stored_artifact_matches(
-                connection, video_file
+            if (
+                stored_version == video_file.version_id
+                and stored_manifest == manifest_file.version_id
+                and _stored_artifact_matches(connection, video_file)
+                and _stored_artifact_matches(connection, manifest_file)
             ):
                 return AssembledVideo(
                     edition_id=lease.edition_id,
@@ -1380,15 +1427,17 @@ def checkpoint_assembled_video(
             )
 
         _register_artifact(connection, video_file, current)
+        _register_artifact(connection, manifest_file, current)
         _execute_returning(
             connection,
             """
             UPDATE video_digest_editions
-            SET assembled_video_artifact_version_id = %s, updated_at = %s
+            SET assembled_video_artifact_version_id = %s,
+                assembly_manifest_artifact_version_id = %s, updated_at = %s
             WHERE edition_id = %s AND assembled_video_artifact_version_id IS NULL
             RETURNING edition_id
             """,
-            (video_file.version_id, current, lease.edition_id),
+            (video_file.version_id, manifest_file.version_id, current, lease.edition_id),
             VideoDigestCheckpointConflictError(
                 "Stored video digest edition conflicts with assembly completion"
             ),
@@ -1971,7 +2020,8 @@ def _lock_edition_outputs(
 ) -> Mapping[str, Any]:
     row = connection.execute(
         """
-        SELECT edition_id, assembled_video_artifact_version_id, subtitle_state,
+        SELECT edition_id, assembled_video_artifact_version_id,
+               assembly_manifest_artifact_version_id, subtitle_state,
                subtitle_artifact_version_id,
                subtitle_failure_evidence_artifact_version_id
         FROM video_digest_editions
@@ -2816,6 +2866,7 @@ def _lock_generation_request(
         SELECT request_id, edition_id, story_position, attempt_index,
                request_artifact_version_id, stage, provider_receipt_id,
                response_artifact_version_id, accepted_clip_artifact_version_id,
+               validation_evidence_artifact_version_id,
                failure_evidence_artifact_version_id, cost_kind, cost_usd,
                cost_unknown_reason
         FROM video_digest_generation_requests
@@ -2927,6 +2978,25 @@ def _generation_attempt_reference(row: Mapping[str, Any]) -> GenerationAttemptRe
             content_digest=str(row["response_content_digest"]),
             r2_key=str(row["response_r2_key"]),
         )
+    clip_version = row["accepted_clip_artifact_version_id"]
+    clip = None
+    if clip_version is not None:
+        clip = AcceptedClipReference(
+            artifact_id=str(row["clip_artifact_id"]),
+            version_id=str(clip_version),
+            content_digest=str(row["clip_content_digest"]),
+            r2_key=str(row["clip_r2_key"]),
+            byte_size=int(row["clip_byte_size"]),
+        )
+    validation_version = row["validation_evidence_artifact_version_id"]
+    validation = None
+    if validation_version is not None:
+        validation = ArtifactReference(
+            artifact_id=str(row["validation_artifact_id"]),
+            version_id=str(validation_version),
+            content_digest=str(row["validation_content_digest"]),
+            r2_key=str(row["validation_r2_key"]),
+        )
     return GenerationAttemptReference(
         request=GenerationRequestIdentity(
             request_id=GenerationRequestId(str(row["request_id"])),
@@ -2948,6 +3018,8 @@ def _generation_attempt_reference(row: Mapping[str, Any]) -> GenerationAttemptRe
         ),
         receipt_evidence=receipt,
         response_evidence=response,
+        accepted_clip=clip,
+        validation_evidence=validation,
     )
 
 
