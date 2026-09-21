@@ -29,6 +29,7 @@ from romanian_news.video_digest.errors import (
 )
 from romanian_news.video_digest.models import (
     AssembledVideo,
+    AttemptCost,
     AvailableSubtitles,
     ClaimedSlot,
     ClaimResult,
@@ -37,6 +38,8 @@ from romanian_news.video_digest.models import (
     EditionIdentity,
     EstimatedAttemptCost,
     FailedSubtitles,
+    GenerationAdmission,
+    GenerationRequestCheckpoint,
     GenerationRequestId,
     GenerationRequestIdentity,
     GenerationRequestState,
@@ -100,6 +103,73 @@ class PlanningAttemptReference(NewsModel):
     accepted_plan_artifact_version_id: Sha256 | None
 
 
+class GenerationAttemptReference(NewsModel):
+    request: GenerationRequestIdentity
+    stage: GenerationStage
+    provider_receipt_id: str | None
+    cost: AttemptCost
+    request_evidence: CatalogArtifactReference
+    receipt_evidence: CatalogArtifactReference | None
+    response_evidence: CatalogArtifactReference | None
+
+
+def read_generation_attempts(edition_id: EditionId) -> tuple[GenerationAttemptReference, ...]:
+    rows = catalog_query(
+        """
+        SELECT request.request_id, request.edition_id, request.story_position,
+               request.attempt_index, request.request_artifact_version_id,
+               request.stage, request.provider_receipt_id, request.cost_kind,
+               request.cost_usd, request.cost_unknown_reason,
+               request_artifact.id AS request_artifact_id,
+               request_file.content_digest AS request_content_digest,
+               request_file.r2_key AS request_r2_key,
+               receipt_version.id AS receipt_artifact_version_id,
+               receipt_file.content_digest AS receipt_content_digest,
+               receipt_file.r2_key AS receipt_r2_key,
+               response_artifact.id AS response_artifact_id,
+               response_file.content_digest AS response_content_digest,
+               response_file.r2_key AS response_r2_key,
+               request.response_artifact_version_id
+        FROM video_digest_generation_requests AS request
+        JOIN artifact_versions AS request_version
+          ON request_version.id = request.request_artifact_version_id
+        JOIN artifacts AS request_artifact ON request_artifact.id = request_version.artifact_id
+        JOIN artifact_files AS request_file
+          ON request_file.artifact_version_id = request_version.id
+        LEFT JOIN artifacts AS receipt_artifact
+          ON receipt_artifact.id = request.provider_receipt_id
+        LEFT JOIN artifact_versions AS receipt_version
+          ON receipt_version.id = receipt_artifact.current_version_id
+        LEFT JOIN artifact_files AS receipt_file
+          ON receipt_file.artifact_version_id = receipt_version.id
+        LEFT JOIN artifact_versions AS response_version
+          ON response_version.id = request.response_artifact_version_id
+        LEFT JOIN artifacts AS response_artifact
+          ON response_artifact.id = response_version.artifact_id
+        LEFT JOIN artifact_files AS response_file
+          ON response_file.artifact_version_id = response_version.id
+        WHERE request.edition_id = %s
+        ORDER BY request.story_position, request.attempt_index
+        """,
+        [edition_id],
+    )
+    return tuple(_generation_attempt_reference(row) for row in rows)
+
+
+def read_generation_deadline(slot_id: SlotId) -> datetime:
+    rows = catalog_query(
+        """
+        SELECT scheduled_at + INTERVAL '90 minutes' AS deadline_at
+        FROM video_digest_slots
+        WHERE slot_id = %s
+        """,
+        [slot_id],
+    )
+    if len(rows) != 1:
+        raise ResearchCatalogError("PostgreSQL did not return the video digest deadline")
+    return _utc(cast(datetime, rows[0]["deadline_at"]), "deadline_at")
+
+
 def record_policy_bundle(file: ArtifactFile, *, recorded_at: datetime) -> Sha256:
     timestamp = _utc(recorded_at, "recorded_at")
     if (
@@ -114,6 +184,26 @@ def record_policy_bundle(file: ArtifactFile, *, recorded_at: datetime) -> Sha256
         if not _stored_artifact_matches(connection, file):
             raise VideoDigestCheckpointConflictError(
                 "Stored video digest policy conflicts with the request"
+            )
+        return file.version_id
+
+    return _checkpoint_transaction(record)
+
+
+def record_generation_policy(file: ArtifactFile, *, recorded_at: datetime) -> Sha256:
+    timestamp = _utc(recorded_at, "recorded_at")
+    if (
+        not file.artifact_id.startswith("video-digest-generation-policy:")
+        or file.artifact_kind != "video_digest_generation_policy"
+        or file.media_type != "application/json"
+    ):
+        raise ValueError("Video digest generation policy artifact identity is invalid")
+
+    def record(connection: CatalogConnection) -> Sha256:
+        _register_artifact(connection, file, timestamp)
+        if not _stored_artifact_matches(connection, file):
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest generation policy conflicts with the request"
             )
         return file.version_id
 
@@ -613,8 +703,9 @@ def checkpoint_generation_request(
     request: GenerationRequestIdentity,
     *,
     request_file: ArtifactFile,
+    admission: GenerationAdmission,
     recorded_at: datetime,
-) -> GenerationRequestState:
+) -> GenerationRequestCheckpoint:
     _utc(recorded_at, "recorded_at")
     if request.edition_id != lease.edition_id:
         raise ValueError("Generation request edition does not match the slot lease")
@@ -629,16 +720,20 @@ def checkpoint_generation_request(
     ):
         raise ValueError("Generation request artifact identity is invalid")
 
-    def checkpoint(connection: CatalogConnection) -> GenerationRequestState:
+    def checkpoint(connection: CatalogConnection) -> GenerationRequestCheckpoint:
         slot_row, current = _lock_slot_for_lease(connection, lease)
         stored = _lock_generation_request(connection, request.request_id)
         if stored is not None:
             _require_generation_identity(stored, request)
-            if not _stored_artifact_matches(connection, request_file):
+            if not _stored_artifact_matches(
+                connection, request_file
+            ) or not _stored_generation_admission_matches(
+                connection, request.request_id, admission
+            ):
                 raise VideoDigestCheckpointConflictError(
-                    "Stored generation request artifact conflicts with the request"
+                    "Stored generation request admission conflicts with the request"
                 )
-            return _generation_state(stored)
+            return GenerationRequestCheckpoint(state=_generation_state(stored), created=False)
         if str(slot_row["stage"]) != SlotStage.GENERATING.value:
             raise VideoDigestCheckpointConflictError(
                 "Stored video digest slot conflicts with the generation request"
@@ -724,13 +819,16 @@ def checkpoint_generation_request(
                 "Another video digest generation attempt is active"
             )
 
+        scheduled_at = _utc(cast(datetime, slot_row["scheduled_at"]), "scheduled_at")
+        deadline_at = scheduled_at + timedelta(minutes=90)
         _register_artifact(connection, request_file, current)
         connection.execute(
             """
             INSERT INTO video_digest_generation_requests
                 (request_id, edition_id, story_position, attempt_index,
-                 request_artifact_version_id, stage, cost_kind, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, 'pending', 'pending', %s, %s)
+                 request_artifact_version_id, generation_policy_artifact_version_id,
+                 reserved_cost_usd, deadline_at, stage, cost_kind, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', 'pending', %s, %s)
             """,
             (
                 request.request_id,
@@ -738,14 +836,55 @@ def checkpoint_generation_request(
                 request.story_position,
                 request.attempt_index,
                 request.request_artifact_version_id,
+                admission.generation_policy_artifact_version_id,
+                admission.reserved_usd,
+                deadline_at,
                 current,
                 current,
             ),
         )
-        return GenerationRequestState(
-            request_id=request.request_id,
-            stage=GenerationStage.PENDING,
-            cost=PendingAttemptCost(),
+        bucharest_day = cast(date, slot_row["bucharest_day"])
+        scopes = (
+            ("story", str(story_row["story_id"]), admission.limits.story_usd),
+            ("edition", str(request.edition_id), admission.limits.edition_usd),
+            ("bucharest_day", bucharest_day.isoformat(), admission.limits.bucharest_day_usd),
+            (
+                "calendar_month",
+                bucharest_day.replace(day=1).isoformat(),
+                admission.limits.calendar_month_usd,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO video_digest_generation_reservations
+                (request_id, scope_kind, scope_key, limit_usd, reserved_usd,
+                 generation_policy_artifact_version_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s),
+                   (%s, %s, %s, %s, %s, %s, %s),
+                   (%s, %s, %s, %s, %s, %s, %s),
+                   (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            tuple(
+                value
+                for scope_kind, scope_key, limit_usd in scopes
+                for value in (
+                    request.request_id,
+                    scope_kind,
+                    scope_key,
+                    limit_usd,
+                    admission.reserved_usd,
+                    admission.generation_policy_artifact_version_id,
+                    current,
+                )
+            ),
+        )
+        return GenerationRequestCheckpoint(
+            state=GenerationRequestState(
+                request_id=request.request_id,
+                stage=GenerationStage.PENDING,
+                cost=PendingAttemptCost(),
+            ),
+            created=True,
         )
 
     return _checkpoint_transaction(checkpoint)
@@ -2728,6 +2867,37 @@ def _generation_request_artifact_id(
     return f"{edition_id}:{story_position}:{attempt_index}:generation-request"
 
 
+def _stored_generation_admission_matches(
+    connection: CatalogConnection,
+    request_id: GenerationRequestId,
+    admission: GenerationAdmission,
+) -> bool:
+    rows = connection.execute(
+        """
+        SELECT scope_kind, limit_usd, reserved_usd,
+               generation_policy_artifact_version_id
+        FROM video_digest_generation_reservations
+        WHERE request_id = %s
+        ORDER BY scope_kind
+        """,
+        (request_id,),
+    ).fetchall()
+    expected_limits = {
+        "story": admission.limits.story_usd,
+        "edition": admission.limits.edition_usd,
+        "bucharest_day": admission.limits.bucharest_day_usd,
+        "calendar_month": admission.limits.calendar_month_usd,
+    }
+    return len(rows) == 4 and all(
+        str(row["scope_kind"]) in expected_limits
+        and Decimal(str(row["limit_usd"])) == expected_limits[str(row["scope_kind"])]
+        and Decimal(str(row["reserved_usd"])) == admission.reserved_usd
+        and str(row["generation_policy_artifact_version_id"])
+        == admission.generation_policy_artifact_version_id
+        for row in rows
+    )
+
+
 def _generation_state(row: Mapping[str, Any]) -> GenerationRequestState:
     receipt = row["provider_receipt_id"]
     return GenerationRequestState(
@@ -2735,6 +2905,49 @@ def _generation_state(row: Mapping[str, Any]) -> GenerationRequestState:
         stage=GenerationStage(str(row["stage"])),
         provider_receipt_id=str(receipt) if receipt is not None else None,
         cost=_cost_from_row(row),
+    )
+
+
+def _generation_attempt_reference(row: Mapping[str, Any]) -> GenerationAttemptReference:
+    receipt_version = row["receipt_artifact_version_id"]
+    receipt = None
+    if receipt_version is not None:
+        receipt = CatalogArtifactReference(
+            artifact_id=str(row["provider_receipt_id"]),
+            version_id=str(receipt_version),
+            content_digest=str(row["receipt_content_digest"]),
+            r2_key=str(row["receipt_r2_key"]),
+        )
+    response_version = row["response_artifact_version_id"]
+    response = None
+    if response_version is not None:
+        response = CatalogArtifactReference(
+            artifact_id=str(row["response_artifact_id"]),
+            version_id=str(response_version),
+            content_digest=str(row["response_content_digest"]),
+            r2_key=str(row["response_r2_key"]),
+        )
+    return GenerationAttemptReference(
+        request=GenerationRequestIdentity(
+            request_id=GenerationRequestId(str(row["request_id"])),
+            edition_id=EditionId(str(row["edition_id"])),
+            story_position=int(row["story_position"]),
+            attempt_index=int(row["attempt_index"]),
+            request_artifact_version_id=str(row["request_artifact_version_id"]),
+        ),
+        stage=GenerationStage(str(row["stage"])),
+        provider_receipt_id=(
+            str(row["provider_receipt_id"]) if row["provider_receipt_id"] is not None else None
+        ),
+        cost=_cost_from_row(row),
+        request_evidence=CatalogArtifactReference(
+            artifact_id=str(row["request_artifact_id"]),
+            version_id=str(row["request_artifact_version_id"]),
+            content_digest=str(row["request_content_digest"]),
+            r2_key=str(row["request_r2_key"]),
+        ),
+        receipt_evidence=receipt,
+        response_evidence=response,
     )
 
 

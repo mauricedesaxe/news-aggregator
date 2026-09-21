@@ -291,6 +291,24 @@ class GenerationSpend(NewsModel):
     unknown_requests: Annotated[int, Field(ge=0)]
 
 
+class GenerationBudgetLimits(NewsModel):
+    story_usd: Annotated[Decimal, Field(gt=0)]
+    edition_usd: Annotated[Decimal, Field(gt=0)]
+    bucharest_day_usd: Annotated[Decimal, Field(gt=0)]
+    calendar_month_usd: Annotated[Decimal, Field(gt=0)]
+
+
+class GenerationAdmission(NewsModel):
+    generation_policy_artifact_version_id: Sha256
+    reserved_usd: Annotated[Decimal, Field(gt=0)]
+    limits: GenerationBudgetLimits
+
+
+class GenerationRequestCheckpoint(NewsModel):
+    state: GenerationRequestState
+    created: bool
+
+
 class SlotSkipReason(StrEnum):
     SOURCE_MISSING = "source_missing"
     SOURCE_EMPTY = "source_empty"
