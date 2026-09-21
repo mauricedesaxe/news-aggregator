@@ -5,11 +5,11 @@ from datetime import date, datetime, time, timedelta
 from pydantic import model_validator
 
 from romanian_news import BUCHAREST, NewsModel
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.embeddings import embedding_request_id
 from romanian_news.analysis.groups.sentiment import sentiment_request_id
 from romanian_news.analysis.groups.summary import summary_request_id
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import parse_daily_cluster_set
 from romanian_news.storage import read_verified_r2_object
 
@@ -45,17 +45,13 @@ def read_daily_feed_observation_references(day: date) -> DailyArtifactReferences
         read_daily_feed_observation_references as read_references,
     )
 
-    return DailyArtifactReferences(
-        day=day, values=tuple(_catalog_reference(value) for value in read_references(day))
-    )
+    return DailyArtifactReferences(day=day, values=read_references(day))
 
 
 def read_daily_article_references(day: date) -> DailyArtifactReferences:
     from romanian_news.catalog.daily import read_daily_article_references as read_references
 
-    return DailyArtifactReferences(
-        day=day, values=tuple(_catalog_reference(value) for value in read_references(day))
-    )
+    return DailyArtifactReferences(day=day, values=read_references(day))
 
 
 def read_daily_relevance_references(day: date) -> DailyArtifactReferences:
@@ -140,8 +136,4 @@ def _required_current_reference(artifact_id: str) -> ArtifactReference:
 def _current_references(artifact_ids: tuple[str, ...]) -> tuple[ArtifactReference, ...]:
     from romanian_news.catalog.artifacts import current_artifact_references
 
-    return tuple(_catalog_reference(value) for value in current_artifact_references(artifact_ids))
-
-
-def _catalog_reference(value) -> ArtifactReference:
-    return ArtifactReference.model_validate(value.model_dump(), strict=True)
+    return current_artifact_references(artifact_ids)

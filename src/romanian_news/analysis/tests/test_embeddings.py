@@ -5,7 +5,6 @@ import pytest
 from pydantic import HttpUrl
 
 from romanian_news.analysis import embeddings as embeddings_module
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.embeddings import (
     EmbeddingInput,
     embed_article,
@@ -16,6 +15,7 @@ from romanian_news.analysis.embeddings import (
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 
 
 def test_embedding_request_identity_stays_stable() -> None:

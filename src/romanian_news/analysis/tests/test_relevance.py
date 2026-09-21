@@ -9,7 +9,6 @@ import pytest
 from pydantic import HttpUrl, ValidationError
 
 from romanian_news.analysis import relevance as relevance_module
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.relevance import (
     PRODUCTION_RELEVANCE_POLICY,
     RELEVANCE_POLICY_V1,
@@ -23,6 +22,7 @@ from romanian_news.analysis.relevance import (
 )
 from romanian_news.analysis.tracing import ProviderCallResult
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 
 _A = "a" * 64
 _B = "b" * 64

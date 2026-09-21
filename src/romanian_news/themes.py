@@ -12,11 +12,11 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
 from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
 from romanian_news import GROUP_ANALYSIS_MODEL, NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.attempts import ModelCall, record_model_attempt
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.groups.models import GroupSummary
 from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup, parse_daily_cluster_set
 from romanian_news.storage import read_verified_r2_object
 
@@ -537,8 +537,7 @@ def read_recorded_daily_theme_input(day: date) -> DailyThemeInput:
     references = read_recorded_daily_theme_references(day)
     if not references:
         raise ValueError(f"Daily themes are unavailable for {day.isoformat()}")
-    values = tuple(_catalog_reference(value) for value in references)
-    return load_daily_theme_input(values[0], values[1:])
+    return load_daily_theme_input(references[0], references[1:])
 
 
 def load_daily_theme_input(
@@ -1687,11 +1686,7 @@ def _current_reference(artifact_id: str, kind: str) -> ArtifactReference:
     reference = current_artifact_reference(artifact_id, kind)
     if reference is None:
         raise ValueError(f"Required theme input is unavailable: {artifact_id}")
-    return _catalog_reference(reference)
-
-
-def _catalog_reference(value) -> ArtifactReference:
-    return ArtifactReference.model_validate(value.model_dump(), strict=True)
+    return reference
 
 
 def _summary_request_id(group: NewsGroup) -> Sha256:

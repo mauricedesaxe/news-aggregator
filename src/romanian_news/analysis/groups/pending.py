@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import date
 
 from romanian_news import Sha256
-from romanian_news.analysis.artifacts import ArtifactReference, existing_current_artifact_ids
 from romanian_news.analysis.groups.models import GroupAnalysisInput, GroupAnalysisReferenceInput
 from romanian_news.analysis.groups.sentiment import sentiment_request_id
 from romanian_news.analysis.groups.summary import summary_request_id
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
+from romanian_news.catalog.artifacts import existing_current_artifact_ids
 from romanian_news.groups import parse_daily_cluster_set
 from romanian_news.storage import read_verified_r2_object
 
@@ -18,10 +19,7 @@ def read_pending_group_analysis_references(
     """Read pending group analysis references without article content."""
     from romanian_news.catalog.cluster_inputs import read_current_cluster_references
 
-    cluster_references = tuple(
-        ArtifactReference.model_validate(value.model_dump(), strict=True)
-        for value in read_current_cluster_references()
-    )
+    cluster_references = read_current_cluster_references()
     candidates = []
     requested_ids = []
     for cluster_reference in cluster_references:
@@ -74,11 +72,7 @@ def read_pending_group_analyses(
 def _read_article_references(version_ids: tuple[Sha256, ...]) -> dict[Sha256, ArtifactReference]:
     from romanian_news.catalog.artifacts import artifact_references_by_version_ids
 
-    catalog_result = artifact_references_by_version_ids(version_ids)
-    result = {
-        version_id: ArtifactReference.model_validate(value.model_dump(), strict=True)
-        for version_id, value in catalog_result.items()
-    }
+    result = artifact_references_by_version_ids(version_ids)
     if set(result) != set(version_ids):
         raise ValueError("Cluster set references unknown article versions")
     return result

@@ -5,8 +5,8 @@ import pytest
 from pydantic import ValidationError
 
 from romanian_news import subject_assessments as assessment_module
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.groups.models import GroupSummary
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.evaluation import (
     EvaluationProvenance,
     RankingEvaluationCase,

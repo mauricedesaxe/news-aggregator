@@ -12,7 +12,6 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
 from pydantic import ValidationError
 
 from romanian_news import GROUP_ANALYSIS_MODEL, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.attempts import ModelCall, record_model_attempt
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.groups.models import (
@@ -29,6 +28,7 @@ from romanian_news.analysis.tracing import (
     trace_provider_call,
 )
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup
 
 ARTICLE_SENTIMENT_PROMPT = (

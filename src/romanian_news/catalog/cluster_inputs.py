@@ -1,24 +1,24 @@
 from datetime import date
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.catalog.artifacts import CatalogArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog_transport import catalog_query
 
 
 class EmbeddedArticleCatalogReference(NewsModel):
-    article: CatalogArtifactReference
-    relevance: CatalogArtifactReference
-    embedding: CatalogArtifactReference
+    article: ArtifactReference
+    relevance: ArtifactReference
+    embedding: ArtifactReference
 
 
-def read_current_cluster_references() -> tuple[CatalogArtifactReference, ...]:
+def read_current_cluster_references() -> tuple[ArtifactReference, ...]:
     rows = catalog_query(
         """SELECT cluster.id AS artifact_id, cluster.current_version_id AS version_id,
                   file.content_digest, file.r2_key FROM artifacts cluster
            JOIN artifact_files file ON file.artifact_version_id = cluster.current_version_id
            WHERE cluster.kind = 'news_clusters' ORDER BY cluster.id"""
     )
-    return tuple(CatalogArtifactReference.model_validate(row, strict=True) for row in rows)
+    return tuple(ArtifactReference.model_validate(row, strict=True) for row in rows)
 
 
 def read_embedded_article_references(
@@ -84,8 +84,8 @@ def read_cluster_article_references(
 
 
 def _embedded(row: dict[str, object]) -> EmbeddedArticleCatalogReference:
-    def reference(prefix: str) -> CatalogArtifactReference:
-        return CatalogArtifactReference(
+    def reference(prefix: str) -> ArtifactReference:
+        return ArtifactReference(
             artifact_id=str(row[f"{prefix}_artifact_id"]),
             version_id=str(row[f"{prefix}_version_id"]),
             content_digest=str(row[f"{prefix}_digest"]),

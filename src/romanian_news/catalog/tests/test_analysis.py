@@ -1,4 +1,3 @@
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.attempts import ModelCall
 from romanian_news.analysis.groups.models import GroupSummaryOutput
 from romanian_news.analysis.relevance import (
@@ -15,6 +14,7 @@ from romanian_news.analysis.relevance_v3 import (
     ImpactGateResult,
     RelevanceV3Output,
 )
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.analysis import (
     _analysis_catalog_statements,
     _analysis_file,

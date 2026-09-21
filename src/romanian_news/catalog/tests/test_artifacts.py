@@ -1,5 +1,7 @@
 from typing import TypedDict
 
+from romanian_news.artifacts import ArtifactReference
+from romanian_news.catalog import artifacts
 from romanian_news.catalog.artifacts import artifact_file
 
 
@@ -27,3 +29,22 @@ def test_content_version_identity_is_stable_across_computations() -> None:
     second = artifact_file(**_ARGUMENTS)
 
     assert first == second
+
+
+def test_catalog_returns_the_shared_artifact_reference(monkeypatch) -> None:
+    monkeypatch.setattr(
+        artifacts,
+        "catalog_query",
+        lambda *_args: [
+            {
+                "artifact_id": "news:daily:2026-08-31",
+                "version_id": "a" * 64,
+                "content_digest": "b" * 64,
+                "r2_key": "news/reports/daily/2026-08-31/report.json",
+            }
+        ],
+    )
+
+    reference = artifacts.current_artifact_reference("news:daily:2026-08-31", "news_daily_report")
+
+    assert type(reference) is ArtifactReference

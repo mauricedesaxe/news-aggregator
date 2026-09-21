@@ -1,4 +1,5 @@
 import hashlib
+import json
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -307,8 +308,15 @@ def test_feed_publication_normalizes_mixed_captures_before_cataloging(monkeypatc
     observation_rows = [
         parameters for sql, parameters in batches[0] if "news_feed_observations" in sql
     ]
+    observation_payloads = [
+        json.loads(content)
+        for key, content in uploaded
+        if key.startswith("news/feed-observations/")
+    ]
     assert call_order == ["upload", "d1"]
     assert len(uploaded) == 6
+    assert publication.uploaded_objects == 6
+    assert publication.reused_objects == 0
     assert publication.feed_observations == 3
     assert publication.feed_snapshots == 1
     assert publication.feed_entry_events == 1
@@ -320,6 +328,19 @@ def test_feed_publication_normalizes_mixed_captures_before_cataloging(monkeypatc
         ("hotnews", "ok", 1),
         ("digi24", "not_modified", 0),
         ("g4media", "failed", 1),
+    ]
+    assert [
+        (
+            payload["feed_id"],
+            payload["status"],
+            payload["feed_snapshot_version_id"],
+            payload["entry_ids"],
+        )
+        for payload in observation_payloads
+    ] == [
+        ("hotnews", "ok", observation_rows[0][1], [entry.source_id]),
+        ("digi24", "not_modified", current_version, []),
+        ("g4media", "failed", None, [entry.source_id]),
     ]
 
 

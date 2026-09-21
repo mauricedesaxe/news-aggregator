@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo
 import dagster as dg
 from dagster._core.definitions.metadata.metadata_value import JsonMetadataValue
 
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.articles.models import ArticleAcquisitionFailure, ArticleFailureKind
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.daily import DailyArtifactReferences
 from romanian_news.groups import DailyClusterSet, NewsGroup
 from romanian_news.reports import DailyReportInput

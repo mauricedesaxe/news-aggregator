@@ -7,13 +7,13 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 import pytest
 from pydantic import ValidationError
 
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.relevance import (
     RELEVANCE_POLICY_V1,
     RelevanceDecision,
     relevance_is_accepted,
 )
 from romanian_news.analysis.relevance_v3 import ImpactDecision
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog import evaluations
 from romanian_news.evaluation import (
     ConfidenceEvaluationCase,

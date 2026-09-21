@@ -4,9 +4,9 @@ from uuid import UUID
 from pydantic import HttpUrl
 
 from romanian_news import EMBEDDING_DIMENSIONS
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.relevance import RelevanceDecision
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.evaluation import (
     ArticleRelevanceInput,
     ArticleRelevanceSpec,

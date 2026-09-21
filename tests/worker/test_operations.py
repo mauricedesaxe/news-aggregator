@@ -11,7 +11,6 @@ import pytest
 import requests
 from pydantic import HttpUrl
 
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.attempts import ModelCall
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.analysis.relevance_v3 import (
@@ -26,6 +25,7 @@ from romanian_news.analysis.relevance_v3 import (
 )
 from romanian_news.articles.extraction import article_id, normalize_article_url
 from romanian_news.articles.models import ArticleFailureKind, ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import (
     artifact_file,
     artifact_statements,

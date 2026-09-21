@@ -2,7 +2,7 @@ import hashlib
 from datetime import date
 from types import SimpleNamespace
 
-from romanian_news.analysis.artifacts import ArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog import subject_assessments as catalog
 from romanian_news.subject_assessments import (
     PRODUCTION_SUBJECT_ASSESSMENT_POLICY,
