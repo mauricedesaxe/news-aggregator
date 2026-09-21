@@ -297,9 +297,20 @@ def _walk_publication_pipeline(
         )
         for position in range(story_count)
     )
-    video_digest_catalog.checkpoint_plan(
+    planning_attempt_file = artifact_file(
+        artifact_id=f"{identity.edition_id}:0:planning-attempt",
+        artifact_kind="video_digest_planning_attempt",
+        title=f"Planning attempt {seed}",
+        content=f"planning attempt {seed}".encode(),
+        r2_key=f"video-digest/{seed}/planning-attempt.json",
+        media_type="application/json",
+    )
+    video_digest_catalog.checkpoint_planning_attempt(
         lease,
-        DigestPlan(
+        0,
+        "accepted",
+        evidence_file=planning_attempt_file,
+        accepted_plan=DigestPlan(
             edition_id=identity.edition_id,
             artifact_version_id=plan_file.version_id,
             stories=stories,
@@ -381,6 +392,20 @@ def _walk_publication_pipeline(
         video_digest_catalog.checkpoint_story_verification(
             lease, story.story_id, evidence_file=verification, recorded_at=recorded_at
         )
+
+    manifest_file = artifact_file(
+        artifact_id=f"{identity.edition_id}:verification-manifest",
+        artifact_kind="video_digest_verification_manifest",
+        title=f"Edition verification manifest {seed}",
+        content=f"edition verification manifest {seed}".encode(),
+        r2_key=f"video-digest/{seed}/verification-manifest.json",
+        media_type="application/json",
+    )
+    video_digest_catalog.checkpoint_edition_verification(
+        lease, manifest_file=manifest_file, recorded_at=recorded_at
+    )
+
+    for position, story in enumerate(stories):
         request_file = artifact_file(
             artifact_id=f"{identity.edition_id}:{position}:0:generation-request",
             artifact_kind="video_digest_generation_request",

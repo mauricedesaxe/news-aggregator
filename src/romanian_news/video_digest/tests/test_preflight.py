@@ -10,7 +10,12 @@ from openai.types.chat import ChatCompletion
 
 from romanian_news.analysis.attempts import model_attempt_from_payload
 from romanian_news.analysis.tracing import ProviderChatRequest
-from romanian_news.catalog.artifacts import CatalogArtifactReference
+from romanian_news.artifacts import ArtifactReference
+from romanian_news.catalog.artifacts import (
+    artifact_file,
+    canonical_json,
+    sha256,
+)
 from romanian_news.catalog.video_digest import PlanningAttemptReference
 from romanian_news.reports import (
     DailyReport,
@@ -28,7 +33,6 @@ from romanian_news.video_digest.models import (
     edition_id,
 )
 
-REPORT_VERSION = "a" * 64
 SUBJECT_ONE = "1" * 64
 SUBJECT_TWO = "2" * 64
 ARTICLE_ONE = "3" * 64
@@ -85,17 +89,40 @@ def _report() -> preflight.PlanningReport:
             _section(SUBJECT_TWO, ARTICLE_TWO, 2),
         ),
     )
-    return preflight.PlanningReport(version_id=REPORT_VERSION, report=report)
+    content = canonical_json(report.model_dump(mode="json"))
+    file = artifact_file(
+        artifact_id=f"news:daily:{report.day.isoformat()}",
+        artifact_kind="news_daily_report",
+        title=f"Romanian news report for {report.day.isoformat()}",
+        content=content,
+        r2_key=f"news/reports/daily/{report.day.isoformat()}/{sha256(content)}.json",
+        media_type="application/json",
+    )
+    return preflight.PlanningReport(version_id=file.version_id, report=report)
 
 
 def _lease() -> SlotLease:
+    report = _report()
     return SlotLease(
         slot_id=SlotId("5" * 64),
-        edition_id=edition_id(REPORT_VERSION, preflight.PRODUCTION_POLICY.artifact.version_id),
+        edition_id=edition_id(report.version_id, preflight.PRODUCTION_POLICY.artifact.version_id),
         owner_token="owner",
         expires_at=datetime.now(UTC) + timedelta(minutes=10),
         claim_count=1,
     )
+
+
+def test_planning_report_rejects_a_version_for_different_content() -> None:
+    report = _report()
+
+    with pytest.raises(ValueError, match="version does not match its content"):
+        preflight.PlanningReport(version_id="a" * 64, report=report.report)
+
+
+def test_production_policy_uses_independent_model_families() -> None:
+    policy = preflight.PRODUCTION_POLICY.definition.policy
+
+    assert policy.planning_model.partition("/")[0] != policy.verification_model.partition("/")[0]
 
 
 def _plan_content() -> str:
@@ -189,7 +216,7 @@ class _Harness:
             PlanningAttemptReference(
                 attempt_index=attempt_index,
                 disposition=disposition,
-                evidence=CatalogArtifactReference(
+                evidence=ArtifactReference(
                     artifact_id=evidence_file.artifact_id,
                     version_id=evidence_file.version_id,
                     content_digest=evidence_file.content_digest,

@@ -143,6 +143,7 @@ def _recover_lease(pipeline: _GenerationPipeline) -> ClaimedSlot:
 class _GenerationPipeline:
     def __init__(self, *, seed: int) -> None:
         self.seed = seed
+        self.story_count = 0
         self.recorded_at = datetime.now(UTC)
         assert news_schema.NEWS_POSTGRES_DSN is not None
         with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
@@ -195,6 +196,7 @@ class _GenerationPipeline:
         return planned_story_id(self.edition.edition_id, position, self._subject_id(position))
 
     def build_plan(self, story_count: int = 1) -> tuple[DigestPlan, ArtifactFile]:
+        self.story_count = story_count
         plan_file = self._file(
             self.edition.edition_id, "video_digest_plan", title="Video digest plan"
         )
@@ -218,8 +220,26 @@ class _GenerationPipeline:
 
     def checkpoint_plan(self, story_count: int = 1) -> DigestPlan:
         plan, plan_file = self.build_plan(story_count)
-        return video_digest_catalog.checkpoint_plan(
-            self.lease, plan, plan_file=plan_file, recorded_at=self.recorded_at
+        stored = video_digest_catalog.checkpoint_planning_attempt(
+            self.lease,
+            0,
+            "accepted",
+            evidence_file=self.planning_attempt_file(),
+            accepted_plan=plan,
+            plan_file=plan_file,
+            recorded_at=self.recorded_at,
+        )
+        assert stored is not None
+        return stored
+
+    def planning_attempt_file(
+        self, attempt: int = 0, *, content: bytes | None = None
+    ) -> ArtifactFile:
+        return self._file(
+            f"{self.edition.edition_id}:{attempt}:planning-attempt",
+            "video_digest_planning_attempt",
+            title=f"Planning attempt {attempt}",
+            content=content,
         )
 
     def evidence_file(self, position: int, *, content: bytes | None = None) -> ArtifactFile:
@@ -240,7 +260,27 @@ class _GenerationPipeline:
         )
         return evidence
 
-    def _request_file(self, position: int, attempt: int) -> ArtifactFile:
+    def manifest_file(self, *, content: bytes | None = None) -> ArtifactFile:
+        return self._file(
+            f"{self.edition.edition_id}:verification-manifest",
+            "video_digest_verification_manifest",
+            title="Edition verification manifest",
+            content=content,
+        )
+
+    def verify_edition(self) -> ArtifactFile:
+        manifest = self.manifest_file()
+        video_digest_catalog.checkpoint_edition_verification(
+            self.lease, manifest_file=manifest, recorded_at=self.recorded_at
+        )
+        return manifest
+
+    def verify_all_stories(self) -> None:
+        for position in range(self.story_count):
+            self.verify_story(position)
+        self.verify_edition()
+
+    def _request_file(self, position: int, attempt: int = 0) -> ArtifactFile:
         return self._file(
             f"{self.edition.edition_id}:{position}:{attempt}:generation-request",
             "video_digest_generation_request",
@@ -255,9 +295,9 @@ class _GenerationPipeline:
             self._request_file(position, attempt).version_id,
         )
 
-    def start_request(self, position: int, attempt: int = 0) -> GenerationRequestState:
+    def request_identity(self, position: int, attempt: int = 0) -> GenerationRequestIdentity:
         request_file = self._request_file(position, attempt)
-        identity = GenerationRequestIdentity(
+        return GenerationRequestIdentity(
             request_id=generation_request_id(
                 self.edition.edition_id, position, attempt, request_file.version_id
             ),
@@ -266,8 +306,15 @@ class _GenerationPipeline:
             attempt_index=attempt,
             request_artifact_version_id=request_file.version_id,
         )
+
+    def start_request(self, position: int, attempt: int = 0) -> GenerationRequestState:
+        self.verify_edition()
+        request_file = self._request_file(position, attempt)
         return video_digest_catalog.checkpoint_generation_request(
-            self.lease, identity, request_file=request_file, recorded_at=self.recorded_at
+            self.lease,
+            self.request_identity(position, attempt),
+            request_file=request_file,
+            recorded_at=self.recorded_at,
         )
 
     def receipt_file(self, position: int, attempt: int = 0) -> ArtifactFile:
@@ -353,7 +400,7 @@ class _GenerationPipeline:
         )
 
     def generate(self, position: int, *, usd: str = "1.2500") -> None:
-        self.verify_story(position)
+        self.verify_all_stories()
         self.start_request(position)
         self.submit(position, usd=usd)
         self.respond(position)
@@ -412,7 +459,133 @@ class _GenerationPipeline:
         )
 
 
-def test_plan_checkpoint_persists_plan_stories_and_artifact_atomically(
+def test_rejected_planning_attempt_records_only_immutable_evidence(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=31)
+    evidence = pipeline.planning_attempt_file()
+
+    result = video_digest_catalog.checkpoint_planning_attempt(
+        pipeline.lease,
+        0,
+        "rejected",
+        evidence_file=evidence,
+        recorded_at=pipeline.recorded_at,
+    )
+
+    assert result is None
+    assert pipeline.slot_stage() == ("claimed",)
+    assert _query_one(
+        "SELECT disposition, attempt_evidence_artifact_version_id, "
+        "accepted_plan_artifact_version_id FROM video_digest_planning_attempts "
+        "WHERE edition_id = %s AND attempt_index = 0",
+        (pipeline.edition.edition_id,),
+    ) == ("rejected", evidence.version_id, None)
+    assert _query_one(
+        "SELECT count(*) FROM video_digest_stories WHERE edition_id = %s",
+        (pipeline.edition.edition_id,),
+    ) == (0,)
+
+
+def test_planning_attempt_validates_disposition_shape_before_writing(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=32)
+    plan, plan_file = pipeline.build_plan()
+
+    with pytest.raises(ValueError, match="index"):
+        video_digest_catalog.checkpoint_planning_attempt(
+            pipeline.lease,
+            3,
+            "rejected",
+            evidence_file=pipeline.planning_attempt_file(3),
+            recorded_at=pipeline.recorded_at,
+        )
+    with pytest.raises(ValueError, match="cannot register"):
+        video_digest_catalog.checkpoint_planning_attempt(
+            pipeline.lease,
+            0,
+            "rejected",
+            evidence_file=pipeline.planning_attempt_file(),
+            accepted_plan=plan,
+            plan_file=plan_file,
+            recorded_at=pipeline.recorded_at,
+        )
+
+    assert _query_one(
+        "SELECT count(*) FROM video_digest_planning_attempts WHERE edition_id = %s",
+        (pipeline.edition.edition_id,),
+    ) == (0,)
+
+
+def test_read_planning_attempts_returns_ordered_immutable_artifact_projection(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=36)
+    rejected = pipeline.planning_attempt_file()
+    video_digest_catalog.checkpoint_planning_attempt(
+        pipeline.lease,
+        0,
+        "rejected",
+        evidence_file=rejected,
+        recorded_at=pipeline.recorded_at,
+    )
+    plan, plan_file = pipeline.build_plan()
+    accepted = pipeline.planning_attempt_file(1)
+    video_digest_catalog.checkpoint_planning_attempt(
+        pipeline.lease,
+        1,
+        "accepted",
+        evidence_file=accepted,
+        accepted_plan=plan,
+        plan_file=plan_file,
+        recorded_at=pipeline.recorded_at,
+    )
+
+    attempts = video_digest_catalog.read_planning_attempts(pipeline.edition.edition_id)
+
+    assert tuple(item.attempt_index for item in attempts) == (0, 1)
+    assert tuple(item.disposition for item in attempts) == ("rejected", "accepted")
+    assert attempts[0].evidence.version_id == rejected.version_id
+    assert attempts[0].accepted_plan_artifact_version_id is None
+    assert attempts[1].evidence.version_id == accepted.version_id
+    assert attempts[1].accepted_plan_artifact_version_id == plan.artifact_version_id
+
+
+def test_record_policy_bundle_validates_and_registers_exact_artifact(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    policy = artifact_file(
+        artifact_id="video-digest-policy:contract",
+        artifact_kind="video_digest_policy",
+        title="Video digest policy contract",
+        content=b"policy contract",
+        r2_key="video-digest/policies/contract.json",
+        media_type="application/json",
+    )
+
+    assert (
+        video_digest_catalog.record_policy_bundle(policy, recorded_at=datetime.now(UTC))
+        == policy.version_id
+    )
+    assert (
+        video_digest_catalog.record_policy_bundle(policy, recorded_at=datetime.now(UTC))
+        == policy.version_id
+    )
+    assert _query_one(
+        "SELECT kind, current_version_id FROM artifacts WHERE id = %s", (policy.artifact_id,)
+    ) == ("video_digest_policy", policy.version_id)
+
+    wrong_kind = policy.model_copy(update={"artifact_kind": "test"})
+    with pytest.raises(ValueError, match="policy artifact identity"):
+        video_digest_catalog.record_policy_bundle(wrong_kind, recorded_at=datetime.now(UTC))
+
+
+def test_accepted_planning_attempt_persists_plan_stories_and_artifacts_atomically(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
@@ -423,8 +596,14 @@ def test_plan_checkpoint_persists_plan_stories_and_artifact_atomically(
         "video_digest_editions", "plan", "NEW.plan_artifact_version_id IS NOT NULL"
     ):
         with pytest.raises(VideoDigestCheckpointConflictError):
-            video_digest_catalog.checkpoint_plan(
-                pipeline.lease, plan, plan_file=plan_file, recorded_at=pipeline.recorded_at
+            video_digest_catalog.checkpoint_planning_attempt(
+                pipeline.lease,
+                0,
+                "accepted",
+                evidence_file=pipeline.planning_attempt_file(),
+                accepted_plan=plan,
+                plan_file=plan_file,
+                recorded_at=pipeline.recorded_at,
             )
     assert pipeline.slot_stage() == ("claimed",)
     assert _query_one(
@@ -439,8 +618,14 @@ def test_plan_checkpoint_persists_plan_stories_and_artifact_atomically(
         (pipeline.edition.edition_id,),
     ) == (None,)
 
-    stored = video_digest_catalog.checkpoint_plan(
-        pipeline.lease, plan, plan_file=plan_file, recorded_at=pipeline.recorded_at
+    stored = video_digest_catalog.checkpoint_planning_attempt(
+        pipeline.lease,
+        0,
+        "accepted",
+        evidence_file=pipeline.planning_attempt_file(),
+        accepted_plan=plan,
+        plan_file=plan_file,
+        recorded_at=pipeline.recorded_at,
     )
     assert stored == plan
     assert pipeline.slot_stage() == ("generating",)
@@ -458,16 +643,30 @@ def test_plan_checkpoint_persists_plan_stories_and_artifact_atomically(
     ) == (plan.artifact_version_id,)
 
 
-def test_plan_checkpoint_replays_the_exact_stored_plan(postgres_news_schema: str) -> None:
+def test_accepted_planning_attempt_replays_the_exact_stored_plan(
+    postgres_news_schema: str,
+) -> None:
     ensure_news_catalog_schema()
     pipeline = _GenerationPipeline(seed=2)
     plan, plan_file = pipeline.build_plan()
 
-    stored = video_digest_catalog.checkpoint_plan(
-        pipeline.lease, plan, plan_file=plan_file, recorded_at=pipeline.recorded_at
+    stored = video_digest_catalog.checkpoint_planning_attempt(
+        pipeline.lease,
+        0,
+        "accepted",
+        evidence_file=pipeline.planning_attempt_file(),
+        accepted_plan=plan,
+        plan_file=plan_file,
+        recorded_at=pipeline.recorded_at,
     )
-    replayed = video_digest_catalog.checkpoint_plan(
-        pipeline.lease, plan, plan_file=plan_file, recorded_at=pipeline.recorded_at
+    replayed = video_digest_catalog.checkpoint_planning_attempt(
+        pipeline.lease,
+        0,
+        "accepted",
+        evidence_file=pipeline.planning_attempt_file(),
+        accepted_plan=plan,
+        plan_file=plan_file,
+        recorded_at=pipeline.recorded_at,
     )
 
     assert replayed == plan
@@ -481,7 +680,7 @@ def test_plan_checkpoint_replays_the_exact_stored_plan(postgres_news_schema: str
     ) == (1,)
 
 
-def test_plan_checkpoint_rejects_a_different_plan_for_a_planned_edition(
+def test_planning_attempt_rejects_a_different_plan_for_a_planned_edition(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
@@ -508,9 +707,15 @@ def test_plan_checkpoint_rejects_a_different_plan_for_a_planned_edition(
         ),
     )
 
-    with pytest.raises(VideoDigestCheckpointConflictError, match="plan conflicts"):
-        video_digest_catalog.checkpoint_plan(
-            pipeline.lease, revised_plan, plan_file=revised_file, recorded_at=pipeline.recorded_at
+    with pytest.raises(VideoDigestCheckpointConflictError, match="planning attempt conflicts"):
+        video_digest_catalog.checkpoint_planning_attempt(
+            pipeline.lease,
+            0,
+            "accepted",
+            evidence_file=pipeline.planning_attempt_file(),
+            accepted_plan=revised_plan,
+            plan_file=revised_file,
+            recorded_at=pipeline.recorded_at,
         )
 
     assert _query_one(
@@ -519,7 +724,7 @@ def test_plan_checkpoint_rejects_a_different_plan_for_a_planned_edition(
     ) == ("Story 0", 15_000)
 
 
-def test_plan_checkpoint_rejects_a_slot_that_never_reached_planning(
+def test_planning_attempt_rejects_a_slot_that_is_already_planning(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
@@ -531,9 +736,15 @@ def test_plan_checkpoint_rejects_a_slot_that_never_reached_planning(
     )
     plan, plan_file = pipeline.build_plan()
 
-    with pytest.raises(VideoDigestCheckpointConflictError, match="slot stage"):
-        video_digest_catalog.checkpoint_plan(
-            pipeline.lease, plan, plan_file=plan_file, recorded_at=pipeline.recorded_at
+    with pytest.raises(VideoDigestCheckpointConflictError, match="planning attempt"):
+        video_digest_catalog.checkpoint_planning_attempt(
+            pipeline.lease,
+            0,
+            "accepted",
+            evidence_file=pipeline.planning_attempt_file(),
+            accepted_plan=plan,
+            plan_file=plan_file,
+            recorded_at=pipeline.recorded_at,
         )
 
     assert pipeline.slot_stage() == ("planning",)
@@ -543,7 +754,7 @@ def test_plan_checkpoint_rejects_a_slot_that_never_reached_planning(
     ) == (0,)
 
 
-def test_plan_checkpoint_raises_lease_lost_after_the_fence_was_recovered(
+def test_planning_attempt_raises_lease_lost_after_the_fence_was_recovered(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
@@ -556,8 +767,14 @@ def test_plan_checkpoint_raises_lease_lost_after_the_fence_was_recovered(
 
     plan, plan_file = pipeline.build_plan()
     with pytest.raises(VideoDigestLeaseLostError):
-        video_digest_catalog.checkpoint_plan(
-            pipeline.lease, plan, plan_file=plan_file, recorded_at=pipeline.recorded_at
+        video_digest_catalog.checkpoint_planning_attempt(
+            pipeline.lease,
+            0,
+            "accepted",
+            evidence_file=pipeline.planning_attempt_file(),
+            accepted_plan=plan,
+            plan_file=plan_file,
+            recorded_at=pipeline.recorded_at,
         )
 
     assert pipeline.slot_stage() == ("generating",)
@@ -567,7 +784,7 @@ def test_plan_checkpoint_raises_lease_lost_after_the_fence_was_recovered(
     ) == (1,)
 
 
-def test_plan_checkpoint_rejects_invalid_boundary_identity_before_writing(
+def test_planning_attempt_rejects_invalid_boundary_identity_before_writing(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
@@ -601,20 +818,32 @@ def test_plan_checkpoint_rejects_invalid_boundary_identity_before_writing(
     plan, plan_file = pipeline.build_plan()
 
     with pytest.raises(ValueError, match="does not match the slot lease"):
-        video_digest_catalog.checkpoint_plan(
-            pipeline.lease, other_plan, plan_file=other_file, recorded_at=pipeline.recorded_at
+        video_digest_catalog.checkpoint_planning_attempt(
+            pipeline.lease,
+            0,
+            "accepted",
+            evidence_file=pipeline.planning_attempt_file(),
+            accepted_plan=other_plan,
+            plan_file=other_file,
+            recorded_at=pipeline.recorded_at,
         )
     with pytest.raises(ValueError, match="does not match the plan version"):
-        video_digest_catalog.checkpoint_plan(
+        video_digest_catalog.checkpoint_planning_attempt(
             pipeline.lease,
-            plan,
+            0,
+            "accepted",
+            evidence_file=pipeline.planning_attempt_file(),
+            accepted_plan=plan,
             plan_file=plan_file.model_copy(update={"version_id": _sha256_id(63)}),
             recorded_at=pipeline.recorded_at,
         )
     with pytest.raises(ValueError, match="artifact identity is invalid"):
-        video_digest_catalog.checkpoint_plan(
+        video_digest_catalog.checkpoint_planning_attempt(
             pipeline.lease,
-            plan,
+            0,
+            "accepted",
+            evidence_file=pipeline.planning_attempt_file(),
+            accepted_plan=plan,
             plan_file=plan_file.model_copy(update={"artifact_id": "another-edition"}),
             recorded_at=pipeline.recorded_at,
         )
@@ -711,6 +940,83 @@ def test_story_verification_rejects_an_unknown_story_identity(postgres_news_sche
         "SELECT stage FROM video_digest_stories WHERE story_id = %s",
         (pipeline.story_id(0),),
     ) == ("planned",)
+
+
+def test_edition_verification_records_and_replays_an_exact_manifest(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=33)
+    pipeline.checkpoint_plan()
+    pipeline.verify_story(0)
+
+    manifest = pipeline.verify_edition()
+    pipeline.verify_edition()
+
+    assert _query_one(
+        "SELECT verification_manifest_artifact_version_id FROM video_digest_editions "
+        "WHERE edition_id = %s",
+        (pipeline.edition.edition_id,),
+    ) == (manifest.version_id,)
+    assert _query_one(
+        "SELECT count(*) FROM artifact_versions WHERE id = %s", (manifest.version_id,)
+    ) == (1,)
+
+    changed = pipeline.manifest_file(content=b"changed verification manifest")
+    with pytest.raises(VideoDigestCheckpointConflictError, match="manifest conflicts"):
+        video_digest_catalog.checkpoint_edition_verification(
+            pipeline.lease, manifest_file=changed, recorded_at=pipeline.recorded_at
+        )
+
+
+def test_edition_verification_requires_every_mandatory_story(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=34)
+    pipeline.checkpoint_plan(story_count=2)
+    pipeline.verify_story(0)
+    manifest = pipeline.manifest_file()
+
+    with pytest.raises(VideoDigestCheckpointConflictError, match="every mandatory story"):
+        video_digest_catalog.checkpoint_edition_verification(
+            pipeline.lease, manifest_file=manifest, recorded_at=pipeline.recorded_at
+        )
+
+    assert _query_one(
+        "SELECT verification_manifest_artifact_version_id FROM video_digest_editions "
+        "WHERE edition_id = %s",
+        (pipeline.edition.edition_id,),
+    ) == (None,)
+    assert _query_one("SELECT count(*) FROM artifacts WHERE id = %s", (manifest.artifact_id,)) == (
+        0,
+    )
+
+
+def test_generation_request_requires_manifest_before_artifact_registration(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=35)
+    pipeline.checkpoint_plan()
+    pipeline.verify_story(0)
+    request_file = pipeline._request_file(0)
+
+    with pytest.raises(VideoDigestCheckpointConflictError, match="verification manifest"):
+        video_digest_catalog.checkpoint_generation_request(
+            pipeline.lease,
+            pipeline.request_identity(0),
+            request_file=request_file,
+            recorded_at=pipeline.recorded_at,
+        )
+
+    assert _query_one(
+        "SELECT count(*) FROM video_digest_generation_requests WHERE edition_id = %s",
+        (pipeline.edition.edition_id,),
+    ) == (0,)
+    assert _query_one(
+        "SELECT count(*) FROM artifacts WHERE id = %s", (request_file.artifact_id,)
+    ) == (0,)
 
 
 def test_generation_request_starts_pending_and_replays_idempotently(

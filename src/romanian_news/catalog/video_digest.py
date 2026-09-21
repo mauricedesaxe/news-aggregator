@@ -10,9 +10,9 @@ from urllib.parse import urlsplit
 from pydantic import Field, ValidationError
 
 from romanian_news import NewsModel, Sha256
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import (
     ArtifactFile,
-    CatalogArtifactReference,
     artifact_statements,
 )
 from romanian_news.catalog_transport import (
@@ -91,7 +91,7 @@ _Result = TypeVar("_Result")
 class PlanningAttemptReference(NewsModel):
     attempt_index: Annotated[int, Field(ge=0, le=2)]
     disposition: Literal["rejected", "accepted"]
-    evidence: CatalogArtifactReference
+    evidence: ArtifactReference
     accepted_plan_artifact_version_id: Sha256 | None
 
 
@@ -136,7 +136,7 @@ def read_planning_attempts(edition_id: EditionId) -> tuple[PlanningAttemptRefere
         PlanningAttemptReference(
             attempt_index=row["attempt_index"],
             disposition=row["disposition"],
-            evidence=CatalogArtifactReference.model_validate(
+            evidence=ArtifactReference.model_validate(
                 {
                     field: row[field]
                     for field in ("artifact_id", "version_id", "content_digest", "r2_key")
@@ -398,23 +398,6 @@ def checkpoint_planning_attempt(
             current,
             plan_artifact_registered=True,
         )
-
-    return _checkpoint_transaction(checkpoint)
-
-
-def checkpoint_plan(
-    lease: SlotLease,
-    plan: DigestPlan,
-    *,
-    plan_file: ArtifactFile,
-    recorded_at: datetime,
-) -> DigestPlan:
-    _utc(recorded_at, "recorded_at")
-    _validate_plan_checkpoint(lease, plan, plan_file)
-
-    def checkpoint(connection: CatalogConnection) -> DigestPlan:
-        row, current = _lock_slot_for_lease(connection, lease)
-        return _checkpoint_plan_locked(connection, lease, plan, plan_file, row, current)
 
     return _checkpoint_transaction(checkpoint)
 
