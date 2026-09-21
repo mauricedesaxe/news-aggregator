@@ -76,9 +76,7 @@ class PlanningAttemptArtifact(NewsModel):
         return self
 
 
-def planning_request_id(
-    edition_id: Sha256, attempt_index: int, stage: str
-) -> Sha256:
+def planning_request_id(edition_id: Sha256, attempt_index: int, stage: str) -> Sha256:
     return sha256(
         canonical_json(
             {
@@ -144,9 +142,7 @@ def _validate_response_content(artifact: PlanningAttemptArtifact) -> None:
 
 
 def _validate_disposition(artifact: PlanningAttemptArtifact) -> None:
-    if artifact.disposition == "accepted" and (
-        artifact.attempt is None or artifact.failures
-    ):
+    if artifact.disposition == "accepted" and (artifact.attempt is None or artifact.failures):
         raise ValueError("Accepted planning artifact requires its accepted attempt")
     if artifact.disposition == "rejected" and not artifact.failures:
         raise ValueError("Rejected planning artifact requires structured failures")
@@ -176,9 +172,7 @@ def parse_planning_attempt_file(edition_id: Sha256, file: ArtifactFile) -> Plann
     return artifact
 
 
-def _validate_response_identities(
-    edition_id: Sha256, artifact: PlanningAttemptArtifact
-) -> None:
+def _validate_response_identities(edition_id: Sha256, artifact: PlanningAttemptArtifact) -> None:
     _validate_recorded_attempt(
         artifact.planning_response,
         planning_request_id(edition_id, artifact.attempt_index, "planning"),
@@ -188,9 +182,7 @@ def _validate_response_identities(
     for position, response in enumerate(artifact.verification_responses):
         _validate_recorded_attempt(
             response,
-            planning_request_id(
-                edition_id, artifact.attempt_index, f"verification:{position}"
-            ),
+            planning_request_id(edition_id, artifact.attempt_index, f"verification:{position}"),
             VERIFICATION_OPERATION,
             artifact.attempt_index,
         )

@@ -173,7 +173,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION require_video_digest_generation_submission_authorization() RETURNS trigger
+CREATE FUNCTION require_video_digest_submission_authorization() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     IF OLD.stage = 'pending' AND NEW.stage = 'submitted' AND (
@@ -231,6 +231,6 @@ CREATE TRIGGER video_digest_generation_requests_require_authorization
 BEFORE INSERT ON video_digest_generation_requests
 FOR EACH ROW EXECUTE FUNCTION require_video_digest_generation_authorization();
 
-CREATE TRIGGER video_digest_generation_requests_require_submission_authorization
+CREATE TRIGGER video_digest_requests_require_submission_authorization
 BEFORE UPDATE ON video_digest_generation_requests
-FOR EACH ROW EXECUTE FUNCTION require_video_digest_generation_submission_authorization();
+FOR EACH ROW EXECUTE FUNCTION require_video_digest_submission_authorization();
