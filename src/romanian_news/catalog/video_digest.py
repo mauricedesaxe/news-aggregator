@@ -2191,7 +2191,7 @@ def _lock_slot(connection: CatalogConnection, slot_id: SlotId) -> Mapping[str, A
         SELECT slot_id, name, scheduled_at, bucharest_day, stage, edition_id,
                lease_owner_token, lease_expires_at, claim_count, skip_reason,
                terminal_lease_owner_token, terminal_lease_expires_at,
-               terminal_claim_count
+               terminal_claim_count, failure_evidence_artifact_version_id
         FROM video_digest_slots
         WHERE slot_id = %s
         FOR UPDATE
