@@ -29,6 +29,7 @@ from romanian_news.catalog.video_digest import (
 from romanian_news.storage import (
     ResearchObjectIntegrityError,
     publish_immutable_r2_objects,
+    publish_private_video_object,
     read_verified_r2_object,
 )
 from romanian_news.video_digest.generation import (
@@ -477,9 +478,13 @@ def accept_candidate(
         ),
         media_type="application/json",
     )
-    publish_immutable_r2_objects(
-        ((clip_file.r2_key, clip_file.content), (validation_file.r2_key, validation_file.content))
+    publish_private_video_object(
+        clip_file.r2_key,
+        clip_file.content,
+        retention="permanent",
+        source_lineage=candidate.request_id,
     )
+    publish_immutable_r2_objects(((validation_file.r2_key, validation_file.content),))
     checkpoint_generation_acceptance(
         lease,
         candidate.request_id,

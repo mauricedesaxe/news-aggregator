@@ -31,6 +31,7 @@ from romanian_news.config import FAL_KEY
 from romanian_news.storage import (
     presigned_r2_url,
     publish_immutable_r2_objects,
+    publish_private_video_object,
     read_verified_r2_object,
 )
 from romanian_news.video_digest.models import (
@@ -521,8 +522,7 @@ def _poll_submitted(
         return _fail_attempt(lease, active, str(error), terminal=False)
     candidate = CandidateReference(
         r2_key=(
-            f"news/video-digest/{active.request.edition_id}/generation/"
-            f"{active.request.story_position}-{active.request.attempt_index}-"
+            f"news/video-digest/candidates/7d/{active.request.request_id}/"
             f"{sha256(candidate_bytes)}.mp4"
         ),
         content_digest=sha256(candidate_bytes),
@@ -547,9 +547,13 @@ def _poll_submitted(
         ),
         media_type="application/json",
     )
-    publish_immutable_r2_objects(
-        ((candidate.r2_key, candidate_bytes), (response_file.r2_key, response_file.content))
+    publish_private_video_object(
+        candidate.r2_key,
+        candidate_bytes,
+        retention="candidate-7d",
+        source_lineage=active.request.request_id,
     )
+    publish_immutable_r2_objects(((response_file.r2_key, response_file.content),))
     checkpoint_generation_response(
         lease,
         active.request.request_id,

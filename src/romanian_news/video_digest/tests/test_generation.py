@@ -302,6 +302,7 @@ class _Harness:
     ) -> None:
         self.prepared = prepared
         self.objects: dict[str, bytes] = {}
+        self.classifications: list[tuple[str, str, str]] = []
         self.attempts: list[generation.GenerationAttemptReference] = []
         self.admissions: list[GenerationAdmission] = []
         self.failed_slot = False
@@ -319,6 +320,11 @@ class _Harness:
             generation, "read_generation_attempts", lambda _edition: tuple(self.attempts)
         )
         monkeypatch.setattr(generation, "publish_immutable_r2_objects", self.publish)
+        monkeypatch.setattr(
+            generation,
+            "publish_private_video_object",
+            self.publish_private_video,
+        )
         monkeypatch.setattr(generation, "read_verified_r2_object", self.read)
         monkeypatch.setattr(generation, "checkpoint_generation_request", self.checkpoint_request)
         monkeypatch.setattr(
@@ -334,6 +340,17 @@ class _Harness:
     def publish_policy(self, _policy: generation.GenerationPolicyArtifact) -> str:
         self.policy_publications += 1
         return "8" * 64
+
+    def publish_private_video(
+        self,
+        key: str,
+        content: bytes,
+        *,
+        retention: str,
+        source_lineage: str,
+    ) -> None:
+        self.objects[key] = content
+        self.classifications.append((key, retention, source_lineage))
 
     def read(self, key: str, digest: str) -> bytes:
         content = self.objects[key]
@@ -506,6 +523,12 @@ def test_generation_is_ordered_and_records_unknown_cost(monkeypatch: pytest.Monk
     assert second.story_position == 1
     assert provider.submitted_positions == [0, 1]
     assert all(item.request.attempt_index == 0 for item in harness.attempts)
+    assert all("/candidates/7d/" in key for key, _retention, _lineage in harness.classifications)
+    assert all(retention == "candidate-7d" for _key, retention, _lineage in harness.classifications)
+    assert [lineage for _key, _retention, lineage in harness.classifications] == [
+        first.request_id,
+        second.request_id,
+    ]
 
 
 def test_generation_reuses_stored_receipt_without_submission(
