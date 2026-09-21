@@ -74,6 +74,19 @@ def download_verified_r2_object(key: str, digest: str, path: Path) -> None:
     temporary.replace(path)
 
 
+def presigned_r2_url(key: str, *, expires_in: int = 3600) -> str:
+    if expires_in <= 0:
+        raise ValueError("expires_in must be positive")
+    try:
+        return _r2_client().generate_presigned_url(
+            "get_object",
+            Params={"Bucket": NEWS_R2_BUCKET, "Key": key},
+            ExpiresIn=expires_in,
+        )
+    except (_BotoCoreError, _ClientError, RuntimeError) as error:
+        raise ResearchObjectUnavailable(f"Could not sign R2 object: {key}") from error
+
+
 def publish_immutable_r2_objects(
     objects: Iterable[tuple[str, bytes]],
 ) -> ImmutableR2Publication:
