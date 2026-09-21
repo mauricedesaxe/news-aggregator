@@ -73,6 +73,11 @@ from romanian_news.video_digest.models import (
     UploadingPublication,
     VerifiedPublication,
 )
+from romanian_news.video_digest.planning import PlanningAttempt
+from romanian_news.video_digest.planning_artifacts import (
+    parse_planning_attempt_file,
+    parse_verified_plan_file,
+)
 
 _ACTIVE_STAGES = frozenset(
     {
@@ -116,6 +121,16 @@ def record_policy_bundle(file: ArtifactFile, *, recorded_at: datetime) -> Sha256
 
 
 def read_planning_attempts(edition_id: EditionId) -> tuple[PlanningAttemptReference, ...]:
+    editions = catalog_query(
+        "SELECT planning_contract FROM video_digest_editions WHERE edition_id = %s",
+        [edition_id],
+    )
+    if len(editions) != 1:
+        raise VideoDigestCheckpointConflictError("Video digest edition does not exist")
+    if str(editions[0]["planning_contract"]) != "verified_v1":
+        raise VideoDigestCheckpointConflictError(
+            "Legacy video digest edition cannot authorize new paid generation"
+        )
     rows = catalog_query(
         """
         SELECT attempt.attempt_index, attempt.disposition,
@@ -305,15 +320,13 @@ def checkpoint_planning_attempt(
         raise ValueError("Planning attempt index must be 0, 1, or 2")
     if disposition not in {"rejected", "accepted"}:
         raise ValueError("Planning attempt disposition must be rejected or accepted")
-    if (
-        evidence_file.artifact_id != f"{lease.edition_id}:{attempt_index}:planning-attempt"
-        or evidence_file.artifact_kind != "video_digest_planning_attempt"
-    ):
-        raise ValueError("Planning attempt evidence artifact identity is invalid")
+    evidence = parse_planning_attempt_file(lease.edition_id, evidence_file)
+    if (evidence.attempt_index, evidence.disposition) != (attempt_index, disposition):
+        raise ValueError("Planning attempt evidence does not match its catalog projection")
     if disposition == "accepted":
         if accepted_plan is None or plan_file is None:
             raise ValueError("Accepted planning attempt requires its canonical plan")
-        _validate_plan_checkpoint(lease, accepted_plan, plan_file)
+        _validate_plan_checkpoint(lease, evidence.attempt, accepted_plan, plan_file)
     elif accepted_plan is not None or plan_file is not None:
         raise ValueError("Rejected planning attempt cannot register a canonical plan")
 
@@ -2477,15 +2490,19 @@ def _scheduled_slot_from_row(row: Mapping[str, Any]) -> ScheduledSlot:
 
 def _validate_plan_checkpoint(
     lease: SlotLease,
+    attempt: PlanningAttempt | None,
     plan: DigestPlan,
     plan_file: ArtifactFile,
 ) -> None:
-    if plan.edition_id != lease.edition_id:
+    if attempt is None:
+        raise ValueError("Accepted planning attempt evidence requires its accepted attempt")
+    verified, projected_plan = parse_verified_plan_file(plan_file)
+    if verified.plan != attempt.plan or verified.accepted_evidence != attempt.story_evidence:
+        raise ValueError("Accepted plan does not match its planning attempt evidence")
+    if projected_plan != plan:
+        raise ValueError("Digest plan does not match its canonical artifact projection")
+    if projected_plan.edition_id != lease.edition_id:
         raise ValueError("Digest plan edition does not match the slot lease")
-    if plan_file.version_id != plan.artifact_version_id:
-        raise ValueError("Digest plan artifact does not match the plan version")
-    if plan_file.artifact_id != plan.edition_id or plan_file.artifact_kind != "video_digest_plan":
-        raise ValueError("Digest plan artifact identity is invalid")
 
 
 def _checkpoint_plan_locked(

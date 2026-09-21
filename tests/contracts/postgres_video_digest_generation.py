@@ -47,6 +47,16 @@ from romanian_news.video_digest.models import (
     publication_id,
     scheduled_slot_id,
 )
+from romanian_news.video_digest.planning_artifacts import (
+    PlanningAttemptArtifact,
+)
+from romanian_news.video_digest.planning_artifacts import (
+    planning_attempt_file as canonical_planning_attempt_file,
+)
+from tests.contracts.video_digest_planning_fixtures import (
+    accepted_planning_files,
+    rejected_planning_file,
+)
 
 SCHEDULED_AT = datetime(2026, 9, 20, 6, tzinfo=UTC)
 
@@ -144,6 +154,7 @@ class _GenerationPipeline:
     def __init__(self, *, seed: int) -> None:
         self.seed = seed
         self.story_count = 0
+        self.plan_stories: tuple[tuple[str, str, int], ...] | None = None
         self.recorded_at = datetime.now(UTC)
         assert news_schema.NEWS_POSTGRES_DSN is not None
         with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
@@ -197,24 +208,14 @@ class _GenerationPipeline:
 
     def build_plan(self, story_count: int = 1) -> tuple[DigestPlan, ArtifactFile]:
         self.story_count = story_count
-        plan_file = self._file(
-            self.edition.edition_id, "video_digest_plan", title="Video digest plan"
-        )
-        stories = tuple(
-            PlannedStory(
-                story_id=self.story_id(position),
-                edition_id=self.edition.edition_id,
-                position=position,
-                report_subject_id=self._subject_id(position),
-                title=f"Story {position}",
-                requested_duration_ms=15_000,
-            )
+        self.plan_stories = tuple(
+            (self._subject_id(position), f"Story {position}", 15_000)
             for position in range(story_count)
         )
-        plan = DigestPlan(
-            edition_id=self.edition.edition_id,
-            artifact_version_id=plan_file.version_id,
-            stories=stories,
+        plan, plan_file, _attempt_file = accepted_planning_files(
+            self.edition,
+            self.plan_stories,
+            seed=str(self.seed),
         )
         return plan, plan_file
 
@@ -233,14 +234,19 @@ class _GenerationPipeline:
         return stored
 
     def planning_attempt_file(
-        self, attempt: int = 0, *, content: bytes | None = None
+        self, attempt: int = 0, *, accepted: bool | None = None
     ) -> ArtifactFile:
-        return self._file(
-            f"{self.edition.edition_id}:{attempt}:planning-attempt",
-            "video_digest_planning_attempt",
-            title=f"Planning attempt {attempt}",
-            content=content,
+        use_accepted = self.plan_stories is not None if accepted is None else accepted
+        if not use_accepted:
+            return rejected_planning_file(self.edition.edition_id, attempt, seed=str(self.seed))
+        assert self.plan_stories is not None
+        _plan, _plan_file, attempt_file = accepted_planning_files(
+            self.edition,
+            self.plan_stories,
+            attempt_index=attempt,
+            seed=str(self.seed),
         )
+        return attempt_file
 
     def evidence_file(self, position: int, *, content: bytes | None = None) -> ArtifactFile:
         return self._file(
@@ -508,7 +514,7 @@ def test_planning_attempt_validates_disposition_shape_before_writing(
             pipeline.lease,
             0,
             "rejected",
-            evidence_file=pipeline.planning_attempt_file(),
+            evidence_file=pipeline.planning_attempt_file(accepted=False),
             accepted_plan=plan,
             plan_file=plan_file,
             recorded_at=pipeline.recorded_at,
@@ -518,6 +524,91 @@ def test_planning_attempt_validates_disposition_shape_before_writing(
         "SELECT count(*) FROM video_digest_planning_attempts WHERE edition_id = %s",
         (pipeline.edition.edition_id,),
     ) == (0,)
+
+
+def test_planning_attempt_rejects_unbound_artifact_content_before_writing(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=33)
+    plan, plan_file = pipeline.build_plan()
+    arbitrary_evidence = pipeline._file(
+        f"{pipeline.edition.edition_id}:0:planning-attempt",
+        "video_digest_planning_attempt",
+        title="Video digest planning attempt 0",
+        content=b"arbitrary evidence",
+    )
+
+    with pytest.raises(ValueError):
+        video_digest_catalog.checkpoint_planning_attempt(
+            pipeline.lease,
+            0,
+            "accepted",
+            evidence_file=arbitrary_evidence,
+            accepted_plan=plan,
+            plan_file=plan_file,
+            recorded_at=pipeline.recorded_at,
+        )
+
+    assert pipeline.slot_stage() == ("claimed",)
+    assert _query_one(
+        "SELECT count(*) FROM video_digest_planning_attempts WHERE edition_id = %s",
+        (pipeline.edition.edition_id,),
+    ) == (0,)
+
+
+def test_planning_attempt_rejects_evidence_for_a_different_canonical_plan(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=34)
+    _first_plan, _first_file = pipeline.build_plan()
+    first_evidence = pipeline.planning_attempt_file()
+    second_plan, second_file = pipeline.build_plan(story_count=2)
+
+    with pytest.raises(ValueError, match="does not match its planning attempt evidence"):
+        video_digest_catalog.checkpoint_planning_attempt(
+            pipeline.lease,
+            0,
+            "accepted",
+            evidence_file=first_evidence,
+            accepted_plan=second_plan,
+            plan_file=second_file,
+            recorded_at=pipeline.recorded_at,
+        )
+
+    assert pipeline.slot_stage() == ("claimed",)
+
+
+def test_planning_attempt_rejects_a_duplicated_verifier_response(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=35)
+    plan, plan_file = pipeline.build_plan(story_count=2)
+    evidence_file = pipeline.planning_attempt_file()
+    artifact = PlanningAttemptArtifact.model_validate_json(evidence_file.content, strict=True)
+    duplicated = artifact.model_copy(
+        update={
+            "verification_responses": (
+                artifact.verification_responses[0],
+                artifact.verification_responses[0],
+            )
+        }
+    )
+
+    with pytest.raises(ValueError, match="deterministic identity"):
+        video_digest_catalog.checkpoint_planning_attempt(
+            pipeline.lease,
+            0,
+            "accepted",
+            evidence_file=canonical_planning_attempt_file(pipeline.edition.edition_id, duplicated),
+            accepted_plan=plan,
+            plan_file=plan_file,
+            recorded_at=pipeline.recorded_at,
+        )
+
+    assert pipeline.slot_stage() == ("claimed",)
 
 
 def test_read_planning_attempts_returns_ordered_immutable_artifact_projection(
@@ -686,25 +777,10 @@ def test_planning_attempt_rejects_a_different_plan_for_a_planned_edition(
     ensure_news_catalog_schema()
     pipeline = _GenerationPipeline(seed=3)
     pipeline.checkpoint_plan()
-    revised_file = pipeline._file(
-        pipeline.edition.edition_id,
-        "video_digest_plan",
-        title="Revised video digest plan",
-        content=b"revised plan",
-    )
-    revised_plan = DigestPlan(
-        edition_id=pipeline.edition.edition_id,
-        artifact_version_id=revised_file.version_id,
-        stories=(
-            PlannedStory(
-                story_id=pipeline.story_id(0),
-                edition_id=pipeline.edition.edition_id,
-                position=0,
-                report_subject_id=pipeline._subject_id(0),
-                title="Revised story",
-                requested_duration_ms=20_000,
-            ),
-        ),
+    revised_plan, revised_file, revised_evidence = accepted_planning_files(
+        pipeline.edition,
+        ((pipeline._subject_id(0), "Revised story", 20_000),),
+        seed=str(pipeline.seed),
     )
 
     with pytest.raises(VideoDigestCheckpointConflictError, match="planning attempt conflicts"):
@@ -712,7 +788,7 @@ def test_planning_attempt_rejects_a_different_plan_for_a_planned_edition(
             pipeline.lease,
             0,
             "accepted",
-            evidence_file=pipeline.planning_attempt_file(),
+            evidence_file=revised_evidence,
             accepted_plan=revised_plan,
             plan_file=revised_file,
             recorded_at=pipeline.recorded_at,
@@ -817,7 +893,7 @@ def test_planning_attempt_rejects_invalid_boundary_identity_before_writing(
     )
     plan, plan_file = pipeline.build_plan()
 
-    with pytest.raises(ValueError, match="does not match the slot lease"):
+    with pytest.raises(ValueError):
         video_digest_catalog.checkpoint_planning_attempt(
             pipeline.lease,
             0,
@@ -827,7 +903,7 @@ def test_planning_attempt_rejects_invalid_boundary_identity_before_writing(
             plan_file=other_file,
             recorded_at=pipeline.recorded_at,
         )
-    with pytest.raises(ValueError, match="does not match the plan version"):
+    with pytest.raises(ValueError):
         video_digest_catalog.checkpoint_planning_attempt(
             pipeline.lease,
             0,
@@ -837,7 +913,7 @@ def test_planning_attempt_rejects_invalid_boundary_identity_before_writing(
             plan_file=plan_file.model_copy(update={"version_id": _sha256_id(63)}),
             recorded_at=pipeline.recorded_at,
         )
-    with pytest.raises(ValueError, match="artifact identity is invalid"):
+    with pytest.raises(ValueError):
         video_digest_catalog.checkpoint_planning_attempt(
             pipeline.lease,
             0,

@@ -9,7 +9,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
 from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.attempts import ModelAttempt, record_model_attempt
+from romanian_news.analysis.attempts import record_model_attempt
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
 from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json, sha256
@@ -23,16 +23,9 @@ from romanian_news.catalog.video_digest import (
 )
 from romanian_news.reports import DailyReport, DailyReportSection
 from romanian_news.storage import publish_immutable_r2_objects, read_verified_r2_object
-from romanian_news.video_digest.models import (
-    DigestPlan,
-    PlannedStory,
-    SlotLease,
-    edition_id,
-    planned_story_id,
-)
+from romanian_news.video_digest.models import DigestPlan, SlotLease, edition_id
 from romanian_news.video_digest.planning import (
     GenerationAuthorization,
-    PlanningAttempt,
     PlanningFailure,
     ScreenplayStory,
     StoryVerificationEvidence,
@@ -44,9 +37,18 @@ from romanian_news.video_digest.planning import (
     record_planning_attempt,
     screenplay_story_digest,
 )
+from romanian_news.video_digest.planning_artifacts import (
+    PLANNING_OPERATION,
+    VERIFICATION_OPERATION,
+    PlanningAttemptArtifact,
+    PlanningResponse,
+    RecordedProviderResponse,
+    VerificationResponse,
+    planning_attempt_file,
+    planning_request_id,
+    verified_plan_file,
+)
 
-PLANNING_OPERATION = "news.video_digest.plan"
-VERIFICATION_OPERATION = "news.video_digest.verify_story"
 PLANNING_PROMPT = (
     "Write one complete Romanian-language video screenplay for every supplied main story. "
     "The recurring lead scientist and three-eyed pear-shaped alien co-host deliver each story "
@@ -87,23 +89,6 @@ class PlanningReport(NewsModel):
         return self
 
 
-class _PlanningResponse(NewsModel):
-    stories: Annotated[tuple[ScreenplayStory, ...], Field(min_length=1)]
-
-
-class _VerificationResponse(NewsModel):
-    status: Literal["accepted", "rejected"]
-    failures: tuple[PlanningFailure, ...]
-
-    @model_validator(mode="after")
-    def require_failures_for_rejection(self) -> _VerificationResponse:
-        if self.status == "accepted" and self.failures:
-            raise ValueError("Accepted verification cannot contain failures")
-        if self.status == "rejected" and not self.failures:
-            raise ValueError("Rejected verification requires a structured failure")
-        return self
-
-
 def _schema_digest(model: type[NewsModel]) -> Sha256:
     return sha256(canonical_json(model.model_json_schema()))
 
@@ -126,9 +111,9 @@ class VideoDigestPolicyDefinition(NewsModel):
             raise ValueError("Planning prompt digest does not match its prompt")
         if sha256(self.verification_prompt.encode()) != self.policy.verification_prompt_digest:
             raise ValueError("Verification prompt digest does not match its prompt")
-        if self.planning_response_schema_digest != _schema_digest(_PlanningResponse):
+        if self.planning_response_schema_digest != _schema_digest(PlanningResponse):
             raise ValueError("Planning response schema digest does not match its schema")
-        if self.verification_response_schema_digest != _schema_digest(_VerificationResponse):
+        if self.verification_response_schema_digest != _schema_digest(VerificationResponse):
             raise ValueError("Verification response schema digest does not match its schema")
         return self
 
@@ -151,37 +136,6 @@ class PlanningPolicy(NewsModel):
             or self.artifact.r2_key != f"news/video-digest/policies/{expected_digest}.json"
         ):
             raise ValueError("Planning policy artifact does not match its definition")
-        return self
-
-
-class RecordedProviderResponse(NewsModel):
-    attempt: ModelAttempt
-    response_content: str
-    response_content_digest: Sha256
-    provider_response: dict[str, object]
-
-
-class PlanningAttemptArtifact(NewsModel):
-    attempt_index: int
-    disposition: Literal["accepted", "rejected"]
-    planning_response: RecordedProviderResponse
-    verification_responses: tuple[RecordedProviderResponse, ...]
-    attempt: PlanningAttempt | None
-    failures: tuple[PlanningFailure, ...]
-
-    @model_validator(mode="after")
-    def require_consistent_attempt(self) -> PlanningAttemptArtifact:
-        if self.attempt is not None:
-            if self.attempt.attempt_index != self.attempt_index:
-                raise ValueError("Planning attempt artifact index does not match its attempt")
-            if self.attempt.disposition != self.disposition:
-                raise ValueError("Planning attempt artifact disposition does not match its attempt")
-            if len(self.verification_responses) != len(self.attempt.story_evidence):
-                raise ValueError("Planning attempt artifact must retain every verifier response")
-        if self.disposition == "accepted" and (self.attempt is None or self.failures):
-            raise ValueError("Accepted planning artifact requires its accepted attempt")
-        if self.disposition == "rejected" and not self.failures:
-            raise ValueError("Rejected planning artifact requires structured failures")
         return self
 
 
@@ -217,8 +171,8 @@ PRODUCTION_POLICY_DEFINITION = VideoDigestPolicyDefinition(
     ),
     planning_prompt=PLANNING_PROMPT,
     verification_prompt=VERIFICATION_PROMPT,
-    planning_response_schema_digest=_schema_digest(_PlanningResponse),
-    verification_response_schema_digest=_schema_digest(_VerificationResponse),
+    planning_response_schema_digest=_schema_digest(PlanningResponse),
+    verification_response_schema_digest=_schema_digest(VerificationResponse),
 )
 
 
@@ -303,11 +257,11 @@ def _run_attempt(
     planning_request = _planning_request(lease, report, policy, attempt_index, prior_attempts)
     parsed, planning_response, parse_failure = _call_model(
         PLANNING_OPERATION,
-        _request_id(lease, attempt_index, "planning"),
+        planning_request_id(lease.edition_id, attempt_index, "planning"),
         planning_request,
         attempt_index,
         provider,
-        _PlanningResponse,
+        PlanningResponse,
     )
     if parsed is None:
         assert parse_failure is not None
@@ -315,6 +269,7 @@ def _run_attempt(
         return PlanningAttemptArtifact(
             attempt_index=attempt_index,
             disposition="rejected",
+            policy=policy.definition.policy,
             planning_response=planning_response,
             verification_responses=(),
             attempt=None,
@@ -334,6 +289,7 @@ def _run_attempt(
         return PlanningAttemptArtifact(
             attempt_index=attempt_index,
             disposition="rejected",
+            policy=policy.definition.policy,
             planning_response=planning_response,
             verification_responses=(),
             attempt=None,
@@ -348,15 +304,15 @@ def _run_attempt(
         section = sections[story.report_subject_id]
         verification, response, parse_error = _call_model(
             VERIFICATION_OPERATION,
-            _request_id(lease, attempt_index, f"verification:{position}"),
+            planning_request_id(lease.edition_id, attempt_index, f"verification:{position}"),
             _verification_request(policy, story, section),
             attempt_index,
             provider,
-            _VerificationResponse,
+            VerificationResponse,
         )
         verifier_responses.append(response)
         if verification is None:
-            verification = _VerificationResponse(
+            verification = VerificationResponse(
                 status="rejected",
                 failures=(
                     PlanningFailure(
@@ -395,6 +351,7 @@ def _run_attempt(
     return PlanningAttemptArtifact(
         attempt_index=attempt_index,
         disposition=disposition,
+        policy=policy.definition.policy,
         planning_response=planning_response,
         verification_responses=tuple(verifier_responses),
         attempt=attempt,
@@ -412,7 +369,7 @@ def _finish_new_accepted(
     attempt = artifact.attempt
     assert attempt is not None
     verified = accept_planning_attempt(report.report, policy.definition.policy, attempt)
-    plan_file, plan = _canonical_plan_file(verified)
+    plan_file, plan = verified_plan_file(verified)
     publish_immutable_r2_objects(
         ((attempt_file.r2_key, attempt_file.content), (plan_file.r2_key, plan_file.content))
     )
@@ -438,7 +395,7 @@ def _finish_accepted(
     attempt = artifact.attempt
     assert attempt is not None
     verified = accept_planning_attempt(report.report, policy.definition.policy, attempt)
-    _plan_file, plan = _canonical_plan_file(verified)
+    _plan_file, plan = verified_plan_file(verified)
     if reference.accepted_plan_artifact_version_id != plan.artifact_version_id:
         raise ValueError("Recorded accepted plan does not match its planning artifact")
     return _checkpoint_evidence_and_manifest(lease, verified, plan)
@@ -481,47 +438,8 @@ def _checkpoint_evidence_and_manifest(
     return PreparedPaidGeneration(authorization=authorization, plan=plan)
 
 
-def _canonical_plan_file(verified: VerifiedDigestPlan) -> tuple[ArtifactFile, DigestPlan]:
-    content = canonical_json(verified.model_dump(mode="json"))
-    file = artifact_file(
-        artifact_id=verified.plan.edition_id,
-        artifact_kind="video_digest_plan",
-        title=f"Accepted video digest plan {verified.plan.edition_id}",
-        content=content,
-        r2_key=f"news/video-digest/{verified.plan.edition_id}/plans/{sha256(content)}.json",
-        media_type="application/json",
-    )
-    stories = tuple(
-        PlannedStory(
-            story_id=planned_story_id(verified.plan.edition_id, position, story.report_subject_id),
-            edition_id=verified.plan.edition_id,
-            position=position,
-            report_subject_id=story.report_subject_id,
-            title=story.title,
-            requested_duration_ms=story.requested_duration_ms,
-        )
-        for position, story in enumerate(verified.plan.stories)
-    )
-    return file, DigestPlan(
-        edition_id=verified.plan.edition_id,
-        artifact_version_id=file.version_id,
-        stories=stories,
-    )
-
-
 def _attempt_file(lease: SlotLease, artifact: PlanningAttemptArtifact) -> ArtifactFile:
-    content = canonical_json(artifact.model_dump(mode="json"))
-    return artifact_file(
-        artifact_id=f"{lease.edition_id}:{artifact.attempt_index}:planning-attempt",
-        artifact_kind="video_digest_planning_attempt",
-        title=f"Video digest planning attempt {artifact.attempt_index}",
-        content=content,
-        r2_key=(
-            f"news/video-digest/{lease.edition_id}/planning/"
-            f"attempt-{artifact.attempt_index}-{sha256(content)}.json"
-        ),
-        media_type="application/json",
-    )
+    return planning_attempt_file(lease.edition_id, artifact)
 
 
 def _read_attempt(reference: PlanningAttemptReference) -> PlanningAttemptArtifact:
@@ -564,7 +482,7 @@ def _planning_request(
         policy.definition.policy.planning_model,
         policy.definition.planning_prompt,
         context,
-        _PlanningResponse.model_json_schema(),
+        PlanningResponse.model_json_schema(),
         "romanian_news_video_digest_plan",
     )
 
@@ -581,7 +499,7 @@ def _verification_request(
             "story": story.model_dump(mode="json"),
             "report_evidence": section.model_dump(mode="json"),
         },
-        _VerificationResponse.model_json_schema(),
+        VerificationResponse.model_json_schema(),
         "romanian_news_video_digest_story_verification",
     )
 
@@ -673,15 +591,3 @@ def _call_model(
 
 def _openrouter_completion(request: ProviderChatRequest) -> ChatCompletion:
     return openrouter_client().chat.completions.create(**request)
-
-
-def _request_id(lease: SlotLease, attempt_index: int, stage: str) -> Sha256:
-    return sha256(
-        canonical_json(
-            {
-                "edition_id": lease.edition_id,
-                "planning_attempt_index": attempt_index,
-                "stage": stage,
-            }
-        )
-    )

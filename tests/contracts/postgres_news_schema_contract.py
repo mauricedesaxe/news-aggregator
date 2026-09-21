@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from threading import Barrier
-from typing import Any
+from typing import Any, LiteralString, cast
 
 import psycopg
 import pytest
@@ -22,14 +22,13 @@ from romanian_news.video_digest.errors import (
 from romanian_news.video_digest.models import (
     ClaimedSlot,
     ClaimResult,
-    DigestPlan,
+    EditionId,
     EditionIdentity,
     EstimatedAttemptCost,
     FailedSubtitles,
     GenerationRequestIdentity,
     GenerationStage,
     MeasuredAttemptCost,
-    PlannedStory,
     PublicationIntent,
     ScheduledSlot,
     SkippedSlot,
@@ -41,10 +40,10 @@ from romanian_news.video_digest.models import (
     VerifiedPublicObject,
     edition_id,
     generation_request_id,
-    planned_story_id,
     publication_id,
     scheduled_slot_id,
 )
+from tests.contracts.video_digest_planning_fixtures import accepted_planning_files
 
 
 def _sha256_id(value: int) -> str:
@@ -252,6 +251,55 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
     ]
 
 
+def test_planning_migration_grandfathers_existing_editions_without_authorizing_paid_work(
+    postgres_news_schema: str,
+) -> None:
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    migrations = news_schema.NEWS_CATALOG_MIGRATIONS
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        for migration in migrations[:4]:
+            connection.execute(cast(LiteralString, migration.path.read_text()), prepare=False)
+            connection.execute(
+                "INSERT INTO news_schema_migrations (version, name, sha256) VALUES (%s, %s, %s)",
+                (migration.version, migration.name, migration.sha256),
+            )
+
+        report, policy, plan, request = _record_artifact_versions(connection, 900, 4)
+        legacy_edition, legacy_story, request_id = (_sha256_id(value) for value in range(910, 913))
+        _insert_edition(connection, legacy_edition, report, policy)
+        _insert_story(connection, legacy_story, legacy_edition, 0, _sha256_id(913))
+        connection.execute(
+            "UPDATE video_digest_editions SET plan_artifact_version_id = %s, "
+            "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+            (plan, legacy_edition),
+        )
+        _insert_generation_request(connection, request_id, legacy_edition, request)
+
+    ensure_news_catalog_schema()
+
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        assert connection.execute(
+            "SELECT planning_contract FROM video_digest_editions WHERE edition_id = %s",
+            (legacy_edition,),
+        ).fetchone() == ("legacy_unverified",)
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_generation_requests SET stage = 'submitted', "
+                "provider_receipt_id = 'legacy-receipt', cost_kind = 'estimated', "
+                "cost_usd = 1, updated_at = CURRENT_TIMESTAMP WHERE request_id = %s",
+                (request_id,),
+            )
+        new_edition = _sha256_id(914)
+        _insert_edition(connection, new_edition, report, policy)
+        assert connection.execute(
+            "SELECT planning_contract FROM video_digest_editions WHERE edition_id = %s",
+            (new_edition,),
+        ).fetchone() == ("verified_v1",)
+
+    with pytest.raises(VideoDigestCheckpointConflictError, match="Legacy video digest edition"):
+        video_digest_catalog.read_planning_attempts(EditionId(legacy_edition))
+
+
 def test_news_schema_rejects_changed_migration_digest(postgres_news_schema: str) -> None:
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
@@ -329,6 +377,18 @@ def test_video_digest_inserts_must_start_at_initial_state(
                 "'receipt', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 (request_id, edition_id, request_version),
             )
+        _insert_planning_attempt(connection, edition_id, video, plan)
+        connection.execute(
+            "UPDATE video_digest_editions SET plan_artifact_version_id = %s, "
+            "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+            (plan, edition_id),
+        )
+        _advance_story_to_generating(connection, story_id, verification)
+        connection.execute(
+            "UPDATE video_digest_editions SET verification_manifest_artifact_version_id = %s, "
+            "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+            (verification, edition_id),
+        )
         _insert_generation_request(connection, request_id, edition_id, request_version)
 
         with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
@@ -810,40 +870,18 @@ def test_video_digest_generation_checkpoints_complete_atomically(
     assert isinstance(claimed, ClaimedSlot)
     lease = claimed.lease
 
-    plan_file = artifact_file(
-        artifact_id=identity.edition_id,
-        artifact_kind="video_digest_plan",
-        title="Contract plan",
-        content=b"contract plan",
-        r2_key="contracts/video-digest/plan.json",
-        media_type="application/json",
+    plan, plan_file, planning_attempt_file = accepted_planning_files(
+        identity,
+        ((_sha256_id(502), "Contract story", 15_000),),
+        seed="schema-contract",
     )
-    story = PlannedStory(
-        story_id=planned_story_id(identity.edition_id, 0, _sha256_id(502)),
-        edition_id=identity.edition_id,
-        position=0,
-        report_subject_id=_sha256_id(502),
-        title="Contract story",
-        requested_duration_ms=15_000,
-    )
-    planning_attempt_file = artifact_file(
-        artifact_id=f"{identity.edition_id}:0:planning-attempt",
-        artifact_kind="video_digest_planning_attempt",
-        title="Contract planning attempt",
-        content=b"accepted planning evidence",
-        r2_key="contracts/video-digest/planning-attempt.json",
-        media_type="application/json",
-    )
+    story = plan.stories[0]
     video_digest_catalog.checkpoint_planning_attempt(
         lease,
         0,
         "accepted",
         evidence_file=planning_attempt_file,
-        accepted_plan=DigestPlan(
-            edition_id=identity.edition_id,
-            artifact_version_id=plan_file.version_id,
-            stories=(story,),
-        ),
+        accepted_plan=plan,
         plan_file=plan_file,
         recorded_at=recorded_at,
     )
