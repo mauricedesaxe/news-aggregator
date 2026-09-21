@@ -79,8 +79,8 @@ name, and scheduled time.
 `PublicationPort` receives one `PublicationHandoff`. The handoff contains the exact assembled
 video artifact metadata and either the exact subtitle artifact metadata or the durable failed
 subtitle state. The orchestration layer does not upload public R2 objects, retry publication five
-times, verify public objects, or deliver incidents. `news-nvs.7` supplies those adapters and owns
-their policies.
+times, verify public objects, or deliver incidents. `R2PublicationPort` owns the upload, retry,
+verification, and retention policies.
 
 Alert selection is pure. Skips and nonterminal retries return `NoAlert`. Subtitle exhaustion also
 returns `NoAlert` because it proceeds with the clean video. A terminal eligible-slot failure or
@@ -99,7 +99,7 @@ deadline returns an `IncidentAlert` whose ID is the digest of the slot ID and al
 
 ## Why the schedule is stopped
 
-The repository does not yet contain every production adapter. Screenplay preparation and Fal H3
-generation exist, but the production subtitle timing, public publication, and incident transport
-adapters are incomplete. The schedule is registered as `STOPPED`, and the production activation
-workflow excludes it. `news-nvs.7` can start it only after those ports have production adapters.
+The repository does not yet contain every production adapter. Screenplay preparation, Fal H3
+generation, and public publication exist, but the production subtitle timing and incident
+transport adapters are incomplete. The schedule remains registered as `STOPPED`, and the
+production activation workflow excludes it.

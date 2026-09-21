@@ -59,8 +59,9 @@ def _edition() -> EditionIdentity:
 
 
 def _subtitle() -> SubtitleObjectMetadata:
+    edition = _edition().edition_id
     return SubtitleObjectMetadata(
-        expected_key="video-digests/edition.vtt",
+        expected_key=f"video-digests/{edition}/{SUBTITLE_DIGEST}.vtt",
         content_digest=SUBTITLE_DIGEST,
         byte_size=321,
         media_type="text/vtt",
@@ -70,9 +71,10 @@ def _subtitle() -> SubtitleObjectMetadata:
 def _publication_values() -> dict[str, object]:
     edition = _edition().edition_id
     subtitle = _subtitle()
+    video_key = f"video-digests/{edition}/{VIDEO_DIGEST}.mp4"
     values: dict[str, object] = {
         "edition_id": edition,
-        "expected_video_key": "video-digests/edition.mp4",
+        "expected_video_key": video_key,
         "video_digest": VIDEO_DIGEST,
         "video_byte_size": 123_456,
         "video_media_type": "video/mp4",
@@ -82,7 +84,7 @@ def _publication_values() -> dict[str, object]:
     }
     values["publication_id"] = publication_id(
         edition_id_value=edition,
-        expected_video_key="video-digests/edition.mp4",
+        expected_video_key=video_key,
         video_digest=VIDEO_DIGEST,
         video_byte_size=123_456,
         video_media_type="video/mp4",
@@ -360,7 +362,7 @@ def test_publication_identity_is_stable_and_sensitive_to_every_input() -> None:
     changed_ids = (
         publication_id(
             edition_id_value=edition,
-            expected_video_key="video-digests/other.mp4",
+            expected_video_key=f"video-digests/other/{edition}/{VIDEO_DIGEST}.mp4",
             video_digest=VIDEO_DIGEST,
             video_byte_size=123_456,
             video_media_type="video/mp4",
@@ -370,7 +372,7 @@ def test_publication_identity_is_stable_and_sensitive_to_every_input() -> None:
         ),
         publication_id(
             edition_id_value=edition,
-            expected_video_key="video-digests/edition.mp4",
+            expected_video_key=f"video-digests/{edition}/{VIDEO_DIGEST}.mp4",
             video_digest="3" * 64,
             video_byte_size=123_456,
             video_media_type="video/mp4",
@@ -380,7 +382,7 @@ def test_publication_identity_is_stable_and_sensitive_to_every_input() -> None:
         ),
         publication_id(
             edition_id_value=edition,
-            expected_video_key="video-digests/edition.mp4",
+            expected_video_key=f"video-digests/{edition}/{VIDEO_DIGEST}.mp4",
             video_digest=VIDEO_DIGEST,
             video_byte_size=123_457,
             video_media_type="video/mp4",
@@ -390,7 +392,7 @@ def test_publication_identity_is_stable_and_sensitive_to_every_input() -> None:
         ),
         publication_id(
             edition_id_value=edition,
-            expected_video_key="video-digests/edition.mp4",
+            expected_video_key=f"video-digests/{edition}/{VIDEO_DIGEST}.mp4",
             video_digest=VIDEO_DIGEST,
             video_byte_size=123_456,
             video_media_type="video/webm",
@@ -400,7 +402,7 @@ def test_publication_identity_is_stable_and_sensitive_to_every_input() -> None:
         ),
         publication_id(
             edition_id_value=edition,
-            expected_video_key="video-digests/edition.mp4",
+            expected_video_key=f"video-digests/{edition}/{VIDEO_DIGEST}.mp4",
             video_digest=VIDEO_DIGEST,
             video_byte_size=123_456,
             video_media_type="video/mp4",
@@ -410,7 +412,7 @@ def test_publication_identity_is_stable_and_sensitive_to_every_input() -> None:
         ),
         publication_id(
             edition_id_value=edition,
-            expected_video_key="video-digests/edition.mp4",
+            expected_video_key=f"video-digests/{edition}/{VIDEO_DIGEST}.mp4",
             video_digest=VIDEO_DIGEST,
             video_byte_size=123_456,
             video_media_type="video/mp4",
@@ -420,7 +422,7 @@ def test_publication_identity_is_stable_and_sensitive_to_every_input() -> None:
         ),
         publication_id(
             edition_id_value=edition,
-            expected_video_key="video-digests/edition.mp4",
+            expected_video_key=f"video-digests/{edition}/{VIDEO_DIGEST}.mp4",
             video_digest=VIDEO_DIGEST,
             video_byte_size=123_456,
             video_media_type="video/mp4",
@@ -430,6 +432,43 @@ def test_publication_identity_is_stable_and_sensitive_to_every_input() -> None:
         ),
     )
     assert all(changed_id != original.publication_id for changed_id in changed_ids)
+
+
+def test_publication_identity_includes_exact_public_policy() -> None:
+    values = _publication_values()
+    intent = PublicationIntent.model_validate(values)
+
+    def identity(
+        *,
+        cache_control: str = intent.cache_control,
+        visibility: str = intent.visibility,
+        retention: str = intent.retention,
+    ) -> PublicationId:
+        return publication_id(
+            edition_id_value=intent.edition_id,
+            expected_video_key=intent.expected_video_key,
+            video_digest=intent.video_digest,
+            video_byte_size=intent.video_byte_size,
+            video_media_type=intent.video_media_type,
+            subtitle=intent.subtitle,
+            source_video_version_id=intent.source_video_version_id,
+            source_subtitle_version_id=intent.source_subtitle_version_id,
+            cache_control=cache_control,
+            visibility=visibility,
+            retention=retention,
+        )
+
+    assert identity(cache_control="public,max-age=60") != intent.publication_id
+    assert identity(visibility="private") != intent.publication_id
+    assert identity(retention="candidate-7d") != intent.publication_id
+    for field, value in (
+        ("cache_control", "public,max-age=60"),
+        ("visibility", "private"),
+        ("retention", "candidate-7d"),
+        ("video_media_type", "video/webm"),
+    ):
+        with pytest.raises(ValidationError):
+            PublicationIntent.model_validate(values | {field: value})
 
 
 def test_publication_rejects_invalid_size_and_mismatched_identity() -> None:
