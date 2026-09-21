@@ -54,6 +54,11 @@ NEWS_CATALOG_MIGRATIONS = (
         "video_digest_generation_admission",
         MIGRATIONS_PATH / "0006_video_digest_generation_admission.sql",
     ),
+    NewsCatalogMigration(
+        7,
+        "video_digest_media_evidence",
+        MIGRATIONS_PATH / "0007_video_digest_media_evidence.sql",
+    ),
 )
 
 
