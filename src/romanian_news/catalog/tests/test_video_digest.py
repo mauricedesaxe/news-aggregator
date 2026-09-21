@@ -163,6 +163,14 @@ CLIP_FILE = artifact_file(
     r2_key="video-digest/clips/accepted.mp4",
     media_type="video/mp4",
 )
+VALIDATION_FILE = artifact_file(
+    artifact_id=f"{REQUEST.request_id}:validation",
+    artifact_kind="video_digest_candidate_validation",
+    title="Candidate validation",
+    content=b"validation",
+    r2_key="video-digest/generation/validation.json",
+    media_type="application/json",
+)
 FAILURE_FILE = artifact_file(
     artifact_id=f"{REQUEST.request_id}:failure",
     artifact_kind="video_digest_generation_failure",
@@ -178,6 +186,14 @@ ASSEMBLED_FILE = artifact_file(
     content=b"assembled video",
     r2_key="video-digest/assembled/video.mp4",
     media_type="video/mp4",
+)
+ASSEMBLY_MANIFEST_FILE = artifact_file(
+    artifact_id=f"{EDITION.edition_id}:assembly-manifest",
+    artifact_kind="video_digest_assembly_manifest",
+    title="Assembly manifest",
+    content=b"assembly manifest",
+    r2_key="video-digest/assembled/manifest.json",
+    media_type="application/json",
 )
 SUBTITLE_FAILURE_FILE = artifact_file(
     artifact_id=f"{EDITION.edition_id}:subtitle-failure",
@@ -394,6 +410,7 @@ def _story_row(**updates: object) -> dict[str, object]:
         "stage": "planned",
         "verification_evidence_artifact_version_id": None,
         "accepted_clip_artifact_version_id": None,
+        "validation_evidence_artifact_version_id": None,
         "failure_evidence_artifact_version_id": None,
     }
     row.update(updates)
@@ -420,6 +437,7 @@ def _edition_outputs(**updates: object) -> dict[str, object]:
     row: dict[str, object] = {
         "edition_id": EDITION.edition_id,
         "assembled_video_artifact_version_id": ASSEMBLED_FILE.version_id,
+        "assembly_manifest_artifact_version_id": ASSEMBLY_MANIFEST_FILE.version_id,
         "subtitle_state": "failed",
         "subtitle_artifact_version_id": None,
         "subtitle_failure_evidence_artifact_version_id": SUBTITLE_FAILURE_FILE.version_id,
@@ -1597,7 +1615,7 @@ def test_generation_request_replay_requires_the_exact_budget_admission(
     assert connection.steps == []
 
 
-def test_read_generation_attempts_returns_receipt_and_response_projections(
+def test_read_generation_attempts_returns_generation_and_accepted_clip_projections(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     response_file = artifact_file(
@@ -1614,11 +1632,13 @@ def test_read_generation_attempts_returns_receipt_and_response_projections(
         lambda _query, _values: [
             {
                 **_generation_row(
-                    stage="processing",
+                    stage="accepted",
                     provider_receipt_id="fal-receipt-1",
                     response_artifact_version_id=response_file.version_id,
-                    cost_kind="estimated",
-                    cost_usd=Decimal("3.25632"),
+                    accepted_clip_artifact_version_id=CLIP_FILE.version_id,
+                    validation_evidence_artifact_version_id=VALIDATION_FILE.version_id,
+                    cost_kind="measured",
+                    cost_usd=Decimal("3.25"),
                 ),
                 "request_artifact_id": REQUEST_FILE.artifact_id,
                 "request_content_digest": REQUEST_FILE.content_digest,
@@ -1629,6 +1649,13 @@ def test_read_generation_attempts_returns_receipt_and_response_projections(
                 "response_artifact_id": response_file.artifact_id,
                 "response_content_digest": response_file.content_digest,
                 "response_r2_key": response_file.r2_key,
+                "clip_artifact_id": CLIP_FILE.artifact_id,
+                "clip_content_digest": CLIP_FILE.content_digest,
+                "clip_r2_key": CLIP_FILE.r2_key,
+                "clip_byte_size": len(CLIP_FILE.content),
+                "validation_artifact_id": VALIDATION_FILE.artifact_id,
+                "validation_content_digest": VALIDATION_FILE.content_digest,
+                "validation_r2_key": VALIDATION_FILE.r2_key,
             }
         ],
     )
@@ -1641,6 +1668,11 @@ def test_read_generation_attempts_returns_receipt_and_response_projections(
     assert attempts[0].receipt_evidence.version_id == RECEIPT_FILE.version_id
     assert attempts[0].response_evidence is not None
     assert attempts[0].response_evidence.version_id == response_file.version_id
+    assert attempts[0].accepted_clip is not None
+    assert attempts[0].accepted_clip.version_id == CLIP_FILE.version_id
+    assert attempts[0].accepted_clip.byte_size == len(CLIP_FILE.content)
+    assert attempts[0].validation_evidence is not None
+    assert attempts[0].validation_evidence.version_id == VALIDATION_FILE.version_id
 
 
 def test_second_generation_request_requires_failed_first_attempt(
@@ -1896,6 +1928,7 @@ def test_generation_acceptance_updates_request_before_story(
             ),
             ("FROM video_digest_stories", _story_row(stage="generating")),
             *_artifact_steps(),
+            *_artifact_steps(),
             ("UPDATE video_digest_generation_requests", {"request_id": REQUEST.request_id}),
             ("UPDATE video_digest_stories", {"story_id": STORY.story_id}),
         ],
@@ -1905,6 +1938,7 @@ def test_generation_acceptance_updates_request_before_story(
         _lease(),
         REQUEST.request_id,
         clip_file=CLIP_FILE,
+        validation_file=VALIDATION_FILE,
         cost=MeasuredAttemptCost(usd=Decimal("1.10")),
         recorded_at=NOW,
     )
@@ -2092,13 +2126,17 @@ def test_assembled_video_checkpoint_records_output_before_advancing_slot(
             ),
             ("FROM video_digest_stories", None),
             *_artifact_steps(),
+            *_artifact_steps(),
             ("UPDATE video_digest_editions", {"edition_id": EDITION.edition_id}),
             ("UPDATE video_digest_slots", {"slot_id": SLOT.slot_id}),
         ],
     )
 
     assembled = video_digest.checkpoint_assembled_video(
-        _lease(), video_file=ASSEMBLED_FILE, recorded_at=NOW
+        _lease(),
+        video_file=ASSEMBLED_FILE,
+        manifest_file=ASSEMBLY_MANIFEST_FILE,
+        recorded_at=NOW,
     )
 
     assert assembled.artifact_version_id == ASSEMBLED_FILE.version_id
@@ -2128,7 +2166,10 @@ def test_assembled_video_checkpoint_requires_accepted_stories(
 
     with pytest.raises(VideoDigestCheckpointConflictError, match="incomplete mandatory stories"):
         video_digest.checkpoint_assembled_video(
-            _lease(), video_file=ASSEMBLED_FILE, recorded_at=NOW
+            _lease(),
+            video_file=ASSEMBLED_FILE,
+            manifest_file=ASSEMBLY_MANIFEST_FILE,
+            recorded_at=NOW,
         )
 
     assert connection.steps == []
@@ -2146,11 +2187,15 @@ def test_assembled_video_checkpoint_replays_after_slot_progress(
             ("FROM video_digest_slots", _active_row(stage="publishing")),
             ("FROM video_digest_editions", _edition_outputs()),
             ("FROM artifacts AS artifact", _artifact_row(ASSEMBLED_FILE)),
+            ("FROM artifacts AS artifact", _artifact_row(ASSEMBLY_MANIFEST_FILE)),
         ],
     )
 
     result = video_digest.checkpoint_assembled_video(
-        _lease(), video_file=ASSEMBLED_FILE, recorded_at=NOW
+        _lease(),
+        video_file=ASSEMBLED_FILE,
+        manifest_file=ASSEMBLY_MANIFEST_FILE,
+        recorded_at=NOW,
     )
 
     assert result.artifact_version_id == ASSEMBLED_FILE.version_id

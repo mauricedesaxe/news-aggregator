@@ -141,14 +141,79 @@ def _insert_generation_request(
     request_id: str,
     edition_id: str,
     request_version: str,
+    *,
+    admission: GenerationAdmission,
+    attempt_index: int = 0,
+    validation_version: str | None = None,
 ) -> None:
-    connection.execute(
-        "INSERT INTO video_digest_generation_requests "
-        "(request_id, edition_id, story_position, attempt_index, "
-        "request_artifact_version_id, stage, cost_kind, created_at, updated_at) "
-        "VALUES (%s, %s, 0, 0, %s, 'pending', 'pending', "
-        "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-        (request_id, edition_id, request_version),
+    slot = connection.execute(
+        "SELECT scheduled_at, bucharest_day FROM video_digest_slots WHERE edition_id = %s",
+        (edition_id,),
+    ).fetchone()
+    story = connection.execute(
+        "SELECT story_id FROM video_digest_stories WHERE edition_id = %s AND position = 0",
+        (edition_id,),
+    ).fetchone()
+    if slot is None or story is None:
+        raise ValueError("Generation request fixture requires an edition slot and story")
+    scheduled_at, bucharest_day = slot
+    scopes = (
+        ("story", story[0], admission.limits.story_usd),
+        ("edition", edition_id, admission.limits.edition_usd),
+        ("bucharest_day", bucharest_day.isoformat(), admission.limits.bucharest_day_usd),
+        (
+            "calendar_month",
+            bucharest_day.replace(day=1).isoformat(),
+            admission.limits.calendar_month_usd,
+        ),
+    )
+    with connection.transaction():
+        connection.execute(
+            "INSERT INTO video_digest_generation_requests "
+            "(request_id, edition_id, story_position, attempt_index, "
+            "request_artifact_version_id, generation_policy_artifact_version_id, "
+            "reserved_cost_usd, deadline_at, validation_evidence_artifact_version_id, "
+            "stage, cost_kind, created_at, updated_at) "
+            "VALUES (%s, %s, 0, %s, %s, %s, %s, %s, %s, 'pending', 'pending', "
+            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            (
+                request_id,
+                edition_id,
+                attempt_index,
+                request_version,
+                admission.generation_policy_artifact_version_id,
+                admission.reserved_usd,
+                scheduled_at + timedelta(minutes=90),
+                validation_version,
+            ),
+        )
+        for scope_kind, scope_key, limit_usd in scopes:
+            connection.execute(
+                "INSERT INTO video_digest_generation_reservations "
+                "(request_id, scope_kind, scope_key, limit_usd, reserved_usd, "
+                "generation_policy_artifact_version_id, created_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
+                (
+                    request_id,
+                    scope_kind,
+                    scope_key,
+                    limit_usd,
+                    admission.reserved_usd,
+                    admission.generation_policy_artifact_version_id,
+                ),
+            )
+
+
+def _generation_admission(policy_version: str) -> GenerationAdmission:
+    return GenerationAdmission(
+        generation_policy_artifact_version_id=policy_version,
+        reserved_usd=Decimal("3.25632"),
+        limits=GenerationBudgetLimits(
+            story_usd=Decimal("7"),
+            edition_usd=Decimal("7"),
+            bucharest_day_usd=Decimal("150"),
+            calendar_month_usd=Decimal("1000"),
+        ),
     )
 
 
@@ -204,6 +269,7 @@ def _accept_generation(
     request_id: str,
     response_version: str,
     clip_version: str,
+    validation_version: str,
 ) -> None:
     connection.execute(
         "UPDATE video_digest_generation_requests SET stage = 'submitted', "
@@ -219,9 +285,11 @@ def _accept_generation(
     )
     connection.execute(
         "UPDATE video_digest_generation_requests SET stage = 'accepted', "
-        "accepted_clip_artifact_version_id = %s, cost_kind = 'measured', cost_usd = 2, "
+        "accepted_clip_artifact_version_id = %s, "
+        "validation_evidence_artifact_version_id = %s, "
+        "cost_kind = 'measured', cost_usd = 2, "
         "updated_at = CURRENT_TIMESTAMP WHERE request_id = %s",
-        (clip_version, request_id),
+        (clip_version, validation_version, request_id),
     )
 
 
@@ -275,6 +343,8 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
             news_schema.NEWS_CATALOG_MIGRATIONS[3].sha256,
         ),
         (5, "video_digest_planning", news_schema.NEWS_CATALOG_MIGRATIONS[4].sha256),
+        (6, "video_digest_generation_admission", news_schema.NEWS_CATALOG_MIGRATIONS[5].sha256),
+        (7, "video_digest_media_evidence", news_schema.NEWS_CATALOG_MIGRATIONS[6].sha256),
     ]
 
 
@@ -320,6 +390,14 @@ def test_video_digest_inserts_must_start_at_initial_state(
                 "VALUES (%s, %s, %s, %s, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 (edition_id, report, policy, plan),
             )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "INSERT INTO video_digest_editions "
+                "(edition_id, daily_report_version_id, policy_bundle_version_id, "
+                "assembly_manifest_artifact_version_id, subtitle_state, created_at, updated_at) "
+                "VALUES (%s, %s, %s, %s, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                (edition_id, report, policy, video),
+            )
         _insert_edition(connection, edition_id, report, policy)
 
         with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
@@ -355,7 +433,6 @@ def test_video_digest_inserts_must_start_at_initial_state(
                 "'receipt', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 (request_id, edition_id, request_version),
             )
-        _insert_generation_request(connection, request_id, edition_id, request_version)
 
         with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
             connection.execute(
@@ -417,9 +494,17 @@ def test_video_digest_planning_and_generation_authorization_are_database_enforce
             manifest,
             request,
         ) = _record_artifact_versions(connection, 130, 8)
-        edition_id, story_id, request_id = (_sha256_id(value) for value in range(140, 143))
+        edition_id, story_id, request_id, slot_id = (_sha256_id(value) for value in range(140, 144))
         _insert_edition(connection, edition_id, report, policy)
+        _insert_slot(connection, slot_id)
+        connection.execute(
+            "UPDATE video_digest_slots SET stage = 'claimed', edition_id = %s, "
+            "lease_owner_token = 'owner', lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', "
+            "claim_count = 1, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (edition_id, slot_id),
+        )
         _insert_story(connection, story_id, edition_id, 0, _sha256_id(150))
+        admission = _generation_admission(policy)
 
         with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
             connection.execute(
@@ -484,17 +569,30 @@ def test_video_digest_planning_and_generation_authorization_are_database_enforce
             )
 
         with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
-            _insert_generation_request(connection, request_id, edition_id, request)
+            _insert_generation_request(
+                connection, request_id, edition_id, request, admission=admission
+            )
         _advance_story_to_generating(connection, story_id, verification)
         with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
-            _insert_generation_request(connection, request_id, edition_id, request)
+            _insert_generation_request(
+                connection, request_id, edition_id, request, admission=admission
+            )
         connection.execute(
             "UPDATE video_digest_editions "
             "SET verification_manifest_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
             "WHERE edition_id = %s",
             (manifest, edition_id),
         )
-        _insert_generation_request(connection, request_id, edition_id, request)
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            _insert_generation_request(
+                connection,
+                request_id,
+                edition_id,
+                request,
+                admission=admission,
+                validation_version=verification,
+            )
+        _insert_generation_request(connection, request_id, edition_id, request, admission=admission)
         with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
             connection.execute(
                 "UPDATE video_digest_editions "
@@ -511,12 +609,34 @@ def test_video_digest_story_acceptance_requires_matching_generation(
     assert news_schema.NEWS_POSTGRES_DSN is not None
 
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy, verification, request_version, response, clip = _record_artifact_versions(
-            connection, 200, 6
-        )
-        edition_id, story_id, request_id = (_sha256_id(value) for value in range(210, 213))
+        (
+            report,
+            policy,
+            plan,
+            planning_evidence,
+            verification,
+            manifest,
+            request_version,
+            response,
+            clip,
+            validation,
+        ) = _record_artifact_versions(connection, 200, 10)
+        edition_id, story_id, request_id, slot_id = (_sha256_id(value) for value in range(210, 214))
         _insert_edition(connection, edition_id, report, policy)
+        _insert_slot(connection, slot_id)
+        connection.execute(
+            "UPDATE video_digest_slots SET stage = 'claimed', edition_id = %s, "
+            "lease_owner_token = 'owner', lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', "
+            "claim_count = 1, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (edition_id, slot_id),
+        )
         _insert_story(connection, story_id, edition_id, 0, _sha256_id(220))
+        _insert_planning_attempt(connection, edition_id, planning_evidence, plan)
+        connection.execute(
+            "UPDATE video_digest_editions SET plan_artifact_version_id = %s, "
+            "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+            (plan, edition_id),
+        )
         _advance_story_to_generating(connection, story_id, verification)
         connection.execute(
             "UPDATE video_digest_editions "
@@ -524,7 +644,13 @@ def test_video_digest_story_acceptance_requires_matching_generation(
             "WHERE edition_id = %s",
             (verification, edition_id),
         )
-        _insert_generation_request(connection, request_id, edition_id, request_version)
+        _insert_generation_request(
+            connection,
+            request_id,
+            edition_id,
+            request_version,
+            admission=_generation_admission(policy),
+        )
 
         with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
             connection.execute(
@@ -534,7 +660,33 @@ def test_video_digest_story_acceptance_requires_matching_generation(
                 (clip, story_id),
             )
 
-        _accept_generation(connection, request_id, response, clip)
+        connection.execute(
+            "UPDATE video_digest_generation_requests SET stage = 'submitted', "
+            "provider_receipt_id = 'provider-1', cost_kind = 'estimated', cost_usd = 1, "
+            "updated_at = CURRENT_TIMESTAMP WHERE request_id = %s",
+            (request_id,),
+        )
+        connection.execute(
+            "UPDATE video_digest_generation_requests SET stage = 'processing', "
+            "response_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
+            "WHERE request_id = %s",
+            (response, request_id),
+        )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_generation_requests SET stage = 'accepted', "
+                "accepted_clip_artifact_version_id = %s, cost_kind = 'measured', cost_usd = 2, "
+                "updated_at = CURRENT_TIMESTAMP WHERE request_id = %s",
+                (clip, request_id),
+            )
+        connection.execute(
+            "UPDATE video_digest_generation_requests SET stage = 'accepted', "
+            "accepted_clip_artifact_version_id = %s, "
+            "validation_evidence_artifact_version_id = %s, "
+            "cost_kind = 'measured', cost_usd = 2, "
+            "updated_at = CURRENT_TIMESTAMP WHERE request_id = %s",
+            (clip, validation, request_id),
+        )
         connection.execute(
             "UPDATE video_digest_stories SET stage = 'accepted', "
             "accepted_clip_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
@@ -688,9 +840,11 @@ def test_video_digest_publication_and_slot_complete_together(
             request_version,
             response,
             clip,
+            validation,
+            assembly_manifest,
             upload_evidence,
             publication_verification,
-        ) = _record_artifact_versions(connection, 400, 11)
+        ) = _record_artifact_versions(connection, 400, 13)
         edition_id, slot_id, story_id, request_id, publication_id = (
             _sha256_id(value) for value in range(420, 425)
         )
@@ -723,18 +877,31 @@ def test_video_digest_publication_and_slot_complete_together(
             "WHERE edition_id = %s",
             (verification, edition_id),
         )
-        _insert_generation_request(connection, request_id, edition_id, request_version)
-        _accept_generation(connection, request_id, response, clip)
+        _insert_generation_request(
+            connection,
+            request_id,
+            edition_id,
+            request_version,
+            admission=_generation_admission(policy),
+        )
+        _accept_generation(connection, request_id, response, clip, validation)
         connection.execute(
             "UPDATE video_digest_stories SET stage = 'accepted', "
             "accepted_clip_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
             "WHERE story_id = %s",
             (clip, story_id),
         )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_editions SET assembled_video_artifact_version_id = %s, "
+                "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+                (video, edition_id),
+            )
         connection.execute(
             "UPDATE video_digest_editions SET assembled_video_artifact_version_id = %s, "
+            "assembly_manifest_artifact_version_id = %s, "
             "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
-            (video, edition_id),
+            (video, assembly_manifest, edition_id),
         )
         connection.execute(
             "UPDATE video_digest_publication_intents SET stage = 'uploading', "
@@ -916,20 +1083,12 @@ def test_video_digest_generation_checkpoints_complete_atomically(
         attempt_index=0,
         request_artifact_version_id=request_file.version_id,
     )
+    admission = _generation_admission(policy)
     pending = video_digest_catalog.checkpoint_generation_request(
         lease,
         request,
         request_file=request_file,
-        admission=GenerationAdmission(
-            generation_policy_artifact_version_id=policy,
-            reserved_usd=Decimal("3.25632"),
-            limits=GenerationBudgetLimits(
-                story_usd=Decimal("7"),
-                edition_usd=Decimal("7"),
-                bucharest_day_usd=Decimal("150"),
-                calendar_month_usd=Decimal("1000"),
-            ),
-        ),
+        admission=admission,
         recorded_at=recorded_at,
     )
     assert pending.created is True
@@ -995,6 +1154,14 @@ def test_video_digest_generation_checkpoints_complete_atomically(
         r2_key="contracts/video-digest/clip.mp4",
         media_type="video/mp4",
     )
+    validation_file = artifact_file(
+        artifact_id=f"{request.request_id}:validation",
+        artifact_kind="video_digest_candidate_validation",
+        title="Contract candidate validation",
+        content=b"validation",
+        r2_key="contracts/video-digest/validation.json",
+        media_type="application/json",
+    )
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
         connection.execute(
             "CREATE FUNCTION reject_contract_story_acceptance() RETURNS trigger "
@@ -1013,6 +1180,7 @@ def test_video_digest_generation_checkpoints_complete_atomically(
             lease,
             request.request_id,
             clip_file=clip_file,
+            validation_file=validation_file,
             cost=MeasuredAttemptCost(usd=Decimal("1.10")),
             recorded_at=recorded_at,
         )
@@ -1032,6 +1200,7 @@ def test_video_digest_generation_checkpoints_complete_atomically(
         lease,
         request.request_id,
         clip_file=clip_file,
+        validation_file=validation_file,
         cost=MeasuredAttemptCost(usd=Decimal("1.10")),
         recorded_at=recorded_at,
     )
@@ -1046,9 +1215,18 @@ def test_video_digest_generation_checkpoints_complete_atomically(
         r2_key="contracts/video-digest/assembled.mp4",
         media_type="video/mp4",
     )
+    assembly_manifest_file = artifact_file(
+        artifact_id=f"{identity.edition_id}:assembly-manifest",
+        artifact_kind="video_digest_assembly_manifest",
+        title="Contract assembly manifest",
+        content=b"assembly manifest",
+        r2_key="contracts/video-digest/assembly-manifest.json",
+        media_type="application/json",
+    )
     video_digest_catalog.checkpoint_assembled_video(
         lease,
         video_file=assembled_file,
+        manifest_file=assembly_manifest_file,
         recorded_at=recorded_at,
     )
     subtitle_failure_file = artifact_file(
@@ -1187,13 +1365,13 @@ def test_video_digest_generation_checkpoints_complete_atomically(
             (clip_file.artifact_id, slot.slot_id),
         ).fetchone()
         second_request_version = _record_artifact_versions(connection, 503, 1)[0]
-        connection.execute(
-            "INSERT INTO video_digest_generation_requests "
-            "(request_id, edition_id, story_position, attempt_index, "
-            " request_artifact_version_id, stage, cost_kind, created_at, updated_at) "
-            "VALUES (%s, %s, 0, 1, %s, 'pending', 'pending', "
-            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-            (_sha256_id(504), identity.edition_id, second_request_version),
+        _insert_generation_request(
+            connection,
+            _sha256_id(504),
+            identity.edition_id,
+            second_request_version,
+            admission=admission,
+            attempt_index=1,
         )
         with pytest.raises(psycopg.errors.UniqueViolation):
             connection.execute(

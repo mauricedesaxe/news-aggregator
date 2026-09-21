@@ -37,6 +37,8 @@ def test_news_schema_contains_its_catalog_boundaries() -> None:
         "video_digest_generation_requests_require_authorization",
         "video_digest_generation_requests_require_order",
         "video_digest_generation_requests_protect_admission",
+        "video_digest_generation_requests_protect_media_evidence",
+        "video_digest_editions_protect_assembly_manifest",
         "video_digest_generation_reservations_reject_updates",
         "video_digest_generation_reservations_reject_deletes",
     } <= news_triggers
@@ -57,6 +59,7 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         (4, "video_digest_publication_evidence"),
         (5, "video_digest_planning"),
         (6, "video_digest_generation_admission"),
+        (7, "video_digest_media_evidence"),
     )
     assert tuple(migration.version for migration in NEWS_CATALOG_MIGRATIONS) == tuple(
         range(1, len(NEWS_CATALOG_MIGRATIONS) + 1)
@@ -74,4 +77,5 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         "8dc260a8d8739ded18a246ae759647cc1971f1c04eeb66ea92d090ea4727e0b7",
         "362c2edd133d99f3455ddc38c0de2cf7c5de93766ea8372820362d81ab189363",
         "fc3c51fec78b2cc7d34f471a1a6025497d813c0b35d3cb474e8e7a9eb3c7f319",
+        "fac89c96631c62599253f144eeaf3fd550b31c904d0b26dee980f504fd427ba4",
     )
