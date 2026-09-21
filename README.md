@@ -26,8 +26,10 @@ credentials or private monorepo code are included in this repository.
 
 The pipeline requires `NEWS_POSTGRES_DSN`, `NEWS_R2_BUCKET`,
 `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_API_TOKEN`. Model-assisted and source
-workflows additionally use the relevant OpenRouter, Gemini, YouTube, Langfuse,
-and Better Stack variables defined in `src/romanian_news/config.py`.
+workflows additionally use the relevant OpenRouter, Gemini, Fal, YouTube,
+Langfuse, and Better Stack variables defined in `src/romanian_news/config.py`.
+Fal H3 generation reads `FAL_KEY`; `FAL_AI_API_KEY` remains an accepted runtime
+alias for the provider's existing secret name.
 
 The reader requires `APP_PASSWORD` and `SESSION_SECRET`. Production deployments
 should also set `COOKIE_SECURE=true`. Set `TRUST_PROXY_HEADERS=true` only behind

@@ -142,6 +142,7 @@ class PlanningPolicy(NewsModel):
 class PreparedPaidGeneration(NewsModel):
     authorization: GenerationAuthorization
     plan: DigestPlan
+    verified_plan: VerifiedDigestPlan
 
 
 class PlanningExhaustion(NewsModel):
@@ -435,7 +436,11 @@ def _checkpoint_evidence_and_manifest(
     )
     publish_immutable_r2_objects(((manifest.r2_key, manifest.content),))
     checkpoint_edition_verification(lease, manifest_file=manifest, recorded_at=datetime.now(UTC))
-    return PreparedPaidGeneration(authorization=authorization, plan=plan)
+    return PreparedPaidGeneration(
+        authorization=authorization,
+        plan=plan,
+        verified_plan=verified,
+    )
 
 
 def _attempt_file(lease: SlotLease, artifact: PlanningAttemptArtifact) -> ArtifactFile:
