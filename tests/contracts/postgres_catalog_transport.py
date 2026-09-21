@@ -14,13 +14,24 @@ def test_catalog_transaction_commits_the_callback_result(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    recorded_at = datetime.now(UTC)
 
-    def count_artifacts(connection: catalog_transport.CatalogConnection) -> int:
-        row = connection.execute("SELECT count(*) AS total FROM artifacts").fetchone()
-        assert row is not None
-        return int(row["total"])
+    def record_artifact(connection: catalog_transport.CatalogConnection) -> str:
+        connection.execute(
+            "INSERT INTO artifacts "
+            "(id, kind, title, authority_class, lifecycle_state, visibility, created_at) "
+            "VALUES (%s, 'test', 'Committed', 'test', 'active', 'private', %s)",
+            ("artifact-commit", recorded_at),
+        )
+        return "recorded"
 
-    assert catalog_transport.catalog_transaction(count_artifacts) == 0
+    assert catalog_transport.catalog_transaction(record_artifact) == "recorded"
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN) as connection:
+        total = connection.execute(
+            "SELECT count(*) FROM artifacts WHERE id = 'artifact-commit'"
+        ).fetchone()
+    assert total == (1,)
 
 
 def test_catalog_transaction_rolls_back_when_the_callback_fails(

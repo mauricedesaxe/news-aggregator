@@ -16,7 +16,7 @@ def test_ci_covers_the_standalone_project() -> None:
         "uv run --no-sync pytest",
         "uv run --no-sync dg check defs",
         "uv build",
-        "tests/contracts/postgres_news_schema_contract.py",
+        "tests/contracts/postgres_*.py",
         "docker build -f deploy/reader/Dockerfile",
         "http://127.0.0.1:8080/livez",
     ):
