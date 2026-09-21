@@ -117,6 +117,11 @@ class VideoDigestPolicyDefinition(NewsModel):
 
     @model_validator(mode="after")
     def require_exact_prompts_and_schemas(self) -> VideoDigestPolicyDefinition:
+        if (
+            self.policy.planning_model.partition("/")[0]
+            == self.policy.verification_model.partition("/")[0]
+        ):
+            raise ValueError("Planning and verification require independent model families")
         if sha256(self.planning_prompt.encode()) != self.policy.planning_prompt_digest:
             raise ValueError("Planning prompt digest does not match its prompt")
         if sha256(self.verification_prompt.encode()) != self.policy.verification_prompt_digest:
@@ -635,10 +640,13 @@ def _call_model(
     content = response.choices[0].message.content or ""
     parsed = None
     error = None
-    try:
-        parsed = response_type.model_validate_json(content, strict=True)
-    except ValueError as exc:
-        error = str(exc)
+    if response.model != request["model"]:
+        error = "Provider response model does not match the requested policy model"
+    else:
+        try:
+            parsed = response_type.model_validate_json(content, strict=True)
+        except ValueError as exc:
+            error = str(exc)
     status: Literal["accepted", "rejected"] = "accepted" if error is None else "rejected"
     recorded = record_model_attempt(
         response,
