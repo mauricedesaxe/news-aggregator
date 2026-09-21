@@ -11,7 +11,6 @@ import pytest
 import requests
 from pydantic import HttpUrl
 
-from romanian_news import BUCHAREST
 from romanian_news.analysis.attempts import ModelCall
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.analysis.relevance_v3 import (
@@ -26,8 +25,6 @@ from romanian_news.analysis.relevance_v3 import (
 )
 from romanian_news.articles.extraction import article_id, normalize_article_url
 from romanian_news.articles.models import (
-    ArticleAcquisitionFailure,
-    ArticleBatchSkip,
     ArticleFailureKind,
     ExtractedArticle,
 )
@@ -37,9 +34,10 @@ from romanian_news.catalog.artifacts import (
     artifact_statements,
     sha256,
 )
-from romanian_news.catalog_transport import ResearchCatalogError
-from romanian_news.catalog_transport import advance_artifact_current_version_statement
-from romanian_news.daily import DailyArtifactReferences
+from romanian_news.catalog_transport import (
+    ResearchCatalogError,
+    advance_artifact_current_version_statement,
+)
 from romanian_news.feeds import acquisition as feed_acquisition
 from romanian_news.feeds.registry import feed_registry
 from romanian_news.storage import publish_immutable_r2_objects

@@ -2,10 +2,7 @@ from typing import TypedDict
 
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog import artifacts
-from romanian_news.catalog.artifacts import (
-    ArtifactFile,
-    artifact_file,
-)
+from romanian_news.catalog.artifacts import artifact_file
 
 
 class _ArtifactFileArguments(TypedDict):
