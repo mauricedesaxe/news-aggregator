@@ -33,7 +33,7 @@ from romanian_news.video_digest.models import (
     scheduled_slot_id,
 )
 
-RECORDED_AT = datetime(2099, 9, 20, 5, tzinfo=UTC)
+RECORDED_AT = datetime.now(UTC)
 MORNING_AT = datetime(2099, 9, 20, 6, tzinfo=UTC)
 MIDDAY_AT = datetime(2099, 9, 20, 9, tzinfo=UTC)
 
