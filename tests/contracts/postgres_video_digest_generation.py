@@ -1196,6 +1196,7 @@ def test_generation_request_rejects_story_budget_exhaustion(
     ensure_news_catalog_schema()
     pipeline = _GenerationPipeline(seed=37)
     pipeline.checkpoint_plan()
+    pipeline.verify_story(0)
     admission = pipeline.generation_admission(story_limit_usd=Decimal("6"))
     pipeline.start_request(0, admission=admission)
     pipeline.fail_attempt(0, measured="0.10")
@@ -1215,6 +1216,7 @@ def test_generation_request_rejects_a_changed_scope_limit(
     ensure_news_catalog_schema()
     pipeline = _GenerationPipeline(seed=38)
     pipeline.checkpoint_plan()
+    pipeline.verify_story(0)
     pipeline.start_request(0)
     pipeline.fail_attempt(0, measured="0.10")
 
@@ -1230,6 +1232,7 @@ def test_generation_request_admission_is_immutable(postgres_news_schema: str) ->
     ensure_news_catalog_schema()
     pipeline = _GenerationPipeline(seed=39)
     pipeline.checkpoint_plan()
+    pipeline.verify_story(0)
     pipeline.start_request(0)
 
     assert news_schema.NEWS_POSTGRES_DSN is not None
