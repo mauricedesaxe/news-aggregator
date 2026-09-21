@@ -13,7 +13,10 @@ from romanian_news import NewsModel, Sha256
 from romanian_news.catalog.artifacts import (
     ArtifactFile,
     CatalogArtifactReference,
+    artifact_file,
     artifact_statements,
+    canonical_json,
+    sha256,
 )
 from romanian_news.catalog_transport import (
     CatalogConnection,
@@ -31,6 +34,7 @@ from romanian_news.video_digest.models import (
     AssembledVideo,
     AttemptCost,
     AvailableSubtitles,
+    BusySlot,
     ClaimedSlot,
     ClaimResult,
     DigestPlan,
@@ -60,8 +64,10 @@ from romanian_news.video_digest.models import (
     PublishedStory,
     PublishedSubtitleAvailable,
     PublishedSubtitleFailed,
+    ReacquireResult,
     ScheduledSlot,
     SkippedSlot,
+    SlotFailureReason,
     SlotId,
     SlotLease,
     SlotName,
@@ -69,12 +75,31 @@ from romanian_news.video_digest.models import (
     SlotStage,
     StoryId,
     SubtitleOutcome,
+    SubtitleState,
     TerminalSlot,
     TerminalSlotState,
     UnknownAttemptCost,
     UploadedPublication,
     UploadingPublication,
     VerifiedPublication,
+)
+from romanian_news.video_digest.orchestration import (
+    AssemblyAttemptReference,
+    AssemblyResume,
+    AvailablePublicationSubtitles,
+    FailedPublicationSubtitles,
+    FailedResume,
+    GenerationResume,
+    MediaArtifactReference,
+    PlanningResume,
+    PublicationHandoff,
+    PublicationResume,
+    PublishedResume,
+    ScheduledResume,
+    SkippedResume,
+    SlotResumeState,
+    SubtitleAttemptReference,
+    SubtitleResume,
 )
 
 _ACTIVE_STAGES = frozenset(
@@ -87,7 +112,6 @@ _ACTIVE_STAGES = frozenset(
         SlotStage.PUBLISHING,
     }
 )
-_TERMINAL_STAGES = frozenset({SlotStage.SKIPPED, SlotStage.FAILED, SlotStage.PUBLISHED})
 _Result = TypeVar("_Result")
 
 
@@ -112,6 +136,330 @@ class GenerationAttemptReference(NewsModel):
     response_evidence: CatalogArtifactReference | None
     accepted_clip: AcceptedClipReference | None = None
     validation_evidence: CatalogArtifactReference | None = None
+
+
+def read_slot_resume_state(slot_id: SlotId) -> SlotResumeState:
+    rows = catalog_query(
+        """
+        SELECT slot.slot_id, slot.name, slot.scheduled_at, slot.bucharest_day,
+               slot.stage, slot.edition_id, slot.lease_owner_token,
+               slot.lease_expires_at, slot.claim_count, slot.skip_reason,
+               slot.failure_reason,
+               edition.assembled_video_artifact_version_id,
+               edition.subtitle_state, edition.subtitle_artifact_version_id,
+               video_artifact.id AS video_artifact_id,
+               video_version.id AS video_version_id,
+               video_file.content_digest AS video_content_digest,
+               video_file.r2_key AS video_r2_key,
+               video_file.byte_size AS video_byte_size,
+               video_file.media_type AS video_media_type,
+               subtitle_artifact.id AS subtitle_artifact_id,
+               subtitle_version.id AS subtitle_version_id,
+               subtitle_file.content_digest AS subtitle_content_digest,
+               subtitle_file.r2_key AS subtitle_r2_key,
+               subtitle_file.byte_size AS subtitle_byte_size,
+               subtitle_file.media_type AS subtitle_media_type
+        FROM video_digest_slots AS slot
+        LEFT JOIN video_digest_editions AS edition ON edition.edition_id = slot.edition_id
+        LEFT JOIN artifact_versions AS video_version
+          ON video_version.id = edition.assembled_video_artifact_version_id
+        LEFT JOIN artifacts AS video_artifact ON video_artifact.id = video_version.artifact_id
+        LEFT JOIN artifact_files AS video_file
+          ON video_file.artifact_version_id = video_version.id
+        LEFT JOIN artifact_versions AS subtitle_version
+          ON subtitle_version.id = edition.subtitle_artifact_version_id
+        LEFT JOIN artifacts AS subtitle_artifact
+          ON subtitle_artifact.id = subtitle_version.artifact_id
+        LEFT JOIN artifact_files AS subtitle_file
+          ON subtitle_file.artifact_version_id = subtitle_version.id
+        WHERE slot.slot_id = %s
+        """,
+        [slot_id],
+    )
+    if len(rows) != 1:
+        raise ResearchCatalogError("PostgreSQL did not return one video digest slot")
+    row = rows[0]
+    slot = _scheduled_slot_from_row(row)
+    stage = SlotStage(str(row["stage"]))
+    if stage == SlotStage.SCHEDULED:
+        return ScheduledResume(slot=slot)
+    if stage == SlotStage.SKIPPED:
+        return SkippedResume(slot=slot, reason=SlotSkipReason(str(row["skip_reason"])))
+    if stage == SlotStage.FAILED:
+        return FailedResume(slot=slot, reason=SlotFailureReason(str(row["failure_reason"])))
+    if stage == SlotStage.PUBLISHED:
+        return PublishedResume(slot=slot)
+    lease = _resume_lease(row)
+    if stage in {SlotStage.CLAIMED, SlotStage.PLANNING}:
+        return PlanningResume(slot=slot, lease=lease)
+    if stage == SlotStage.GENERATING:
+        return GenerationResume(slot=slot, lease=lease)
+    if stage == SlotStage.ASSEMBLING:
+        return AssemblyResume(
+            slot=slot,
+            lease=lease,
+            attempts=read_assembly_attempts(lease.edition_id),
+        )
+    video = _media_reference(row, "video")
+    if stage == SlotStage.SUBTITLING:
+        return SubtitleResume(
+            slot=slot,
+            lease=lease,
+            video=video,
+            attempts=read_subtitle_attempts(lease.edition_id),
+        )
+    subtitle_state = SubtitleState(str(row["subtitle_state"]))
+    if subtitle_state == SubtitleState.PENDING:
+        raise ResearchCatalogError("Publishing video digest slot still has pending subtitles")
+    subtitles = (
+        AvailablePublicationSubtitles(artifact=_media_reference(row, "subtitle"))
+        if subtitle_state == SubtitleState.AVAILABLE
+        else FailedPublicationSubtitles()
+    )
+    return PublicationResume(
+        slot=slot,
+        lease=lease,
+        handoff=PublicationHandoff(
+            slot_id=slot.slot_id,
+            edition_id=lease.edition_id,
+            slot_name=slot.name.value,
+            scheduled_at=slot.scheduled_at,
+            video=video,
+            subtitles=subtitles,
+        ),
+    )
+
+
+def read_assembly_attempts(edition_id: EditionId) -> tuple[AssemblyAttemptReference, ...]:
+    rows = catalog_query(
+        """
+        SELECT attempt.attempt_index, attempt.disposition,
+               evidence_artifact.id AS evidence_artifact_id,
+               evidence_version.id AS evidence_version_id,
+               evidence_file.content_digest AS evidence_content_digest,
+               evidence_file.r2_key AS evidence_r2_key,
+               video_artifact.id AS video_artifact_id,
+               video_version.id AS video_version_id,
+               video_file.content_digest AS video_content_digest,
+               video_file.r2_key AS video_r2_key,
+               video_file.byte_size AS video_byte_size,
+               video_file.media_type AS video_media_type,
+               manifest_artifact.id AS manifest_artifact_id,
+               manifest_version.id AS manifest_version_id,
+               manifest_file.content_digest AS manifest_content_digest,
+               manifest_file.r2_key AS manifest_r2_key
+        FROM video_digest_assembly_attempts AS attempt
+        JOIN artifact_versions AS evidence_version
+          ON evidence_version.id = attempt.evidence_artifact_version_id
+        JOIN artifacts AS evidence_artifact ON evidence_artifact.id = evidence_version.artifact_id
+        JOIN artifact_files AS evidence_file
+          ON evidence_file.artifact_version_id = evidence_version.id
+        LEFT JOIN artifact_versions AS video_version
+          ON video_version.id = attempt.assembled_video_artifact_version_id
+        LEFT JOIN artifacts AS video_artifact ON video_artifact.id = video_version.artifact_id
+        LEFT JOIN artifact_files AS video_file ON video_file.artifact_version_id = video_version.id
+        LEFT JOIN artifact_versions AS manifest_version
+          ON manifest_version.id = attempt.assembly_manifest_artifact_version_id
+        LEFT JOIN artifacts AS manifest_artifact
+          ON manifest_artifact.id = manifest_version.artifact_id
+        LEFT JOIN artifact_files AS manifest_file
+          ON manifest_file.artifact_version_id = manifest_version.id
+        WHERE attempt.edition_id = %s
+        ORDER BY attempt.attempt_index
+        """,
+        [edition_id],
+    )
+    attempts = tuple(
+        AssemblyAttemptReference(
+            attempt_index=int(row["attempt_index"]),
+            disposition=_attempt_disposition(row["disposition"]),
+            evidence=_catalog_reference(row, "evidence"),
+            video=_optional_media_reference(row, "video"),
+            manifest=_optional_catalog_reference(row, "manifest"),
+        )
+        for row in rows
+    )
+    _require_contiguous_attempts(attempts)
+    return attempts
+
+
+def read_subtitle_attempts(edition_id: EditionId) -> tuple[SubtitleAttemptReference, ...]:
+    rows = catalog_query(
+        """
+        SELECT attempt.attempt_index, attempt.strategy, attempt.disposition,
+               evidence_artifact.id AS evidence_artifact_id,
+               evidence_version.id AS evidence_version_id,
+               evidence_file.content_digest AS evidence_content_digest,
+               evidence_file.r2_key AS evidence_r2_key,
+               subtitle_artifact.id AS subtitle_artifact_id,
+               subtitle_version.id AS subtitle_version_id,
+               subtitle_file.content_digest AS subtitle_content_digest,
+               subtitle_file.r2_key AS subtitle_r2_key,
+               subtitle_file.byte_size AS subtitle_byte_size,
+               subtitle_file.media_type AS subtitle_media_type
+        FROM video_digest_subtitle_attempts AS attempt
+        JOIN artifact_versions AS evidence_version
+          ON evidence_version.id = attempt.evidence_artifact_version_id
+        JOIN artifacts AS evidence_artifact ON evidence_artifact.id = evidence_version.artifact_id
+        JOIN artifact_files AS evidence_file
+          ON evidence_file.artifact_version_id = evidence_version.id
+        LEFT JOIN artifact_versions AS subtitle_version
+          ON subtitle_version.id = attempt.subtitle_artifact_version_id
+        LEFT JOIN artifacts AS subtitle_artifact
+          ON subtitle_artifact.id = subtitle_version.artifact_id
+        LEFT JOIN artifact_files AS subtitle_file
+          ON subtitle_file.artifact_version_id = subtitle_version.id
+        WHERE attempt.edition_id = %s
+        ORDER BY attempt.attempt_index
+        """,
+        [edition_id],
+    )
+    attempts = tuple(
+        SubtitleAttemptReference(
+            attempt_index=int(row["attempt_index"]),
+            strategy=_subtitle_strategy(row["strategy"]),
+            disposition=_attempt_disposition(row["disposition"]),
+            evidence=_catalog_reference(row, "evidence"),
+            subtitle=_optional_media_reference(row, "subtitle"),
+        )
+        for row in rows
+    )
+    _require_contiguous_attempts(attempts)
+    return attempts
+
+
+def _resume_lease(row: Mapping[str, Any]) -> SlotLease:
+    return SlotLease.model_validate(
+        {
+            "slot_id": row["slot_id"],
+            "edition_id": row["edition_id"],
+            "owner_token": row["lease_owner_token"],
+            "expires_at": _datetime(row["lease_expires_at"]),
+            "claim_count": row["claim_count"],
+        },
+        strict=True,
+    )
+
+
+def _catalog_reference(row: Mapping[str, Any], prefix: str) -> CatalogArtifactReference:
+    return CatalogArtifactReference.model_validate(
+        {
+            "artifact_id": row[f"{prefix}_artifact_id"],
+            "version_id": row[f"{prefix}_version_id"],
+            "content_digest": row[f"{prefix}_content_digest"],
+            "r2_key": row[f"{prefix}_r2_key"],
+        },
+        strict=True,
+    )
+
+
+def _optional_catalog_reference(
+    row: Mapping[str, Any], prefix: str
+) -> CatalogArtifactReference | None:
+    return None if row[f"{prefix}_version_id"] is None else _catalog_reference(row, prefix)
+
+
+def _media_reference(row: Mapping[str, Any], prefix: str) -> MediaArtifactReference:
+    return MediaArtifactReference.model_validate(
+        {
+            **_catalog_reference(row, prefix).model_dump(),
+            "byte_size": row[f"{prefix}_byte_size"],
+            "media_type": row[f"{prefix}_media_type"],
+        },
+        strict=True,
+    )
+
+
+def _optional_media_reference(row: Mapping[str, Any], prefix: str) -> MediaArtifactReference | None:
+    return None if row[f"{prefix}_version_id"] is None else _media_reference(row, prefix)
+
+
+def _require_contiguous_attempts(
+    attempts: Sequence[AssemblyAttemptReference | SubtitleAttemptReference],
+) -> None:
+    if tuple(item.attempt_index for item in attempts) != tuple(range(len(attempts))):
+        raise VideoDigestCheckpointConflictError("Stored video digest attempts are not contiguous")
+    if any(item.disposition == "succeeded" for item in attempts[:-1]):
+        raise VideoDigestCheckpointConflictError("Successful video digest attempt must be final")
+
+
+def _attempt_disposition(value: object) -> Literal["failed", "succeeded"]:
+    text = str(value)
+    if text == "failed":
+        return "failed"
+    if text == "succeeded":
+        return "succeeded"
+    raise ResearchCatalogError("Stored video digest attempt disposition is invalid")
+
+
+def _subtitle_strategy(
+    value: object,
+) -> Literal["whole-edition-v1", "per-story-v1", "per-story-without-vad-v1"]:
+    text = str(value)
+    if text == "whole-edition-v1":
+        return "whole-edition-v1"
+    if text == "per-story-v1":
+        return "per-story-v1"
+    if text == "per-story-without-vad-v1":
+        return "per-story-without-vad-v1"
+    raise ResearchCatalogError("Stored video digest subtitle strategy is invalid")
+
+
+def _optional_string(value: object) -> str | None:
+    return str(value) if value is not None else None
+
+
+def _file_catalog_reference(file: ArtifactFile) -> CatalogArtifactReference:
+    return CatalogArtifactReference(
+        artifact_id=file.artifact_id,
+        version_id=file.version_id,
+        content_digest=file.content_digest,
+        r2_key=file.r2_key,
+    )
+
+
+def _file_media_reference(file: ArtifactFile) -> MediaArtifactReference:
+    return MediaArtifactReference(
+        **_file_catalog_reference(file).model_dump(),
+        byte_size=len(file.content),
+        media_type=file.media_type,
+    )
+
+
+def _assembly_attempt_reference(
+    attempt_index: int,
+    disposition: Literal["failed", "succeeded"],
+    evidence_file: ArtifactFile,
+    video_file: ArtifactFile | None,
+    manifest_file: ArtifactFile | None,
+) -> AssemblyAttemptReference:
+    return AssemblyAttemptReference(
+        attempt_index=attempt_index,
+        disposition=disposition,
+        evidence=_file_catalog_reference(evidence_file),
+        video=_file_media_reference(video_file) if video_file is not None else None,
+        manifest=(_file_catalog_reference(manifest_file) if manifest_file is not None else None),
+    )
+
+
+def _subtitle_attempt_reference(
+    attempt_index: int,
+    strategy: Literal[
+        "whole-edition-v1",
+        "per-story-v1",
+        "per-story-without-vad-v1",
+    ],
+    disposition: Literal["failed", "succeeded"],
+    evidence_file: ArtifactFile,
+    subtitle_file: ArtifactFile | None,
+) -> SubtitleAttemptReference:
+    return SubtitleAttemptReference(
+        attempt_index=attempt_index,
+        strategy=strategy,
+        disposition=disposition,
+        evidence=_file_catalog_reference(evidence_file),
+        subtitle=(_file_media_reference(subtitle_file) if subtitle_file is not None else None),
+    )
 
 
 def read_generation_attempts(edition_id: EditionId) -> tuple[GenerationAttemptReference, ...]:
@@ -352,16 +700,11 @@ def claim_slot(
         stage = SlotStage(str(row["stage"]))
         if stage == SlotStage.SKIPPED:
             return SkippedSlot(reason=SlotSkipReason(str(row["skip_reason"])))
-        if stage in _TERMINAL_STAGES:
+        if stage in {SlotStage.FAILED, SlotStage.PUBLISHED}:
             return TerminalSlot(state=TerminalSlotState(stage.value))
         if stage in _ACTIVE_STAGES:
-            return _claim_active_slot(
-                connection,
-                row,
-                edition,
-                owner=owner,
-                now=current,
-                expires_at=expires_at,
+            raise VideoDigestCheckpointConflictError(
+                "Active video digest slots must be reacquired without an edition claim"
             )
         if stage != SlotStage.SCHEDULED:
             raise VideoDigestCheckpointConflictError(
@@ -377,6 +720,38 @@ def claim_slot(
         )
 
     return _checkpoint_transaction(claim)
+
+
+def reacquire_slot(
+    slot_id: SlotId,
+    *,
+    owner_token: str,
+    now: datetime,
+    lease_duration: timedelta,
+) -> ReacquireResult:
+    _utc(now, "now")
+    duration = _positive_duration(lease_duration)
+    owner = _owner_token(owner_token)
+
+    def reacquire(connection: CatalogConnection) -> ReacquireResult:
+        row = _lock_slot(connection, slot_id)
+        current = _database_now(connection)
+        stage = SlotStage(str(row["stage"]))
+        if stage in {SlotStage.FAILED, SlotStage.PUBLISHED}:
+            return TerminalSlot(state=TerminalSlotState(stage.value))
+        if stage not in _ACTIVE_STAGES:
+            raise VideoDigestCheckpointConflictError(
+                "Only an active video digest slot can be reacquired"
+            )
+        return _reacquire_active_slot(
+            connection,
+            row,
+            owner=owner,
+            now=current,
+            expires_at=current + duration,
+        )
+
+    return _checkpoint_transaction(reacquire)
 
 
 def renew_slot(
@@ -1461,6 +1836,150 @@ def checkpoint_assembled_video(
     return _checkpoint_transaction(checkpoint)
 
 
+def record_assembly_attempt(
+    lease: SlotLease,
+    attempt_index: int,
+    disposition: Literal["failed", "succeeded"],
+    *,
+    evidence_file: ArtifactFile,
+    video_file: ArtifactFile | None = None,
+    manifest_file: ArtifactFile | None = None,
+    recorded_at: datetime,
+) -> AssemblyAttemptReference:
+    _utc(recorded_at, "recorded_at")
+    if attempt_index not in (0, 1, 2):
+        raise ValueError("Assembly attempt index must be 0, 1, or 2")
+    if disposition == "succeeded":
+        if video_file is None or manifest_file is None or evidence_file != manifest_file:
+            raise ValueError("Successful assembly requires its video and manifest evidence")
+        if (
+            video_file.artifact_id != f"{lease.edition_id}:assembled-video"
+            or video_file.artifact_kind != "video_digest_assembled_video"
+            or manifest_file.artifact_id != f"{lease.edition_id}:assembly-manifest"
+            or manifest_file.artifact_kind != "video_digest_assembly_manifest"
+        ):
+            raise ValueError("Successful assembly artifact identity is invalid")
+    elif video_file is not None or manifest_file is not None:
+        raise ValueError("Failed assembly cannot include completed media")
+    elif (
+        evidence_file.artifact_kind != "video_digest_assembly_attempt"
+        or evidence_file.artifact_id != f"{lease.edition_id}:{attempt_index}:assembly-attempt"
+    ) and not (
+        attempt_index == 2
+        and evidence_file.artifact_kind == "video_digest_failure"
+        and evidence_file.artifact_id == f"{lease.slot_id}:failure"
+    ):
+        raise ValueError("Assembly failure evidence identity is invalid")
+
+    def checkpoint(connection: CatalogConnection) -> AssemblyAttemptReference:
+        slot_row = _lock_slot(connection, lease.slot_id)
+        if str(slot_row["stage"]) == SlotStage.FAILED.value:
+            if not _terminal_fence_matches(slot_row, lease):
+                raise VideoDigestLeaseLostError("Video digest slot lease was lost")
+            current = None
+        else:
+            current = _validate_locked_lease(connection, slot_row, lease)
+        stored = connection.execute(
+            """
+            SELECT attempt_index, disposition, evidence_artifact_version_id,
+                   assembled_video_artifact_version_id,
+                   assembly_manifest_artifact_version_id
+            FROM video_digest_assembly_attempts
+            WHERE edition_id = %s AND attempt_index = %s
+            FOR UPDATE
+            """,
+            (lease.edition_id, attempt_index),
+        ).fetchone()
+        if stored is not None:
+            expected = (
+                attempt_index,
+                disposition,
+                evidence_file.version_id,
+                video_file.version_id if video_file is not None else None,
+                manifest_file.version_id if manifest_file is not None else None,
+            )
+            actual = (
+                int(stored["attempt_index"]),
+                str(stored["disposition"]),
+                str(stored["evidence_artifact_version_id"]),
+                _optional_string(stored["assembled_video_artifact_version_id"]),
+                _optional_string(stored["assembly_manifest_artifact_version_id"]),
+            )
+            if actual != expected or not _stored_artifact_matches(connection, evidence_file):
+                raise VideoDigestCheckpointConflictError(
+                    "Stored assembly attempt conflicts with the request"
+                )
+            if video_file is not None and not _stored_artifact_matches(connection, video_file):
+                raise VideoDigestCheckpointConflictError(
+                    "Stored assembly attempt conflicts with the request"
+                )
+            return _assembly_attempt_reference(
+                attempt_index, disposition, evidence_file, video_file, manifest_file
+            )
+        if current is None or str(slot_row["stage"]) != SlotStage.ASSEMBLING.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with the assembly attempt"
+            )
+        _register_artifact(connection, evidence_file, current)
+        if video_file is not None:
+            _register_artifact(connection, video_file, current)
+        connection.execute(
+            """
+            INSERT INTO video_digest_assembly_attempts
+                (edition_id, attempt_index, disposition, evidence_artifact_version_id,
+                 assembled_video_artifact_version_id,
+                 assembly_manifest_artifact_version_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                lease.edition_id,
+                attempt_index,
+                disposition,
+                evidence_file.version_id,
+                video_file.version_id if video_file is not None else None,
+                manifest_file.version_id if manifest_file is not None else None,
+                current,
+            ),
+        )
+        if disposition == "succeeded":
+            assert video_file is not None and manifest_file is not None
+            _execute_returning(
+                connection,
+                """
+                UPDATE video_digest_editions
+                SET assembled_video_artifact_version_id = %s,
+                    assembly_manifest_artifact_version_id = %s, updated_at = %s
+                WHERE edition_id = %s AND assembled_video_artifact_version_id IS NULL
+                RETURNING edition_id
+                """,
+                (video_file.version_id, manifest_file.version_id, current, lease.edition_id),
+                VideoDigestCheckpointConflictError(
+                    "Stored video digest edition conflicts with assembly completion"
+                ),
+            )
+            _advance_slot(
+                connection,
+                lease,
+                current,
+                from_stage=SlotStage.ASSEMBLING,
+                to_stage=SlotStage.SUBTITLING,
+            )
+        elif attempt_index == 2:
+            _terminalize_slot(
+                connection,
+                lease,
+                current,
+                stage=SlotStage.FAILED,
+                failure_version=evidence_file.version_id,
+                failure_reason=SlotFailureReason.TERMINAL_FAILURE,
+            )
+        return _assembly_attempt_reference(
+            attempt_index, disposition, evidence_file, video_file, manifest_file
+        )
+
+    return _checkpoint_transaction(checkpoint)
+
+
 def checkpoint_subtitles(
     lease: SlotLease,
     outcome: SubtitleOutcome,
@@ -1545,6 +2064,145 @@ def checkpoint_subtitles(
             to_stage=SlotStage.PUBLISHING,
         )
         return outcome
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def record_subtitle_attempt(
+    lease: SlotLease,
+    attempt_index: int,
+    strategy: Literal[
+        "whole-edition-v1",
+        "per-story-v1",
+        "per-story-without-vad-v1",
+    ],
+    disposition: Literal["failed", "succeeded"],
+    *,
+    evidence_file: ArtifactFile,
+    subtitle_file: ArtifactFile | None = None,
+    recorded_at: datetime,
+) -> SubtitleAttemptReference:
+    _utc(recorded_at, "recorded_at")
+    strategies = (
+        "whole-edition-v1",
+        "per-story-v1",
+        "per-story-without-vad-v1",
+    )
+    if attempt_index not in (0, 1, 2) or strategy != strategies[attempt_index]:
+        raise ValueError("Subtitle attempt does not match the fixed strategy sequence")
+    if disposition == "succeeded":
+        if subtitle_file is None or evidence_file != subtitle_file:
+            raise ValueError("Successful subtitle attempt requires its subtitle evidence")
+        if (
+            subtitle_file.artifact_id != f"{lease.edition_id}:subtitles"
+            or subtitle_file.artifact_kind != "video_digest_subtitles"
+        ):
+            raise ValueError("Subtitle artifact identity is invalid")
+    elif subtitle_file is not None:
+        raise ValueError("Failed subtitle attempt cannot include subtitles")
+    elif (
+        evidence_file.artifact_kind != "video_digest_subtitle_attempt"
+        or evidence_file.artifact_id != f"{lease.edition_id}:{attempt_index}:subtitle-attempt"
+    ) and not (
+        attempt_index == 2
+        and evidence_file.artifact_kind == "video_digest_subtitle_failure"
+        and evidence_file.artifact_id == f"{lease.edition_id}:subtitle-failure"
+    ):
+        raise ValueError("Subtitle failure evidence identity is invalid")
+
+    def checkpoint(connection: CatalogConnection) -> SubtitleAttemptReference:
+        slot_row, current = _lock_slot_for_lease(connection, lease)
+        stored = connection.execute(
+            """
+            SELECT attempt_index, strategy, disposition, evidence_artifact_version_id,
+                   subtitle_artifact_version_id
+            FROM video_digest_subtitle_attempts
+            WHERE edition_id = %s AND attempt_index = %s
+            FOR UPDATE
+            """,
+            (lease.edition_id, attempt_index),
+        ).fetchone()
+        if stored is not None:
+            expected = (
+                attempt_index,
+                strategy,
+                disposition,
+                evidence_file.version_id,
+                subtitle_file.version_id if subtitle_file is not None else None,
+            )
+            actual = (
+                int(stored["attempt_index"]),
+                str(stored["strategy"]),
+                str(stored["disposition"]),
+                str(stored["evidence_artifact_version_id"]),
+                _optional_string(stored["subtitle_artifact_version_id"]),
+            )
+            if actual != expected or not _stored_artifact_matches(connection, evidence_file):
+                raise VideoDigestCheckpointConflictError(
+                    "Stored subtitle attempt conflicts with the request"
+                )
+            return _subtitle_attempt_reference(
+                attempt_index, strategy, disposition, evidence_file, subtitle_file
+            )
+        if str(slot_row["stage"]) != SlotStage.SUBTITLING.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with the subtitle attempt"
+            )
+        _register_artifact(connection, evidence_file, current)
+        connection.execute(
+            """
+            INSERT INTO video_digest_subtitle_attempts
+                (edition_id, attempt_index, strategy, disposition,
+                 evidence_artifact_version_id, subtitle_artifact_version_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                lease.edition_id,
+                attempt_index,
+                strategy,
+                disposition,
+                evidence_file.version_id,
+                subtitle_file.version_id if subtitle_file is not None else None,
+                current,
+            ),
+        )
+        if disposition == "succeeded":
+            assert subtitle_file is not None
+            subtitle_state = SubtitleState.AVAILABLE.value
+            subtitle_version = subtitle_file.version_id
+            failure_version = None
+        elif attempt_index == 2:
+            subtitle_state = SubtitleState.FAILED.value
+            subtitle_version = None
+            failure_version = evidence_file.version_id
+        else:
+            return _subtitle_attempt_reference(
+                attempt_index, strategy, disposition, evidence_file, subtitle_file
+            )
+        _execute_returning(
+            connection,
+            """
+            UPDATE video_digest_editions
+            SET subtitle_state = %s, subtitle_artifact_version_id = %s,
+                subtitle_failure_evidence_artifact_version_id = %s, updated_at = %s
+            WHERE edition_id = %s AND subtitle_state = 'pending'
+            RETURNING edition_id
+            """,
+            (subtitle_state, subtitle_version, failure_version, current, lease.edition_id),
+            VideoDigestCheckpointConflictError(
+                "Stored video digest edition conflicts with subtitle completion"
+            ),
+        )
+        _advance_slot(
+            connection,
+            lease,
+            current,
+            from_stage=SlotStage.SUBTITLING,
+            to_stage=SlotStage.PUBLISHING,
+        )
+        return _subtitle_attempt_reference(
+            attempt_index, strategy, disposition, evidence_file, subtitle_file
+        )
 
     return _checkpoint_transaction(checkpoint)
 
@@ -1797,6 +2455,7 @@ def complete_publication(
             current,
             stage=SlotStage.PUBLISHED,
             failure_version=None,
+            failure_reason=None,
         )
         return PublishedPublication(
             publication_id=publication_id,
@@ -1863,6 +2522,87 @@ def fail_slot(
             current,
             stage=SlotStage.FAILED,
             failure_version=evidence_file.version_id,
+            failure_reason=SlotFailureReason.TERMINAL_FAILURE,
+        )
+        return TerminalSlot(state=TerminalSlotState.FAILED)
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def fail_slot_deadline(
+    lease: SlotLease,
+    *,
+    recorded_at: datetime,
+) -> TerminalSlot:
+    _utc(recorded_at, "recorded_at")
+    content = canonical_json(
+        {
+            "edition_id": lease.edition_id,
+            "reason": SlotFailureReason.DEADLINE.value,
+            "slot_id": lease.slot_id,
+        }
+    )
+    evidence_file = artifact_file(
+        artifact_id=f"{lease.slot_id}:failure",
+        artifact_kind="video_digest_failure",
+        title=f"Video digest deadline failure for {lease.slot_id}",
+        content=content,
+        r2_key=(
+            f"news/video-digest/{lease.edition_id}/" f"deadline-failure-{sha256(content)}.json"
+        ),
+        media_type="application/json",
+    )
+
+    def checkpoint(connection: CatalogConnection) -> TerminalSlot:
+        slot_row = _lock_slot(connection, lease.slot_id)
+        if str(slot_row["stage"]) == SlotStage.FAILED.value:
+            _require_terminal_failure_replay(connection, slot_row, lease, evidence_file)
+            if str(slot_row["failure_reason"]) != SlotFailureReason.DEADLINE.value:
+                raise VideoDigestCheckpointConflictError(
+                    "Stored video digest failure reason conflicts with the deadline"
+                )
+            return TerminalSlot(state=TerminalSlotState.FAILED)
+        current = _validate_locked_lease(connection, slot_row, lease)
+        _register_artifact(connection, evidence_file, current)
+        connection.execute(
+            """
+            UPDATE video_digest_generation_requests
+            SET stage = 'failed', failure_evidence_artifact_version_id = %s,
+                cost_kind = 'unknown', cost_usd = NULL,
+                cost_unknown_reason = 'deadline', updated_at = %s
+            WHERE edition_id = %s AND stage IN ('pending', 'submitted', 'processing')
+            """,
+            (evidence_file.version_id, current, lease.edition_id),
+        )
+        connection.execute(
+            """
+            UPDATE video_digest_stories
+            SET stage = 'failed', failure_evidence_artifact_version_id = %s,
+                updated_at = %s
+            WHERE edition_id = %s
+              AND stage IN ('planned', 'verifying', 'verified', 'generating')
+              AND accepted_clip_artifact_version_id IS NULL
+              AND failure_evidence_artifact_version_id IS NULL
+            """,
+            (evidence_file.version_id, current, lease.edition_id),
+        )
+        connection.execute(
+            """
+            UPDATE video_digest_publication_intents
+            SET stage = 'failed', failure_evidence_artifact_version_id = %s,
+                updated_at = %s
+            WHERE edition_id = %s
+              AND stage IN ('pending', 'uploading', 'uploaded', 'verified')
+            """,
+            (evidence_file.version_id, current, lease.edition_id),
+        )
+        _terminalize_slot(
+            connection,
+            lease,
+            current,
+            stage=SlotStage.FAILED,
+            failure_version=evidence_file.version_id,
+            failure_reason=SlotFailureReason.DEADLINE,
         )
         return TerminalSlot(state=TerminalSlotState.FAILED)
 
@@ -1936,6 +2676,7 @@ def fail_publication(
             current,
             stage=SlotStage.FAILED,
             failure_version=evidence_file.version_id,
+            failure_reason=SlotFailureReason.TERMINAL_FAILURE,
         )
         return TerminalSlot(state=TerminalSlotState.FAILED)
 
@@ -2297,6 +3038,7 @@ def _terminalize_slot(
     *,
     stage: Literal[SlotStage.FAILED, SlotStage.PUBLISHED],
     failure_version: str | None,
+    failure_reason: SlotFailureReason | None,
 ) -> None:
     _execute_returning(
         connection,
@@ -2305,7 +3047,8 @@ def _terminalize_slot(
         SET stage = %s, lease_owner_token = NULL, lease_expires_at = NULL,
             terminal_lease_owner_token = %s, terminal_lease_expires_at = %s,
             terminal_claim_count = %s,
-            failure_evidence_artifact_version_id = %s, updated_at = %s
+            failure_evidence_artifact_version_id = %s, failure_reason = %s,
+            updated_at = %s
         WHERE slot_id = %s AND edition_id = %s AND lease_owner_token = %s
           AND lease_expires_at = %s AND claim_count = %s
           AND stage IN ('claimed', 'planning', 'generating', 'assembling',
@@ -2318,6 +3061,7 @@ def _terminalize_slot(
             lease.expires_at,
             lease.claim_count,
             failure_version,
+            failure_reason.value if failure_reason is not None else None,
             current,
             lease.slot_id,
             lease.edition_id,
@@ -2420,41 +3164,31 @@ def _public_media_url(base_url: str, raw_key: object) -> str:
     return f"{base_url}/{key}"
 
 
-def _claim_active_slot(
+def _reacquire_active_slot(
     connection: CatalogConnection,
     row: Mapping[str, Any],
-    edition: EditionIdentity,
     *,
     owner: str,
     now: datetime,
     expires_at: datetime,
-) -> ClaimResult:
-    stored_edition_id = str(row["edition_id"])
+) -> ReacquireResult:
+    edition_id = EditionId(str(row["edition_id"]))
     stored_owner = str(row["lease_owner_token"])
     stored_expiry = _datetime(row["lease_expires_at"])
     claim_count = int(row["claim_count"])
     slot_id = SlotId(str(row["slot_id"]))
 
-    if stored_edition_id != edition.edition_id:
-        raise VideoDigestCheckpointConflictError(
-            "Active video digest lease belongs to another edition"
-        )
     if stored_expiry > now:
         if stored_owner != owner:
-            return SkippedSlot(reason=SlotSkipReason.OVERLAPPING_RUN)
+            return BusySlot(retry_at=stored_expiry)
         return ClaimedSlot(
             lease=SlotLease(
                 slot_id=slot_id,
-                edition_id=edition.edition_id,
+                edition_id=edition_id,
                 owner_token=owner,
                 expires_at=stored_expiry,
                 claim_count=claim_count,
             )
-        )
-
-    if stored_owner == owner:
-        raise VideoDigestCheckpointConflictError(
-            "Expired video digest lease recovery requires a fresh owner token"
         )
 
     next_claim_count = claim_count + 1
@@ -2470,7 +3204,7 @@ def _claim_active_slot(
     return ClaimedSlot(
         lease=SlotLease(
             slot_id=slot_id,
-            edition_id=edition.edition_id,
+            edition_id=edition_id,
             owner_token=owner,
             expires_at=expires_at,
             claim_count=next_claim_count,
@@ -2588,6 +3322,7 @@ def _lock_slot(connection: CatalogConnection, slot_id: SlotId) -> Mapping[str, A
         """
         SELECT slot_id, name, scheduled_at, bucharest_day, stage, edition_id,
                lease_owner_token, lease_expires_at, claim_count, skip_reason,
+               failure_reason,
                terminal_lease_owner_token, terminal_lease_expires_at,
                terminal_claim_count
         FROM video_digest_slots

@@ -22,6 +22,7 @@ from romanian_news.worker.definitions import (
     hourly_registered_feed_poll,
     morning_report_check,
     news_automation,
+    scheduled_video_digest,
     weekly_news_report,
     weekly_report_job,
     youtube_approved_publication,
@@ -63,6 +64,7 @@ def test_automation_starts_running_and_uses_bucharest_time() -> None:
     assert hourly_registered_feed_poll.default_status == dg.DefaultScheduleStatus.RUNNING
     assert daily_morning_report_check.default_status == dg.DefaultScheduleStatus.RUNNING
     assert weekly_news_report.default_status == dg.DefaultScheduleStatus.RUNNING
+    assert scheduled_video_digest.default_status == dg.DefaultScheduleStatus.STOPPED
     assert news_automation.default_status == dg.DefaultSensorStatus.RUNNING
     assert article_batch_controller.default_status == dg.DefaultSensorStatus.STOPPED
     assert hourly_registered_feed_poll.cron_schedule == "0 * * * *"
@@ -79,6 +81,7 @@ def test_automation_starts_running_and_uses_bucharest_time() -> None:
         "youtube_source_poll",
         "youtube_approved_publication",
         "quarter_hourly_news_feedback_sync",
+        "scheduled_video_digest",
         "weekly_news_report",
     }
     assert defs.resolve_job_def("morning_report_check").name == morning_report_check.name

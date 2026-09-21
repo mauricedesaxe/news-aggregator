@@ -51,6 +51,7 @@ from romanian_news.worker.morning_report import (
 from romanian_news.worker.relevance_comparison import fresh_relevance_comparison
 from romanian_news.worker.relevance_v3_evaluation import relevance_v3_evaluation
 from romanian_news.worker.theme_comparison import fresh_theme_comparison
+from romanian_news.worker.video_digest import scheduled_video_digest, video_digest_job
 from romanian_news.youtube.models import YOUTUBE_SOURCES
 
 WEEKLY_ASSETS = dg.AssetSelection.groups("romanian_news_weekly")
@@ -461,6 +462,7 @@ defs = dg.Definitions(
         fresh_relevance_comparison,
         fresh_theme_comparison,
         relevance_v3_evaluation,
+        video_digest_job,
     ],
     schedules=[
         hourly_registered_feed_poll,
@@ -469,6 +471,7 @@ defs = dg.Definitions(
         daily_morning_report_check,
         quarter_hourly_news_feedback_sync,
         weekly_news_report,
+        scheduled_video_digest,
     ],
     sensors=[article_batch_controller, youtube_relevance_controller, news_automation],
 )

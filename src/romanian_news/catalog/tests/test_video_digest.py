@@ -16,6 +16,7 @@ from romanian_news.video_digest.errors import (
     VideoDigestLeaseLostError,
 )
 from romanian_news.video_digest.models import (
+    BusySlot,
     ClaimedSlot,
     DigestPlan,
     EditionIdentity,
@@ -33,10 +34,12 @@ from romanian_news.video_digest.models import (
     PublishedStory,
     ScheduledSlot,
     SkippedSlot,
+    SlotFailureReason,
     SlotId,
     SlotLease,
     SlotName,
     SlotSkipReason,
+    SlotStage,
     TerminalSlot,
     TerminalSlotState,
     UnknownAttemptCost,
@@ -331,6 +334,7 @@ def _slot_row(**updates: object) -> dict[str, object]:
         "lease_expires_at": None,
         "claim_count": 0,
         "skip_reason": None,
+        "failure_reason": None,
         "terminal_lease_owner_token": None,
         "terminal_lease_expires_at": None,
         "terminal_claim_count": None,
@@ -631,7 +635,7 @@ def test_claim_slot_returns_terminal_state(
     assert connection.transaction_count == 1
 
 
-def test_claim_slot_replays_an_unexpired_same_owner_lease_in_utc(
+def test_reacquire_slot_replays_an_unexpired_same_owner_lease_in_utc(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     stored_expiry = (NOW + timedelta(hours=1)).astimezone(timezone(timedelta(hours=3)))
@@ -640,9 +644,8 @@ def test_claim_slot_replays_an_unexpired_same_owner_lease_in_utc(
         [("FROM video_digest_slots", _active_row(lease_expires_at=stored_expiry))],
     )
 
-    result = video_digest.claim_slot(
+    result = video_digest.reacquire_slot(
         SLOT.slot_id,
-        EDITION,
         owner_token=" owner-a ",
         now=NOW,
         lease_duration=timedelta(minutes=10),
@@ -654,41 +657,37 @@ def test_claim_slot_replays_an_unexpired_same_owner_lease_in_utc(
     assert connection.transaction_count == 1
 
 
-def test_claim_slot_skips_an_unexpired_other_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reacquire_slot_returns_busy_for_an_unexpired_other_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     connection = _use_connection(
         monkeypatch,
         [("FROM video_digest_slots", _active_row())],
     )
 
-    result = video_digest.claim_slot(
+    result = video_digest.reacquire_slot(
         SLOT.slot_id,
-        EDITION,
         owner_token="owner-b",
         now=NOW,
         lease_duration=timedelta(minutes=10),
     )
 
-    assert result == SkippedSlot(reason=SlotSkipReason.OVERLAPPING_RUN)
+    assert result == BusySlot(retry_at=NOW + timedelta(hours=1))
     assert connection.transaction_count == 1
 
 
-def test_claim_slot_rejects_an_active_different_edition_before_overlap(
+def test_claim_slot_rejects_an_active_slot_in_favor_of_reacquisition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    other = EditionIdentity(
-        edition_id=edition_id("3" * 64, POLICY_ID),
-        daily_report_version_id="3" * 64,
-        policy_bundle_version_id=POLICY_ID,
-    )
     connection = _use_connection(
         monkeypatch,
         [("FROM video_digest_slots", _active_row())],
     )
 
-    with pytest.raises(VideoDigestCheckpointConflictError, match="another edition"):
+    with pytest.raises(VideoDigestCheckpointConflictError, match="must be reacquired"):
         video_digest.claim_slot(
             SLOT.slot_id,
-            other,
+            EDITION,
             owner_token="owner-b",
             now=NOW,
             lease_duration=timedelta(minutes=10),
@@ -697,27 +696,7 @@ def test_claim_slot_rejects_an_active_different_edition_before_overlap(
     assert connection.transaction_count == 1
 
 
-def test_claim_slot_rejects_same_owner_expired_recovery(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    connection = _use_connection(
-        monkeypatch,
-        [("FROM video_digest_slots", _active_row(lease_expires_at=NOW))],
-    )
-
-    with pytest.raises(VideoDigestCheckpointConflictError, match="fresh owner"):
-        video_digest.claim_slot(
-            SLOT.slot_id,
-            EDITION,
-            owner_token="owner-a",
-            now=NOW,
-            lease_duration=timedelta(minutes=10),
-        )
-
-    assert connection.transaction_count == 1
-
-
-def test_claim_slot_recovers_expired_lease_with_incremented_fence(
+def test_reacquire_slot_recovers_same_owner_expired_lease_with_incremented_fence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     connection = _use_connection(
@@ -728,9 +707,43 @@ def test_claim_slot_recovers_expired_lease_with_incremented_fence(
         ],
     )
 
-    result = video_digest.claim_slot(
+    result = video_digest.reacquire_slot(
         SLOT.slot_id,
-        EDITION,
+        owner_token="owner-a",
+        now=NOW,
+        lease_duration=timedelta(minutes=10),
+    )
+
+    assert result == ClaimedSlot(
+        lease=_lease(
+            expires_at=NOW + timedelta(minutes=10),
+            claim_count=4,
+        )
+    )
+    assert connection.parameters[-1] == (
+        "owner-a",
+        NOW + timedelta(minutes=10),
+        4,
+        NOW,
+        SLOT.slot_id,
+    )
+
+    assert connection.transaction_count == 1
+
+
+def test_reacquire_slot_recovers_other_owner_expired_lease_with_incremented_fence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(lease_expires_at=NOW, claim_count=3)),
+            ("UPDATE video_digest_slots", None),
+        ],
+    )
+
+    result = video_digest.reacquire_slot(
+        SLOT.slot_id,
         owner_token="owner-b",
         now=NOW,
         lease_duration=timedelta(minutes=10),
@@ -2647,6 +2660,53 @@ def test_generic_slot_failure_fails_remaining_stories_before_slot(
     assert "video_digest_slots" in connection.statements[-1]
 
 
+def test_deadline_failure_terminalizes_with_deterministic_reason_and_fence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="generating")),
+            *_artifact_steps(),
+            ("UPDATE video_digest_generation_requests", None),
+            ("UPDATE video_digest_stories", None),
+            ("UPDATE video_digest_publication_intents", None),
+            ("UPDATE video_digest_slots", {"slot_id": SLOT.slot_id}),
+        ],
+    )
+
+    terminal = video_digest.fail_slot_deadline(_lease(), recorded_at=NOW)
+
+    assert terminal == TerminalSlot(state=TerminalSlotState.FAILED)
+    assert connection.parameters[-1][0] == SlotStage.FAILED.value
+    assert connection.parameters[-1][5] == SlotFailureReason.DEADLINE.value
+    assert connection.parameters[-1][-3:] == (
+        "owner-a",
+        NOW + timedelta(hours=1),
+        1,
+    )
+    assert connection.steps == []
+
+
+def test_failed_resume_projects_the_durable_deadline_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = _slot_row(
+        stage="failed",
+        edition_id=EDITION.edition_id,
+        claim_count=1,
+        failure_reason=SlotFailureReason.DEADLINE.value,
+    )
+    monkeypatch.setattr(video_digest, "catalog_query", lambda _query, _values: [row])
+
+    state = video_digest.read_slot_resume_state(SLOT.slot_id)
+
+    assert state == video_digest.FailedResume(
+        slot=SLOT,
+        reason=SlotFailureReason.DEADLINE,
+    )
+
+
 def test_published_reads_hide_keys_and_preserve_edition_and_story_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2893,3 +2953,82 @@ def test_unique_catalog_conflict_becomes_checkpoint_conflict(
 
     with pytest.raises(VideoDigestCheckpointConflictError, match="identity conflicts"):
         video_digest.skip_slot(SLOT.slot_id, SlotSkipReason.UNCHANGED, recorded_at=NOW)
+
+
+def test_read_slot_resume_state_projects_ordered_assembly_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main_row = _active_row(stage="assembling") | {
+        "subtitle_state": "pending",
+        "subtitle_artifact_version_id": None,
+        "assembled_video_artifact_version_id": None,
+        "video_artifact_id": None,
+        "video_version_id": None,
+        "video_content_digest": None,
+        "video_r2_key": None,
+        "video_byte_size": None,
+        "video_media_type": None,
+        "subtitle_artifact_id": None,
+        "subtitle_version_id": None,
+        "subtitle_content_digest": None,
+        "subtitle_r2_key": None,
+        "subtitle_byte_size": None,
+        "subtitle_media_type": None,
+    }
+    attempt_row = {
+        "attempt_index": 0,
+        "disposition": "failed",
+        "evidence_artifact_id": "assembly-attempt",
+        "evidence_version_id": "8" * 64,
+        "evidence_content_digest": "9" * 64,
+        "evidence_r2_key": "video-digest/assembly/attempt-0.json",
+        "video_artifact_id": None,
+        "video_version_id": None,
+        "video_content_digest": None,
+        "video_r2_key": None,
+        "video_byte_size": None,
+        "video_media_type": None,
+        "manifest_artifact_id": None,
+        "manifest_version_id": None,
+        "manifest_content_digest": None,
+        "manifest_r2_key": None,
+    }
+
+    def query(statement: str, _values: Sequence[object]) -> list[Mapping[str, object]]:
+        return [main_row] if "FROM video_digest_slots" in statement else [attempt_row]
+
+    monkeypatch.setattr(video_digest, "catalog_query", query)
+
+    state = video_digest.read_slot_resume_state(SLOT.slot_id)
+
+    assert isinstance(state, video_digest.AssemblyResume)
+    assert state.lease == _lease()
+    assert len(state.attempts) == 1
+    assert state.attempts[0].attempt_index == 0
+    assert state.attempts[0].evidence.version_id == "8" * 64
+
+
+def test_read_slot_resume_state_rejects_pending_subtitles_during_publication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = _active_row(stage="publishing") | {
+        "assembled_video_artifact_version_id": ASSEMBLED_FILE.version_id,
+        "subtitle_state": "pending",
+        "subtitle_artifact_version_id": None,
+        "video_artifact_id": ASSEMBLED_FILE.artifact_id,
+        "video_version_id": ASSEMBLED_FILE.version_id,
+        "video_content_digest": ASSEMBLED_FILE.content_digest,
+        "video_r2_key": ASSEMBLED_FILE.r2_key,
+        "video_byte_size": len(ASSEMBLED_FILE.content),
+        "video_media_type": ASSEMBLED_FILE.media_type,
+        "subtitle_artifact_id": None,
+        "subtitle_version_id": None,
+        "subtitle_content_digest": None,
+        "subtitle_r2_key": None,
+        "subtitle_byte_size": None,
+        "subtitle_media_type": None,
+    }
+    monkeypatch.setattr(video_digest, "catalog_query", lambda *_args: [row])
+
+    with pytest.raises(ResearchCatalogError, match="pending subtitles"):
+        video_digest.read_slot_resume_state(SLOT.slot_id)

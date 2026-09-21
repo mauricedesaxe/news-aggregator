@@ -22,7 +22,11 @@ def test_production_workflow_starts_every_defined_schedule() -> None:
 
     schedules = defs.schedules
     assert schedules is not None
-    assert workflow_schedules == {schedule.name for schedule in schedules}
+    running_schedules = {
+        schedule.name for schedule in schedules if schedule.default_status.value == "RUNNING"
+    }
+    assert workflow_schedules == running_schedules
+    assert "scheduled_video_digest" not in workflow_schedules
 
 
 def test_production_workflow_stages_article_controller_activation() -> None:
