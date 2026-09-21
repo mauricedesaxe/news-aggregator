@@ -372,7 +372,14 @@ def validate_media_file(
     try:
         payload = cast(dict[str, object], json.loads(probe_result.stdout))
         probe = _parse_probe(payload)
-    except (KeyError, TypeError, ValueError, ZeroDivisionError, json.JSONDecodeError) as error:
+    except (
+        InvalidOperation,
+        KeyError,
+        TypeError,
+        ValueError,
+        ZeroDivisionError,
+        json.JSONDecodeError,
+    ) as error:
         raise MediaValidationError("unusable_probe", "Candidate probe is unusable") from error
     if any(
         abs(duration_ms - requested_duration_ms) > 100
@@ -400,6 +407,20 @@ def accept_candidate(
     attempt = _matching_attempt(lease, candidate)
     if story.position != candidate.story_position or story.story_id != candidate.story_id:
         raise ValueError("Candidate does not match its planned story")
+    if attempt.stage is GenerationStage.ACCEPTED:
+        clip = attempt.accepted_clip
+        validation = attempt.validation_evidence
+        if (
+            clip is None
+            or validation is None
+            or clip.content_digest != candidate.candidate.content_digest
+            or clip.byte_size != candidate.candidate.byte_size
+        ):
+            raise ValueError("Accepted candidate does not match stored media evidence")
+        return AcceptedCandidate(
+            clip_artifact_version_id=clip.version_id,
+            validation_artifact_version_id=validation.version_id,
+        )
     try:
         content = read_verified_r2_object(
             candidate.candidate.r2_key, candidate.candidate.content_digest
@@ -416,7 +437,6 @@ def accept_candidate(
     except (
         MediaValidationError,
         ResearchObjectIntegrityError,
-        subprocess.CalledProcessError,
         subprocess.TimeoutExpired,
     ) as error:
         return _reject_candidate(lease, candidate, error)
@@ -715,8 +735,11 @@ def _matching_attempt(lease: SlotLease, candidate: CandidateReady) -> Generation
         for attempt in read_generation_attempts(lease.edition_id)
         if attempt.request.request_id == candidate.request_id
     )
-    if len(matches) != 1 or matches[0].stage is not GenerationStage.PROCESSING:
-        raise ValueError("Candidate does not match one processing generation request")
+    if len(matches) != 1 or matches[0].stage not in {
+        GenerationStage.PROCESSING,
+        GenerationStage.ACCEPTED,
+    }:
+        raise ValueError("Candidate does not match one active generation request")
     attempt = matches[0]
     if (
         attempt.request.story_position != candidate.story_position
@@ -731,21 +754,14 @@ def _matching_attempt(lease: SlotLease, candidate: CandidateReady) -> Generation
 def _reject_candidate(
     lease: SlotLease,
     candidate: CandidateReady,
-    error: (
-        MediaValidationError
-        | ResearchObjectIntegrityError
-        | subprocess.CalledProcessError
-        | subprocess.TimeoutExpired
-    ),
+    error: MediaValidationError | ResearchObjectIntegrityError | subprocess.TimeoutExpired,
 ) -> GenerationRetryAvailable | GenerationFailed:
     if isinstance(error, MediaValidationError):
         code = error.code
     elif isinstance(error, ResearchObjectIntegrityError):
         code = "stored_digest_mismatch"
-    elif isinstance(error, subprocess.TimeoutExpired):
-        code = "media_tool_timeout"
     else:
-        code = "full_decode_failed"
+        code = "media_tool_timeout"
     reason = f"Technical media validation failed: {code}"
     content = canonical_json({"request_id": candidate.request_id, "code": code})
     failure_file = artifact_file(

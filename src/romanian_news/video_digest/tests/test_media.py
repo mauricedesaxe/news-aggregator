@@ -31,7 +31,7 @@ from romanian_news.video_digest.models import (
 from romanian_news.video_digest.planning import ScreenplayPlan, ScreenplayStory
 
 FFMPEG_AVAILABLE = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
-pytestmark = pytest.mark.skipif(not FFMPEG_AVAILABLE, reason="ffmpeg and ffprobe are required")
+requires_ffmpeg = pytest.mark.skipif(not FFMPEG_AVAILABLE, reason="ffmpeg and ffprobe are required")
 
 
 def _synthetic_clip(
@@ -72,13 +72,18 @@ def _synthetic_clip(
     return path.read_bytes()
 
 
-def _probe_payload(*, frame_rate: str = "24/1", pixel_format: str = "yuv420p") -> dict[str, object]:
+def _probe_payload(
+    *,
+    frame_rate: str = "24/1",
+    pixel_format: str = "yuv420p",
+    duration: str = "1.0",
+) -> dict[str, object]:
     return {
         "streams": [
             {
                 "codec_type": "video",
                 "avg_frame_rate": frame_rate,
-                "duration": "1.0",
+                "duration": duration,
                 "start_time": "0",
                 "nb_read_frames": "24",
                 "codec_name": "h264",
@@ -88,7 +93,7 @@ def _probe_payload(*, frame_rate: str = "24/1", pixel_format: str = "yuv420p") -
             },
             {
                 "codec_type": "audio",
-                "duration": "1.0",
+                "duration": duration,
                 "start_time": "0",
                 "nb_read_frames": "32",
                 "codec_name": "aac",
@@ -96,7 +101,7 @@ def _probe_payload(*, frame_rate: str = "24/1", pixel_format: str = "yuv420p") -
                 "sample_rate": "32000",
             },
         ],
-        "format": {"duration": "1.0"},
+        "format": {"duration": duration},
     }
 
 
@@ -163,6 +168,7 @@ def _attempt(story: PlannedStory, content: bytes, name: str) -> GenerationAttemp
     )
 
 
+@requires_ffmpeg
 def test_technical_validation_accepts_exact_profile_and_full_decode(tmp_path: Path) -> None:
     path = tmp_path / "candidate.mp4"
     content = _synthetic_clip(path, "red")
@@ -182,6 +188,7 @@ def test_technical_validation_accepts_exact_profile_and_full_decode(tmp_path: Pa
     assert "-xerror" in media.full_decode_command(path)
 
 
+@requires_ffmpeg
 def test_technical_validation_rejects_profile_duration_digest_and_size(tmp_path: Path) -> None:
     valid_path = tmp_path / "valid.mp4"
     valid = _synthetic_clip(valid_path, "red")
@@ -268,6 +275,31 @@ def test_technical_validation_rejects_unsupported_pixel_format(
     assert captured.value.code == "unusable_probe"
 
 
+def test_technical_validation_rejects_unavailable_duration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "candidate.mp4"
+    content = b"candidate"
+    path.write_bytes(content)
+    monkeypatch.setattr(
+        media,
+        "_run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            (), 0, json.dumps(_probe_payload(duration="N/A")), ""
+        ),
+    )
+
+    with pytest.raises(media.MediaValidationError) as captured:
+        media.validate_media_file(
+            path,
+            expected_digest=sha256(content),
+            expected_size=len(content),
+            requested_duration_ms=1000,
+        )
+
+    assert captured.value.code == "unusable_probe"
+
+
 @pytest.mark.parametrize(
     ("failing_program", "expected_code"),
     (("ffprobe", "probe_failed"), ("ffmpeg", "full_decode_failed")),
@@ -301,6 +333,7 @@ def test_technical_validation_identifies_failed_media_stage(
     assert captured.value.code == expected_code
 
 
+@requires_ffmpeg
 def test_candidate_bytes_publish_before_atomic_acceptance(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -358,11 +391,29 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
     assert events == ["publish", "checkpoint"]
     assert any(key.endswith(".mp4") for key in published)
 
+    accepted_attempt = attempt.model_copy(update={"stage": GenerationStage.ACCEPTED})
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (accepted_attempt,))
+    monkeypatch.setattr(
+        media,
+        "read_verified_r2_object",
+        lambda *_args: pytest.fail("accepted candidates must replay stored evidence"),
+    )
+
+    replayed = media.accept_candidate(_lease(edition), candidate, story)
+
+    assert accepted_attempt.accepted_clip is not None
+    assert accepted_attempt.validation_evidence is not None
+    assert replayed == media.AcceptedCandidate(
+        clip_artifact_version_id=accepted_attempt.accepted_clip.version_id,
+        validation_artifact_version_id=accepted_attempt.validation_evidence.version_id,
+    )
+
     events.clear()
 
     def corrupt_read(_key: str, _digest: str) -> bytes:
         raise ResearchObjectIntegrityError("digest mismatch")
 
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
     monkeypatch.setattr(media, "read_verified_r2_object", corrupt_read)
     monkeypatch.setattr(
         media,
@@ -376,6 +427,7 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
     assert events == ["publish", "failure-checkpoint"]
 
 
+@requires_ffmpeg
 def test_assembly_preserves_plan_order_and_deterministic_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
