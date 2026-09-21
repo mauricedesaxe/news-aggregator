@@ -45,6 +45,8 @@ from romanian_news.worker import operations
 _SLOT_DAY = re.compile(r"\((\w+\.)?scheduled_slot AT TIME ZONE 'Europe/Bucharest'\)::date")
 _ANY_PARAMETER = re.compile(r"=\s*ANY\(%s\)", re.IGNORECASE)
 _ROW_VALUE_SUBQUERY = re.compile(r"\s*FROM\s+(\w+)\s+WHERE\s+([\w.]+)\s*=\s*([^\s)]+)\s*\)")
+_IS_NOT_DISTINCT_FROM = re.compile(r"\bIS\s+NOT\s+DISTINCT\s+FROM\b", re.IGNORECASE)
+_IS_DISTINCT_FROM = re.compile(r"\bIS\s+DISTINCT\s+FROM\b", re.IGNORECASE)
 
 
 def _split_top_level_columns(value: str) -> list[str]:
@@ -76,6 +78,8 @@ def _parameter_bindings(sql: str, parameters: Sequence[object]) -> tuple[str, di
     parameter from several per-column scalar subqueries.
     """
     rewritten = _SLOT_DAY.sub(r"bucharest_day(\1scheduled_slot)", sql)
+    rewritten = _IS_NOT_DISTINCT_FROM.sub("IS", rewritten)
+    rewritten = _IS_DISTINCT_FROM.sub("IS NOT", rewritten)
     bindings: dict[str, object] = {}
     out: list[str] = []
     position = 0
@@ -263,7 +267,10 @@ class FakeNewsSession(requests.Session):
 
     def get(self, url: str | bytes, **kwargs: Any) -> requests.Response:
         target = str(url)
-        route = self._routes[target]
+        try:
+            route = self._routes[target]
+        except KeyError:
+            raise AssertionError(f"No fake HTTP route for {target}") from None
         if isinstance(route, Exception):
             raise route
         status, content, headers = route
@@ -410,7 +417,7 @@ def fake_http(monkeypatch: pytest.MonkeyPatch) -> FakeNewsSession:
 
 @pytest.fixture
 def news_day() -> date:
-    return datetime.now(BUCHAREST).date()
+    return date(2099, 9, 2)
 
 
 @pytest.fixture

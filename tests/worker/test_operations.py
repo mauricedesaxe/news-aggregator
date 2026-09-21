@@ -41,6 +41,14 @@ from romanian_news.storage import publish_immutable_r2_objects
 from romanian_news.worker import operations
 
 DAY = date(2099, 9, 2)
+NOW = datetime(2099, 9, 2, 12, tzinfo=UTC)
+
+
+def test_sqlite_catalog_preserves_null_safe_comparison_semantics(sqlite_catalog) -> None:
+    assert sqlite_catalog.query(
+        "SELECT 1 AS matched WHERE %s IS NOT DISTINCT FROM %s", (None, None)
+    )
+    assert sqlite_catalog.query("SELECT 1 AS matched WHERE %s IS DISTINCT FROM %s", (None, 1))
 
 
 def test_feed_intake_publishes_every_registered_feed_and_is_idempotent(
@@ -63,7 +71,7 @@ def test_feed_intake_publishes_every_registered_feed_and_is_idempotent(
         "_destination",
         lambda _request: dlt.destinations.filesystem(bucket_url=destination_dir.as_uri()),
     )
-    scheduled_at = datetime.now(UTC)
+    scheduled_at = NOW
 
     references = operations.materialize_feed_intake(news_day, scheduled_at, tmp_path, "git:test")
 
@@ -128,7 +136,7 @@ def test_article_materializer_publishes_exact_batch_and_rechecks_state(
         "Analistii economici salută măsura, dar avertizează asupra implementării rapide.",
     )
     page = harness.article(title, paragraphs)
-    observed_at = datetime.now(UTC)
+    observed_at = NOW
     capture = harness.seed(
         fake_http,
         registry,
@@ -230,7 +238,7 @@ def test_article_materializer_records_item_failure_before_the_next_item(
             "Autoritățile așteaptă efecte pozitive începând cu următorul an bugetar.",
         ),
     )
-    observed_at = datetime.now(UTC)
+    observed_at = NOW
     harness.seed(
         fake_http,
         registry,
@@ -298,7 +306,7 @@ def test_article_materializer_publishes_each_success_before_the_next_item(
             "Economiștii așteaptă stabilizarea ratei inflației în cursul anului.",
         ),
     )
-    observed_at = datetime.now(UTC)
+    observed_at = NOW
     harness.seed(
         fake_http,
         registry,
@@ -366,7 +374,7 @@ def test_article_materializer_dedupes_alias_sharing_events(
             "Reprezentanții sindicatelor au reacționat cu rezervă față de promisiuni.",
         ),
     )
-    observed_at = datetime.now(UTC)
+    observed_at = NOW
     alpha_capture = harness.seed(
         fake_http,
         registry,
@@ -431,7 +439,7 @@ def test_article_materializer_isolates_a_publish_conflict_across_parallel_items(
             "Oppoziția ceră dezbateri parlamentare pe baza concluziilor raportului.",
         ),
     )
-    observed_at = datetime.now(UTC)
+    observed_at = NOW
     harness.seed(
         fake_http,
         registry,
@@ -546,7 +554,7 @@ def _seed_analysis_article(
         media_type="application/json",
     )
     publish_immutable_r2_objects(((snapshot.r2_key, snapshot.content), (r2_key, content)))
-    timestamp = datetime.now(UTC).isoformat()
+    timestamp = NOW.isoformat()
     statements = [
         *artifact_statements(snapshot, timestamp, produced_by_run_id=None),
         *artifact_statements(file, timestamp, produced_by_run_id=None),
@@ -598,7 +606,7 @@ def test_relevance_materializer_uses_production_v3(
         title=title,
         body=body,
         author=None,
-        published_at=datetime.now(UTC),
+        published_at=NOW,
         source_updated_at=None,
         bucharest_day=news_day,
         material_digest="1" * 64,
