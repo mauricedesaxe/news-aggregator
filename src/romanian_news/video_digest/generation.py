@@ -244,7 +244,7 @@ class FalSubmissionAmbiguousError(RuntimeError):
     pass
 
 
-class FalSubmissionRejectedError(RuntimeError):
+class FalSubmissionRetryableError(RuntimeError):
     pass
 
 
@@ -267,18 +267,25 @@ class FalH3Client:
             response.raise_for_status()
         except requests.HTTPError as error:
             status_code = error.response.status_code if error.response is not None else None
-            if status_code is not None and 400 <= status_code < 500 and status_code != 429:
-                raise FalSubmissionRejectedError(
-                    f"Fal rejected submission with HTTP {status_code}"
+            if status_code in {400, 401, 403, 404, 422, 502, 503, 504}:
+                raise FalSubmissionRetryableError(
+                    f"Fal did not accept submission with HTTP {status_code}"
                 ) from error
             raise FalSubmissionAmbiguousError("Fal submission outcome is unknown") from error
+        except requests.ConnectTimeout as error:
+            raise FalSubmissionRetryableError(
+                "Fal could not be reached before submission"
+            ) from error
         except requests.RequestException as error:
             raise FalSubmissionAmbiguousError("Fal submission outcome is unknown") from error
-        payload = cast(dict[str, object], response.json())
-        return FalSubmissionReceipt.model_validate(
-            {key: payload[key] for key in FalSubmissionReceipt.model_fields if key in payload},
-            strict=True,
-        )
+        try:
+            payload = cast(dict[str, object], response.json())
+            return FalSubmissionReceipt.model_validate(
+                {key: payload[key] for key in FalSubmissionReceipt.model_fields if key in payload},
+                strict=True,
+            )
+        except (TypeError, ValueError) as error:
+            raise FalSubmissionAmbiguousError("Fal submission outcome is unknown") from error
 
     def status(self, receipt: FalSubmissionReceipt) -> FalQueueStatus:
         response = requests.get(
@@ -300,7 +307,7 @@ class FalH3Client:
         return FalH3Result.model_validate({"video": payload.get("video")}, strict=True), payload
 
     def download(self, url: str) -> bytes:
-        response = requests.get(url, timeout=600, stream=True)
+        response = requests.get(_trusted_media_url(url), timeout=600, stream=True)
         try:
             response.raise_for_status()
             content_length = response.headers.get("Content-Length")
@@ -430,7 +437,7 @@ def _start_attempt(
         receipt = client.submit(_fal_arguments(request_value, signer))
     except FalSubmissionAmbiguousError:
         return _fail_ambiguous_submission(lease, identity)
-    except FalSubmissionRejectedError as error:
+    except FalSubmissionRetryableError as error:
         return _fail_request(lease, identity, None, str(error), terminal=False)
     receipt_file = _receipt_file(identity, receipt)
     publish_immutable_r2_objects(((receipt_file.r2_key, receipt_file.content),))
@@ -484,7 +491,12 @@ def _poll_submitted(
             "Video digest generation deadline passed while Fal was active",
             terminal=True,
         )
-    status = provider.status(receipt)
+    try:
+        status = provider.status(receipt)
+    except requests.HTTPError as error:
+        if _is_definitive_provider_failure(error):
+            return _fail_attempt(lease, active, f"Fal status failed: {error}", terminal=False)
+        raise
     if status.request_id != receipt.request_id:
         raise ValueError("Fal status receipt identity changed")
     if status.status != "COMPLETED":
@@ -497,6 +509,13 @@ def _poll_submitted(
         return _fail_attempt(lease, active, status.error, terminal=False)
     try:
         result, raw = provider.result(receipt)
+    except requests.HTTPError as error:
+        if _is_definitive_provider_failure(error):
+            return _fail_attempt(lease, active, f"Fal result failed: {error}", terminal=False)
+        raise
+    except ValueError as error:
+        return _fail_attempt(lease, active, str(error), terminal=False)
+    try:
         candidate_bytes = provider.download(str(result.video.url))
     except ValueError as error:
         return _fail_attempt(lease, active, str(error), terminal=False)
@@ -657,6 +676,23 @@ def _trusted_queue_url(url: HttpUrl) -> str:
     if url.scheme != "https" or url.host != "queue.fal.run":
         raise ValueError("Fal receipt URL must use the trusted Fal queue host")
     return str(url)
+
+
+def _trusted_media_url(url: str) -> str:
+    parsed = HttpUrl(url)
+    host = parsed.host
+    if (
+        parsed.scheme != "https"
+        or host is None
+        or not (host == "fal.media" or host.endswith(".fal.media"))
+    ):
+        raise ValueError("Fal candidate URL must use the trusted Fal media host")
+    return str(parsed)
+
+
+def _is_definitive_provider_failure(error: requests.HTTPError) -> bool:
+    status_code = error.response.status_code if error.response is not None else None
+    return status_code is not None and 400 <= status_code < 500
 
 
 def _admission(policy: GenerationPolicyArtifact, story_count: int) -> GenerationAdmission:

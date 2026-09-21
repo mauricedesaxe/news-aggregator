@@ -315,23 +315,31 @@ class _GenerationPipeline:
             request_artifact_version_id=request_file.version_id,
         )
 
-    def start_request(self, position: int, attempt: int = 0) -> GenerationRequestState:
+    def start_request(
+        self,
+        position: int,
+        attempt: int = 0,
+        *,
+        admission: GenerationAdmission | None = None,
+    ) -> GenerationRequestState:
         self.verify_edition()
         request_file = self._request_file(position, attempt)
         return video_digest_catalog.checkpoint_generation_request(
             self.lease,
             self.request_identity(position, attempt),
             request_file=request_file,
-            admission=self.generation_admission(),
+            admission=admission or self.generation_admission(),
             recorded_at=self.recorded_at,
         ).state
 
-    def generation_admission(self) -> GenerationAdmission:
+    def generation_admission(
+        self, *, story_limit_usd: Decimal = Decimal("7")
+    ) -> GenerationAdmission:
         return GenerationAdmission(
             generation_policy_artifact_version_id=self.edition.policy_bundle_version_id,
             reserved_usd=Decimal("3.25632"),
             limits=GenerationBudgetLimits(
-                story_usd=Decimal("7"),
+                story_usd=story_limit_usd,
                 edition_usd=Decimal("7") * self.story_count,
                 bucharest_day_usd=Decimal("150"),
                 calendar_month_usd=Decimal("1000"),
@@ -1180,6 +1188,58 @@ def test_generation_request_rejects_parallel_paid_work(postgres_news_schema: str
         "SELECT count(*) FROM video_digest_generation_requests WHERE edition_id = %s",
         (pipeline.edition.edition_id,),
     ) == (1,)
+
+
+def test_generation_request_rejects_story_budget_exhaustion(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=37)
+    pipeline.checkpoint_plan()
+    admission = pipeline.generation_admission(story_limit_usd=Decimal("6"))
+    pipeline.start_request(0, admission=admission)
+    pipeline.fail_attempt(0, measured="0.10")
+
+    with pytest.raises(VideoDigestCheckpointConflictError):
+        pipeline.start_request(0, attempt=1, admission=admission)
+
+    assert _query_one(
+        "SELECT count(*) FROM video_digest_generation_requests WHERE edition_id = %s",
+        (pipeline.edition.edition_id,),
+    ) == (1,)
+
+
+def test_generation_request_rejects_a_changed_scope_limit(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=38)
+    pipeline.checkpoint_plan()
+    pipeline.start_request(0)
+    pipeline.fail_attempt(0, measured="0.10")
+
+    with pytest.raises(VideoDigestCheckpointConflictError):
+        pipeline.start_request(
+            0,
+            attempt=1,
+            admission=pipeline.generation_admission(story_limit_usd=Decimal("8")),
+        )
+
+
+def test_generation_request_admission_is_immutable(postgres_news_schema: str) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=39)
+    pipeline.checkpoint_plan()
+    pipeline.start_request(0)
+
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_generation_requests SET reserved_cost_usd = 1 "
+                "WHERE request_id = %s",
+                (pipeline.request_id(0),),
+            )
 
 
 def test_generation_submission_persists_the_provider_receipt_and_estimate(
