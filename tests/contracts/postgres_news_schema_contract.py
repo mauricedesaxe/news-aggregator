@@ -1049,6 +1049,12 @@ def test_video_digest_generation_checkpoints_complete_atomically(
                 "DELETE FROM video_digest_generation_reservations WHERE request_id = %s",
                 (request.request_id,),
             )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_generation_reservations SET reserved_usd = 1 "
+                "WHERE request_id = %s",
+                (request.request_id,),
+            )
 
     receipt_id = f"fal-{request.request_id}"
     receipt_file = artifact_file(

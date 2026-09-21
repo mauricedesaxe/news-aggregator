@@ -43,6 +43,9 @@ The catalog distinguishes a request created by the current call from an existing
 request. Only the creator may submit. If a later process finds a pending request without a Fal
 receipt, it records an ambiguous-submission failure with unknown cost and does not submit
 again. This trades automatic recovery for the no-duplicate-paid-submission invariant.
+Documented Fal ingress failures (502, 503, and 504) and connection timeouts before submission
+permit retry. Responses that may follow acceptance, including 408, 409, and 429, are ambiguous
+and fail closed.
 
 After the receipt reaches immutable R2 and PostgreSQL, every restart polls the stored Fal
 request ID. The workflow never submits another request while one is active.

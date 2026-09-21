@@ -197,10 +197,37 @@ class _TransportFailureProvider(_Provider):
         raise requests.Timeout("result timed out")
 
 
+class _StatusTransportFailureProvider(_Provider):
+    def status(self, receipt: generation.FalSubmissionReceipt) -> generation.FalQueueStatus:
+        del receipt
+        raise _http_error(503)
+
+
 class _RejectedProvider(_Provider):
     def submit(self, arguments: dict[str, object]) -> generation.FalSubmissionReceipt:
         del arguments
-        raise generation.FalSubmissionRejectedError("Fal rejected submission with HTTP 400")
+        raise generation.FalSubmissionRetryableError("Fal did not accept submission with HTTP 400")
+
+
+class _StatusFailureProvider(_Provider):
+    def status(self, receipt: generation.FalSubmissionReceipt) -> generation.FalQueueStatus:
+        del receipt
+        raise _http_error(404)
+
+
+class _ResultFailureProvider(_Provider):
+    def result(
+        self, receipt: generation.FalSubmissionReceipt
+    ) -> tuple[generation.FalH3Result, dict[str, object]]:
+        del receipt
+        raise _http_error(422)
+
+
+def _http_error(status_code: int) -> requests.HTTPError:
+    response = requests.Response()
+    response.status_code = status_code
+    response.url = "https://queue.fal.run/request"
+    return requests.HTTPError(f"HTTP {status_code}", response=response)
 
 
 def _receipt(receipt_id: str) -> generation.FalSubmissionReceipt:
@@ -477,18 +504,25 @@ def test_active_poll_does_not_republish_generation_policy(
     assert harness.policy_publications == 0
 
 
-def test_completed_request_transport_failure_preserves_receipt(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("provider", "message"),
+    [
+        (_TransportFailureProvider(), "result timed out"),
+        (_StatusTransportFailureProvider(), "HTTP 503"),
+    ],
+)
+def test_provider_transport_failure_preserves_receipt(
+    monkeypatch: pytest.MonkeyPatch, provider: _Provider, message: str
 ) -> None:
     prepared = _prepared()
     harness = _Harness(monkeypatch, prepared)
 
-    with pytest.raises(requests.Timeout, match="result timed out"):
+    with pytest.raises(requests.RequestException, match=message):
         generation.generate_next_candidate(
             _lease(prepared),
             prepared,
             _references(),
-            provider=_TransportFailureProvider(),
+            provider=provider,
             sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
         )
 
@@ -505,6 +539,26 @@ def test_confirmed_submission_rejection_allows_retry(monkeypatch: pytest.MonkeyP
         prepared,
         _references(),
         provider=_RejectedProvider(),
+        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+    )
+
+    assert isinstance(outcome, generation.GenerationRetryAvailable)
+    assert harness.attempts[0].stage is GenerationStage.FAILED
+    assert harness.failed_slot is False
+
+
+@pytest.mark.parametrize("provider", [_StatusFailureProvider(), _ResultFailureProvider()])
+def test_definitive_provider_failure_allows_retry(
+    monkeypatch: pytest.MonkeyPatch, provider: _Provider
+) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+
+    outcome = generation.generate_next_candidate(
+        _lease(prepared),
+        prepared,
+        _references(),
+        provider=provider,
         sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
     )
 
@@ -635,7 +689,7 @@ def test_deadline_stops_before_request_admission(monkeypatch: pytest.MonkeyPatch
     assert provider.submitted_positions == []
 
 
-@pytest.mark.parametrize("status_code", [429, 503])
+@pytest.mark.parametrize("status_code", [408, 409, 429, 500])
 def test_fal_submit_maps_uncertain_http_failures_to_ambiguous(
     monkeypatch: pytest.MonkeyPatch, status_code: int
 ) -> None:
@@ -648,13 +702,39 @@ def test_fal_submit_maps_uncertain_http_failures_to_ambiguous(
         generation.FalH3Client("secret").submit({})
 
 
-def test_fal_submit_distinguishes_confirmed_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404, 422, 502, 503, 504])
+def test_fal_submit_distinguishes_retryable_failure(
+    monkeypatch: pytest.MonkeyPatch, status_code: int
+) -> None:
     response = requests.Response()
-    response.status_code = 400
+    response.status_code = status_code
     response.url = "https://queue.fal.run/minimax/h3-max/reference-to-video"
     monkeypatch.setattr(generation.requests, "post", lambda *args, **kwargs: response)
 
-    with pytest.raises(generation.FalSubmissionRejectedError):
+    with pytest.raises(generation.FalSubmissionRetryableError):
+        generation.FalH3Client("secret").submit({})
+
+
+def test_fal_submit_treats_an_invalid_success_body_as_ambiguous(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = requests.Response()
+    response.status_code = 200
+    response.url = "https://queue.fal.run/minimax/h3-max/reference-to-video"
+    response._content = b"not-json"
+    monkeypatch.setattr(generation.requests, "post", lambda *args, **kwargs: response)
+
+    with pytest.raises(generation.FalSubmissionAmbiguousError):
+        generation.FalH3Client("secret").submit({})
+
+
+def test_fal_submit_retries_a_connect_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    def post(*args, **kwargs):
+        raise requests.ConnectTimeout("connect timed out")
+
+    monkeypatch.setattr(generation.requests, "post", post)
+
+    with pytest.raises(generation.FalSubmissionRetryableError):
         generation.FalH3Client("secret").submit({})
 
 
@@ -701,4 +781,20 @@ def test_fal_download_rejects_oversized_response(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(generation.requests, "get", lambda *args, **kwargs: Response())
 
     with pytest.raises(ValueError, match="maximum byte size"):
-        generation.FalH3Client("secret").download("https://media.example/video.mp4")
+        generation.FalH3Client("secret").download("https://v3.fal.media/video.mp4")
+
+
+def test_fal_download_rejects_an_untrusted_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    requested = False
+
+    def get(*args, **kwargs):
+        nonlocal requested
+        requested = True
+        raise AssertionError("untrusted URL was requested")
+
+    monkeypatch.setattr(generation.requests, "get", get)
+
+    with pytest.raises(ValueError, match="trusted Fal media host"):
+        generation.FalH3Client("secret").download("https://attacker.example/video.mp4")
+
+    assert requested is False
