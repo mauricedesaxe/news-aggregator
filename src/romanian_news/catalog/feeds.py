@@ -52,12 +52,6 @@ class _CatalogedFeedEntryOccurrence(NewsModel):
     reference: CatalogedFeedEntryReference
 
 
-class FeedArtifactFile(ArtifactFile):
-    feed_id: str | None = None
-    feed_snapshot_version_id: Sha256 | None = None
-    capture: FeedCapture | None = None
-
-
 class FeedSnapshotFile(NewsModel):
     version_id: Sha256
     content_digest: Sha256
@@ -71,7 +65,9 @@ class FeedCatalogLoadState(NewsModel):
 
 
 class _FeedPublicationItem(NewsModel):
-    observation_file: FeedArtifactFile
+    capture: FeedCapture
+    observation_file: ArtifactFile
+    feed_snapshot_version_id: Sha256 | None
     entry_occurrences: tuple[FeedEntryEventOccurrence, ...]
 
 
@@ -232,23 +228,17 @@ def publish_feed_acquisition(
     current_snapshots = _current_feed_snapshots(
         tuple(capture.feed_id for capture in result.captures if capture.status == "not_modified")
     )
-    observations = tuple(
-        _observation_file(
-            capture,
-            snapshots.get(capture.feed_id) or current_snapshots.get(capture.feed_id),
-        )
-        for capture in result.captures
-    )
-    load_file = _load_file(result, registry, observations)
     items = tuple(
         _feed_publication_item(
             capture,
-            observation,
+            snapshots.get(capture.feed_id) or current_snapshots.get(capture.feed_id),
             result.load_ids[0],
             registry.version_id,
         )
-        for capture, observation in zip(result.captures, observations, strict=True)
+        for capture in result.captures
     )
+    observations = tuple(item.observation_file for item in items)
+    load_file = _load_file(result, registry, observations)
     entry_occurrences = tuple(occurrence for item in items for occurrence in item.entry_occurrences)
     cataloged_entries = _cataloged_feed_entry_occurrences(
         entry_occurrences,
@@ -266,7 +256,7 @@ def publish_feed_acquisition(
             registry,
             registry_file,
             tuple(snapshots.values()),
-            observations,
+            items,
             load_file,
             result.load_ids,
             cataloged_entries,
@@ -281,10 +271,9 @@ def publish_feed_acquisition(
         feed_snapshots=len(snapshots),
         feed_entry_events=len(cataloged_entries),
         feed_snapshot_versions={
-            item.observation_file.feed_id: item.observation_file.feed_snapshot_version_id
+            item.capture.feed_id: item.feed_snapshot_version_id
             for item in items
-            if item.observation_file.feed_snapshot_version_id is not None
-            and item.observation_file.feed_id is not None
+            if item.feed_snapshot_version_id is not None
         },
     )
 
@@ -299,9 +288,9 @@ def _validate_successful_captures(captures: tuple[FeedCapture, ...]) -> None:
             raise ValueError(f"Feed capture {capture.feed_id} contains entries for another feed")
 
 
-def _registry_file(registry: FeedRegistry) -> FeedArtifactFile:
+def _registry_file(registry: FeedRegistry) -> ArtifactFile:
     content = canonical_json(registry.model_dump(mode="json"))
-    return _feed_artifact_file(
+    return artifact_file(
         artifact_id="news:feed-registry",
         artifact_kind="news_registry",
         title="Romanian news feed registry",
@@ -311,27 +300,23 @@ def _registry_file(registry: FeedRegistry) -> FeedArtifactFile:
     )
 
 
-def _snapshot_file(capture: FeedCapture) -> FeedArtifactFile:
+def _snapshot_file(capture: FeedCapture) -> ArtifactFile:
     if capture.content is None or capture.content_digest is None:
         raise ValueError("A feed snapshot requires response bytes")
-    return _feed_artifact_file(
+    return artifact_file(
         artifact_id=f"news:feed:{capture.feed_id}",
         artifact_kind="news_feed",
         title=f"RSS feed: {capture.feed_id}",
         content=capture.content,
         r2_key=f"news/feeds/{capture.feed_id}/{capture.content_digest}.xml",
         media_type="application/xml",
-        feed_id=capture.feed_id,
     )
 
 
 def _observation_file(
     capture: FeedCapture,
-    snapshot: FeedArtifactFile | Sha256 | None,
-) -> FeedArtifactFile:
-    snapshot_version_id = (
-        snapshot.version_id if isinstance(snapshot, FeedArtifactFile) else snapshot
-    )
+    snapshot_version_id: Sha256 | None,
+) -> ArtifactFile:
     if capture.status in ("ok", "not_modified") and snapshot_version_id is None:
         raise ValueError(f"Successful feed observation has no snapshot: {capture.feed_id}")
     payload = capture.model_dump(mode="json", exclude={"content", "entries"})
@@ -339,24 +324,21 @@ def _observation_file(
     payload["feed_snapshot_version_id"] = snapshot_version_id
     content = canonical_json(payload)
     slot = capture.scheduled_slot.isoformat().replace(":", "-")
-    return _feed_artifact_file(
+    return artifact_file(
         artifact_id=f"news:feed-observation:{capture.feed_id}:{capture.scheduled_slot.isoformat()}",
         artifact_kind="news_feed_observation",
         title=f"Feed observation: {capture.feed_id} at {capture.scheduled_slot.isoformat()}",
         content=content,
         r2_key=f"news/feed-observations/{capture.feed_id}/{slot}/{sha256(content)}.json",
         media_type="application/json",
-        feed_id=capture.feed_id,
-        feed_snapshot_version_id=snapshot_version_id,
-        capture=capture,
     )
 
 
 def _load_file(
     result: FeedAcquisitionResult,
     registry: FeedRegistry,
-    observations: tuple[FeedArtifactFile, ...],
-) -> FeedArtifactFile:
+    observations: tuple[ArtifactFile, ...],
+) -> ArtifactFile:
     content = canonical_json(
         {
             "load_ids": result.load_ids,
@@ -365,7 +347,7 @@ def _load_file(
         }
     )
     digest = sha256(content)
-    return _feed_artifact_file(
+    return artifact_file(
         artifact_id=f"news:dlt-load:{digest}",
         artifact_kind="news_dlt_load",
         title=f"Romanian news dlt load {', '.join(result.load_ids)}",
@@ -377,10 +359,14 @@ def _load_file(
 
 def _feed_publication_item(
     capture: FeedCapture,
-    observation_file: FeedArtifactFile,
+    snapshot: ArtifactFile | Sha256 | None,
     load_id: str,
     registry_version_id: Sha256,
 ) -> _FeedPublicationItem:
+    feed_snapshot_version_id = (
+        snapshot.version_id if isinstance(snapshot, ArtifactFile) else snapshot
+    )
+    observation_file = _observation_file(capture, feed_snapshot_version_id)
     entry_occurrences = ()
     if capture.status == "ok":
         entry_occurrences = tuple(
@@ -394,7 +380,9 @@ def _feed_publication_item(
             )
         )
     return _FeedPublicationItem(
+        capture=capture,
         observation_file=observation_file,
+        feed_snapshot_version_id=feed_snapshot_version_id,
         entry_occurrences=entry_occurrences,
     )
 
@@ -406,9 +394,9 @@ def _publication_snapshot_versions(
         (
             occurrence.event.entry.feed_id,
             occurrence.event.feed_content_digest,
-        ): item.observation_file.feed_snapshot_version_id
+        ): item.feed_snapshot_version_id
         for item in items
-        if item.observation_file.feed_snapshot_version_id is not None
+        if item.feed_snapshot_version_id is not None
         for occurrence in item.entry_occurrences
     }
 
@@ -432,7 +420,7 @@ def _run_id(
     result: FeedAcquisitionResult,
     registry: FeedRegistry,
     implementation_ref: str,
-    observations: tuple[FeedArtifactFile, ...],
+    observations: tuple[ArtifactFile, ...],
 ) -> Sha256:
     return sha256(
         canonical_json(
@@ -452,15 +440,16 @@ def _catalog_statements(
     implementation_ref: str,
     published_at: datetime,
     registry: FeedRegistry,
-    registry_file: FeedArtifactFile,
-    snapshots: tuple[FeedArtifactFile, ...],
-    observations: tuple[FeedArtifactFile, ...],
-    load_file: FeedArtifactFile,
+    registry_file: ArtifactFile,
+    snapshots: tuple[ArtifactFile, ...],
+    items: tuple[_FeedPublicationItem, ...],
+    load_file: ArtifactFile,
     load_ids: tuple[str, ...],
     feed_entries: tuple[_CatalogedFeedEntryOccurrence, ...],
     aliases: dict[Sha256, Sha256],
 ) -> list[tuple[str, list[object]]]:
     timestamp = published_at.isoformat()
+    observations = tuple(item.observation_file for item in items)
     statements = artifact_statements(registry_file, timestamp, produced_by_run_id=None)
     statements.append(
         advance_artifact_current_version_statement(
@@ -511,16 +500,15 @@ def _catalog_statements(
         statements.append(
             advance_artifact_current_version_statement(value.artifact_id, value.version_id)
         )
-    for observation in observations:
-        capture = observation.capture
-        if capture is None:
-            raise ValueError("Observation catalog metadata is missing")
+    for item in items:
+        capture = item.capture
+        observation = item.observation_file
         statements.append(
             (
                 "INSERT INTO news_feed_observations VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
                 [
                     observation.version_id,
-                    observation.feed_snapshot_version_id,
+                    item.feed_snapshot_version_id,
                     capture.feed_id,
                     capture.scheduled_slot.isoformat(),
                     capture.status,
@@ -894,31 +882,3 @@ def _existing_feed_entry_event_ids(event_ids: tuple[Sha256, ...]) -> set[Sha256]
         )
         existing.update(row["event_id"] for row in rows)
     return existing
-
-
-def _feed_artifact_file(
-    *,
-    artifact_id: str,
-    artifact_kind: str,
-    title: str,
-    content: bytes,
-    r2_key: str,
-    media_type: str,
-    feed_id: str | None = None,
-    feed_snapshot_version_id: Sha256 | None = None,
-    capture: FeedCapture | None = None,
-) -> FeedArtifactFile:
-    value = artifact_file(
-        artifact_id=artifact_id,
-        artifact_kind=artifact_kind,
-        title=title,
-        content=content,
-        r2_key=r2_key,
-        media_type=media_type,
-    )
-    return FeedArtifactFile(
-        **value.model_dump(),
-        feed_id=feed_id,
-        feed_snapshot_version_id=feed_snapshot_version_id,
-        capture=capture,
-    )
