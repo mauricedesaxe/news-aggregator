@@ -26,6 +26,8 @@ from romanian_news.video_digest.models import (
     EditionIdentity,
     EstimatedAttemptCost,
     FailedSubtitles,
+    GenerationAdmission,
+    GenerationBudgetLimits,
     GenerationRequestIdentity,
     MeasuredAttemptCost,
     PlannedStory,
@@ -250,7 +252,7 @@ def _walk_publication_pipeline(
     dsn = news_schema.NEWS_POSTGRES_DSN
     assert dsn is not None
     recorded_at = datetime.now(UTC)
-    when = scheduled_at if scheduled_at is not None else datetime(2026, 9, 20, 6, tzinfo=UTC)
+    when = scheduled_at if scheduled_at is not None else datetime(2099, 9, 20, 6, tzinfo=UTC)
     with psycopg.connect(dsn, autocommit=True) as connection:
         report, policy = _record_artifact_versions(connection, seed, 2)
     identity = EditionIdentity(
@@ -403,7 +405,20 @@ def _walk_publication_pipeline(
             request_artifact_version_id=request_file.version_id,
         )
         video_digest_catalog.checkpoint_generation_request(
-            lease, request, request_file=request_file, recorded_at=recorded_at
+            lease,
+            request,
+            request_file=request_file,
+            admission=GenerationAdmission(
+                generation_policy_artifact_version_id=identity.policy_bundle_version_id,
+                reserved_usd=Decimal("3.25632"),
+                limits=GenerationBudgetLimits(
+                    story_usd=Decimal("7"),
+                    edition_usd=Decimal("7") * len(stories),
+                    bucharest_day_usd=Decimal("150"),
+                    calendar_month_usd=Decimal("1000"),
+                ),
+            ),
+            recorded_at=recorded_at,
         )
         if stop_at == "request_pending":
             return run
@@ -1152,7 +1167,7 @@ def test_published_reads_reject_non_origin_media_base_urls(
         )
     with pytest.raises(ValueError, match="HTTPS origin"):
         video_digest_catalog.list_published_editions(
-            date(2026, 9, 20), public_media_base_url=base_url
+            date(2099, 9, 20), public_media_base_url=base_url
         )
 
 
@@ -1177,18 +1192,18 @@ def test_list_published_editions_orders_most_recent_first_with_public_media_only
         seed=220,
         stop_at="published",
         slot_name=SlotName.MORNING,
-        scheduled_at=datetime(2026, 9, 20, 6, tzinfo=UTC),
+        scheduled_at=datetime(2099, 9, 20, 6, tzinfo=UTC),
     )
     later = _walk_publication_pipeline(
         seed=230,
         stop_at="published",
         subtitle_available=True,
         slot_name=SlotName.MIDDAY,
-        scheduled_at=datetime(2026, 9, 20, 9, tzinfo=UTC),
+        scheduled_at=datetime(2099, 9, 20, 9, tzinfo=UTC),
     )
 
     summaries = video_digest_catalog.list_published_editions(
-        date(2026, 9, 20), public_media_base_url=PUBLIC_MEDIA_BASE_URL
+        date(2099, 9, 20), public_media_base_url=PUBLIC_MEDIA_BASE_URL
     )
     assert [summary.edition_id for summary in summaries] == [
         later.identity.edition_id,
@@ -1198,7 +1213,7 @@ def test_list_published_editions_orders_most_recent_first_with_public_media_only
 
     top = summaries[0]
     assert top.publication_id == later.intent.publication_id
-    assert top.day == date(2026, 9, 20)
+    assert top.day == date(2099, 9, 20)
     assert str(top.video.url) == "https://media.example.com/video-digest/230/public.mp4"
     assert top.video.content_digest == later.assembled_file.content_digest
     assert top.video.byte_size == len(later.assembled_file.content)
@@ -1229,7 +1244,7 @@ def test_list_published_editions_scopes_to_the_requested_day(
     run = _walk_publication_pipeline(
         seed=250,
         stop_at="published",
-        scheduled_at=datetime(2026, 9, 20, 6, tzinfo=UTC),
+        scheduled_at=datetime(2099, 9, 20, 6, tzinfo=UTC),
     )
 
     assert (
@@ -1239,7 +1254,7 @@ def test_list_published_editions_scopes_to_the_requested_day(
         == ()
     )
     summaries = video_digest_catalog.list_published_editions(
-        date(2026, 9, 20), public_media_base_url=PUBLIC_MEDIA_BASE_URL
+        date(2099, 9, 20), public_media_base_url=PUBLIC_MEDIA_BASE_URL
     )
     assert [summary.edition_id for summary in summaries] == [run.identity.edition_id]
 
@@ -1252,17 +1267,17 @@ def test_list_published_editions_applies_the_requested_limit(
         seed=260,
         stop_at="published",
         slot_name=SlotName.MORNING,
-        scheduled_at=datetime(2026, 9, 20, 6, tzinfo=UTC),
+        scheduled_at=datetime(2099, 9, 20, 6, tzinfo=UTC),
     )
     later = _walk_publication_pipeline(
         seed=270,
         stop_at="published",
         slot_name=SlotName.MIDDAY,
-        scheduled_at=datetime(2026, 9, 20, 9, tzinfo=UTC),
+        scheduled_at=datetime(2099, 9, 20, 9, tzinfo=UTC),
     )
 
     summaries = video_digest_catalog.list_published_editions(
-        date(2026, 9, 20), public_media_base_url=PUBLIC_MEDIA_BASE_URL, limit=1
+        date(2099, 9, 20), public_media_base_url=PUBLIC_MEDIA_BASE_URL, limit=1
     )
     assert [summary.edition_id for summary in summaries] == [later.identity.edition_id]
 
@@ -1274,9 +1289,9 @@ def test_list_published_editions_rejects_out_of_range_limits(
 
     with pytest.raises(ValueError, match="limit must be between"):
         video_digest_catalog.list_published_editions(
-            date(2026, 9, 20), public_media_base_url=PUBLIC_MEDIA_BASE_URL, limit=0
+            date(2099, 9, 20), public_media_base_url=PUBLIC_MEDIA_BASE_URL, limit=0
         )
     with pytest.raises(ValueError, match="limit must be between"):
         video_digest_catalog.list_published_editions(
-            date(2026, 9, 20), public_media_base_url=PUBLIC_MEDIA_BASE_URL, limit=101
+            date(2099, 9, 20), public_media_base_url=PUBLIC_MEDIA_BASE_URL, limit=101
         )

@@ -33,9 +33,9 @@ from romanian_news.video_digest.models import (
     scheduled_slot_id,
 )
 
-RECORDED_AT = datetime(2026, 9, 20, 5, tzinfo=UTC)
-MORNING_AT = datetime(2026, 9, 20, 6, tzinfo=UTC)
-MIDDAY_AT = datetime(2026, 9, 20, 9, tzinfo=UTC)
+RECORDED_AT = datetime(2099, 9, 20, 5, tzinfo=UTC)
+MORNING_AT = datetime(2099, 9, 20, 6, tzinfo=UTC)
+MIDDAY_AT = datetime(2099, 9, 20, 9, tzinfo=UTC)
 
 
 def _sha256_id(value: int) -> str:
@@ -159,14 +159,49 @@ def _insert_generation_request(
     edition_id: str,
     request_version: str,
 ) -> None:
-    connection.execute(
-        "INSERT INTO video_digest_generation_requests "
-        "(request_id, edition_id, story_position, attempt_index, "
-        "request_artifact_version_id, stage, cost_kind, created_at, updated_at) "
-        "VALUES (%s, %s, 0, 0, %s, 'pending', 'pending', CURRENT_TIMESTAMP, "
-        "CURRENT_TIMESTAMP)",
-        (request_id, edition_id, request_version),
-    )
+    row = connection.execute(
+        "SELECT slot.scheduled_at, slot.bucharest_day, story.story_id, "
+        "edition.policy_bundle_version_id FROM video_digest_slots AS slot "
+        "JOIN video_digest_editions AS edition ON edition.edition_id = slot.edition_id "
+        "JOIN video_digest_stories AS story ON story.edition_id = edition.edition_id "
+        "AND story.position = 0 WHERE edition.edition_id = %s",
+        (edition_id,),
+    ).fetchone()
+    assert row is not None
+    scheduled_at, bucharest_day, story_id, policy_version = row
+    with connection.transaction():
+        connection.execute(
+            "INSERT INTO video_digest_generation_requests "
+            "(request_id, edition_id, story_position, attempt_index, "
+            "request_artifact_version_id, generation_policy_artifact_version_id, "
+            "reserved_cost_usd, deadline_at, stage, cost_kind, created_at, updated_at) "
+            "VALUES (%s, %s, 0, 0, %s, %s, 3.25632, %s + INTERVAL '90 minutes', "
+            "'pending', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            (request_id, edition_id, request_version, policy_version, scheduled_at),
+        )
+        connection.execute(
+            "INSERT INTO video_digest_generation_reservations "
+            "(request_id, scope_kind, scope_key, limit_usd, reserved_usd, "
+            "generation_policy_artifact_version_id, created_at) VALUES "
+            "(%s, 'story', %s, 7, 3.25632, %s, CURRENT_TIMESTAMP), "
+            "(%s, 'edition', %s, 7, 3.25632, %s, CURRENT_TIMESTAMP), "
+            "(%s, 'bucharest_day', %s, 150, 3.25632, %s, CURRENT_TIMESTAMP), "
+            "(%s, 'calendar_month', %s, 1000, 3.25632, %s, CURRENT_TIMESTAMP)",
+            (
+                request_id,
+                story_id,
+                policy_version,
+                request_id,
+                edition_id,
+                policy_version,
+                request_id,
+                bucharest_day.isoformat(),
+                policy_version,
+                request_id,
+                bucharest_day.replace(day=1).isoformat(),
+                policy_version,
+            ),
+        )
 
 
 def _expire_lease(connection: psycopg.Connection[Any], slot_id: SlotId) -> None:
@@ -209,6 +244,10 @@ def _publish_edition_and_slot(
     ) = _record_artifact_versions(connection, artifact_start, 11)
     identity = _edition(report, policy)
     _insert_edition(connection, identity.edition_id, report, policy)
+    video_digest_catalog.schedule_slot(slot, recorded_at=recorded_at)
+    lease = _claim_lease(
+        slot.slot_id, identity, owner_token="publisher", lease_duration=timedelta(hours=1)
+    )
     subject_id = _sha256_id(artifact_start + 40)
     story_id = planned_story_id(identity.edition_id, 0, subject_id)
     _insert_story(connection, story_id, identity.edition_id, 0, subject_id)
@@ -286,10 +325,6 @@ def _publish_edition_and_slot(
         "subtitle_failure_evidence_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
         "WHERE edition_id = %s",
         (subtitle_failure, identity.edition_id),
-    )
-    video_digest_catalog.schedule_slot(slot, recorded_at=recorded_at)
-    lease = _claim_lease(
-        slot.slot_id, identity, owner_token="publisher", lease_duration=timedelta(hours=1)
     )
     for stage in ("planning", "generating", "assembling", "subtitling", "publishing"):
         connection.execute(

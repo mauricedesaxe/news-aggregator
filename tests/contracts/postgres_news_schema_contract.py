@@ -133,15 +133,84 @@ def _insert_generation_request(
     request_id: str,
     edition_id: str,
     request_version: str,
+    *,
+    attempt_index: int = 0,
 ) -> None:
-    connection.execute(
-        "INSERT INTO video_digest_generation_requests "
-        "(request_id, edition_id, story_position, attempt_index, "
-        "request_artifact_version_id, stage, cost_kind, created_at, updated_at) "
-        "VALUES (%s, %s, 0, 0, %s, 'pending', 'pending', "
-        "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-        (request_id, edition_id, request_version),
-    )
+    has_admission = connection.execute(
+        "SELECT to_regclass(current_schema() || '.video_digest_generation_reservations')"
+    ).fetchone()
+    assert has_admission is not None
+    if has_admission[0] is None:
+        connection.execute(
+            "INSERT INTO video_digest_generation_requests "
+            "(request_id, edition_id, story_position, attempt_index, "
+            "request_artifact_version_id, stage, cost_kind, created_at, updated_at) "
+            "VALUES (%s, %s, 0, %s, %s, 'pending', 'pending', "
+            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            (request_id, edition_id, attempt_index, request_version),
+        )
+        return
+    row = connection.execute(
+        "SELECT slot.scheduled_at, slot.bucharest_day, story.story_id, "
+        "edition.policy_bundle_version_id FROM video_digest_slots AS slot "
+        "JOIN video_digest_editions AS edition ON edition.edition_id = slot.edition_id "
+        "JOIN video_digest_stories AS story ON story.edition_id = edition.edition_id "
+        "AND story.position = 0 WHERE edition.edition_id = %s",
+        (edition_id,),
+    ).fetchone()
+    if row is None:
+        slot_id = edition_id
+        _insert_slot(connection, slot_id)
+        connection.execute(
+            "UPDATE video_digest_slots SET stage = 'claimed', edition_id = %s, "
+            "lease_owner_token = 'contract-owner', "
+            "lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', claim_count = 1, "
+            "updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (edition_id, slot_id),
+        )
+        row = connection.execute(
+            "SELECT slot.scheduled_at, slot.bucharest_day, story.story_id, "
+            "edition.policy_bundle_version_id FROM video_digest_slots AS slot "
+            "JOIN video_digest_editions AS edition ON edition.edition_id = slot.edition_id "
+            "JOIN video_digest_stories AS story ON story.edition_id = edition.edition_id "
+            "AND story.position = 0 WHERE edition.edition_id = %s",
+            (edition_id,),
+        ).fetchone()
+    assert row is not None
+    scheduled_at, bucharest_day, story_id, policy_version = row
+    with connection.transaction():
+        connection.execute(
+            "INSERT INTO video_digest_generation_requests "
+            "(request_id, edition_id, story_position, attempt_index, "
+            "request_artifact_version_id, generation_policy_artifact_version_id, "
+            "reserved_cost_usd, deadline_at, stage, cost_kind, created_at, updated_at) "
+            "VALUES (%s, %s, 0, %s, %s, %s, 3.25632, %s + INTERVAL '90 minutes', "
+            "'pending', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            (request_id, edition_id, attempt_index, request_version, policy_version, scheduled_at),
+        )
+        connection.execute(
+            "INSERT INTO video_digest_generation_reservations "
+            "(request_id, scope_kind, scope_key, limit_usd, reserved_usd, "
+            "generation_policy_artifact_version_id, created_at) VALUES "
+            "(%s, 'story', %s, 7, 3.25632, %s, CURRENT_TIMESTAMP), "
+            "(%s, 'edition', %s, 7, 3.25632, %s, CURRENT_TIMESTAMP), "
+            "(%s, 'bucharest_day', %s, 150, 3.25632, %s, CURRENT_TIMESTAMP), "
+            "(%s, 'calendar_month', %s, 1000, 3.25632, %s, CURRENT_TIMESTAMP)",
+            (
+                request_id,
+                story_id,
+                policy_version,
+                request_id,
+                edition_id,
+                policy_version,
+                request_id,
+                bucharest_day.isoformat(),
+                policy_version,
+                request_id,
+                bucharest_day.replace(day=1).isoformat(),
+                policy_version,
+            ),
+        )
 
 
 def _insert_publication_intent(
@@ -235,7 +304,7 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         ).fetchall()
 
     assert "debt_transcript_projection_items" not in tables
-    assert len(tables) == 47
+    assert len(tables) == 48
     assert migrations == [
         (1, "initial", news_schema.NEWS_CATALOG_MIGRATIONS[0].sha256),
         (2, "video_digest", news_schema.NEWS_CATALOG_MIGRATIONS[1].sha256),
@@ -250,6 +319,7 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
             news_schema.NEWS_CATALOG_MIGRATIONS[3].sha256,
         ),
         (5, "video_digest_planning", news_schema.NEWS_CATALOG_MIGRATIONS[4].sha256),
+        (6, "video_digest_generation_admission", news_schema.NEWS_CATALOG_MIGRATIONS[5].sha256),
     ]
 
 
@@ -1215,13 +1285,12 @@ def test_video_digest_generation_checkpoints_complete_atomically(
             (clip_file.artifact_id, slot.slot_id),
         ).fetchone()
         second_request_version = _record_artifact_versions(connection, 503, 1)[0]
-        connection.execute(
-            "INSERT INTO video_digest_generation_requests "
-            "(request_id, edition_id, story_position, attempt_index, "
-            " request_artifact_version_id, stage, cost_kind, created_at, updated_at) "
-            "VALUES (%s, %s, 0, 1, %s, 'pending', 'pending', "
-            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-            (_sha256_id(504), identity.edition_id, second_request_version),
+        _insert_generation_request(
+            connection,
+            _sha256_id(504),
+            identity.edition_id,
+            second_request_version,
+            attempt_index=1,
         )
         with pytest.raises(psycopg.errors.UniqueViolation):
             connection.execute(
