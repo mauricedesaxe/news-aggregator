@@ -339,7 +339,7 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         ).fetchall()
 
     assert "debt_transcript_projection_items" not in tables
-    assert len(tables) == 48
+    assert len(tables) == 50
     assert migrations == [
         (1, "initial", news_schema.NEWS_CATALOG_MIGRATIONS[0].sha256),
         (2, "video_digest", news_schema.NEWS_CATALOG_MIGRATIONS[1].sha256),
@@ -356,6 +356,7 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         (5, "video_digest_planning", news_schema.NEWS_CATALOG_MIGRATIONS[4].sha256),
         (6, "video_digest_generation_admission", news_schema.NEWS_CATALOG_MIGRATIONS[5].sha256),
         (7, "video_digest_media_evidence", news_schema.NEWS_CATALOG_MIGRATIONS[6].sha256),
+        (8, "video_digest_orchestration", news_schema.NEWS_CATALOG_MIGRATIONS[7].sha256),
     ]
 
 
@@ -443,6 +444,130 @@ def test_media_migration_rejects_legacy_outputs_without_evidence(
             "WHERE table_schema = current_schema() "
             "AND column_name = 'validation_evidence_artifact_version_id'"
         ).fetchone() == (0,)
+
+
+def test_orchestration_migration_backfills_existing_failed_slots(
+    postgres_news_schema: str,
+) -> None:
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    migrations = news_schema.NEWS_CATALOG_MIGRATIONS
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        for migration in migrations[:7]:
+            connection.execute(cast(LiteralString, migration.path.read_text()), prepare=False)
+            connection.execute(
+                "INSERT INTO news_schema_migrations (version, name, sha256) VALUES (%s, %s, %s)",
+                (migration.version, migration.name, migration.sha256),
+            )
+
+        (failure,) = _record_artifact_versions(connection, 930, 1)
+        slot_id = _sha256_id(931)
+        _insert_slot(connection, slot_id)
+        connection.execute("SET session_replication_role = replica")
+        connection.execute(
+            "UPDATE video_digest_slots SET stage = 'failed', "
+            "failure_evidence_artifact_version_id = %s, terminal_fence_required = FALSE, "
+            "updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (failure, slot_id),
+        )
+        connection.execute("SET session_replication_role = origin")
+
+        migration = migrations[7]
+        connection.execute(cast(LiteralString, migration.path.read_text()), prepare=False)
+        connection.execute(
+            "INSERT INTO news_schema_migrations (version, name, sha256) VALUES (%s, %s, %s)",
+            (migration.version, migration.name, migration.sha256),
+        )
+
+        assert connection.execute(
+            "SELECT failure_reason FROM video_digest_slots WHERE slot_id = %s",
+            (slot_id,),
+        ).fetchone() == ("terminal_failure",)
+        with pytest.raises(
+            psycopg.errors.IntegrityConstraintViolation,
+            match="terminal video digest slot cannot change",
+        ):
+            connection.execute(
+                "UPDATE video_digest_slots SET updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+                (slot_id,),
+            )
+
+
+def test_video_digest_attempt_ledgers_enforce_bounds_and_sequence(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        report, policy, failure, video, manifest, subtitle = _record_artifact_versions(
+            connection, 950, 6
+        )
+        edition_id, slot_id = (_sha256_id(value) for value in range(960, 962))
+        _insert_edition(connection, edition_id, report, policy)
+        _insert_slot(connection, slot_id)
+        connection.execute(
+            "UPDATE video_digest_slots SET stage = 'claimed', edition_id = %s, "
+            "lease_owner_token = 'owner', lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', "
+            "claim_count = 1, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (edition_id, slot_id),
+        )
+        for stage in ("planning", "generating", "assembling"):
+            connection.execute(
+                "UPDATE video_digest_slots SET stage = %s, updated_at = CURRENT_TIMESTAMP "
+                "WHERE slot_id = %s",
+                (stage, slot_id),
+            )
+
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "INSERT INTO video_digest_assembly_attempts "
+                "(edition_id, attempt_index, disposition, evidence_artifact_version_id, created_at) "
+                "VALUES (%s, 1, 'failed', %s, CURRENT_TIMESTAMP)",
+                (edition_id, failure),
+            )
+        connection.execute(
+            "INSERT INTO video_digest_assembly_attempts "
+            "(edition_id, attempt_index, disposition, evidence_artifact_version_id, "
+            "assembled_video_artifact_version_id, assembly_manifest_artifact_version_id, created_at) "
+            "VALUES (%s, 0, 'succeeded', %s, %s, %s, CURRENT_TIMESTAMP)",
+            (edition_id, manifest, video, manifest),
+        )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "UPDATE video_digest_assembly_attempts SET disposition = 'failed' "
+                "WHERE edition_id = %s",
+                (edition_id,),
+            )
+        connection.execute(
+            "UPDATE video_digest_editions SET assembled_video_artifact_version_id = %s, "
+            "assembly_manifest_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
+            "WHERE edition_id = %s",
+            (video, manifest, edition_id),
+        )
+        connection.execute(
+            "UPDATE video_digest_slots SET stage = 'subtitling', updated_at = CURRENT_TIMESTAMP "
+            "WHERE slot_id = %s",
+            (slot_id,),
+        )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "INSERT INTO video_digest_subtitle_attempts "
+                "(edition_id, attempt_index, strategy, disposition, "
+                "evidence_artifact_version_id, created_at) "
+                "VALUES (%s, 0, 'per-story-v1', 'failed', %s, CURRENT_TIMESTAMP)",
+                (edition_id, subtitle),
+            )
+        connection.execute(
+            "INSERT INTO video_digest_subtitle_attempts "
+            "(edition_id, attempt_index, strategy, disposition, "
+            "evidence_artifact_version_id, created_at) "
+            "VALUES (%s, 0, 'whole-edition-v1', 'failed', %s, CURRENT_TIMESTAMP)",
+            (edition_id, subtitle),
+        )
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "DELETE FROM video_digest_subtitle_attempts WHERE edition_id = %s",
+                (edition_id,),
+            )
 
 
 def test_news_schema_rejects_changed_migration_digest(postgres_news_schema: str) -> None:
@@ -811,7 +936,7 @@ def test_video_digest_story_acceptance_requires_matching_generation(
             )
 
 
-def test_video_digest_lease_owner_requires_a_fresh_claim(
+def test_video_digest_lease_recovery_requires_an_expired_fence_and_fresh_claim_count(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
@@ -842,8 +967,18 @@ def test_video_digest_lease_owner_requires_a_fresh_claim(
             (slot_id,),
         )
         connection.execute(
+            "UPDATE video_digest_slots SET lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', "
+            "claim_count = 2, updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (slot_id,),
+        )
+        connection.execute(
+            "UPDATE video_digest_slots SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second', "
+            "updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
+            (slot_id,),
+        )
+        connection.execute(
             "UPDATE video_digest_slots SET lease_owner_token = 'owner-b', "
-            "lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', claim_count = 2, "
+            "lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour', claim_count = 3, "
             "updated_at = CURRENT_TIMESTAMP WHERE slot_id = %s",
             (slot_id,),
         )
@@ -914,9 +1049,8 @@ def test_video_digest_catalog_serializes_claim_race_and_fences_recovery(
             (recovery_time - timedelta(seconds=1), recovery_time, prior_lease.slot_id),
         )
 
-    recovered = video_digest_catalog.claim_slot(
+    recovered = video_digest_catalog.reacquire_slot(
         prior_lease.slot_id,
-        identity,
         owner_token="owner-c",
         now=recovery_time,
         lease_duration=timedelta(hours=1),
