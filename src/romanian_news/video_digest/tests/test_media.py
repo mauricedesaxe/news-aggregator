@@ -226,8 +226,14 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
     monkeypatch.setattr(media, "read_verified_r2_object", lambda _key, _digest: content)
 
     def publish(objects) -> None:
-        events.append("publish")
+        events.append("evidence")
         published.update(objects)
+
+    def publish_clip(key: str, content: bytes, *, retention: str, source_lineage: str) -> None:
+        events.append("private")
+        assert retention == "permanent"
+        assert source_lineage == candidate.request_id
+        published[key] = content
 
     def checkpoint(*_args, validation_file, **_kwargs) -> None:
         events.append("checkpoint")
@@ -238,12 +244,13 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
         )
 
     monkeypatch.setattr(media, "publish_immutable_r2_objects", publish)
+    monkeypatch.setattr(media, "publish_private_video_object", publish_clip)
     monkeypatch.setattr(media, "checkpoint_generation_acceptance", checkpoint)
 
     result = media.accept_candidate(_lease(edition), candidate, story)
 
     assert isinstance(result, media.AcceptedCandidate)
-    assert events == ["publish", "checkpoint"]
+    assert events == ["private", "evidence", "checkpoint"]
     assert any(key.endswith(".mp4") for key in published)
 
     events.clear()
@@ -261,7 +268,7 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
     rejected = media.accept_candidate(_lease(edition), candidate, story)
 
     assert isinstance(rejected, media.GenerationRetryAvailable)
-    assert events == ["publish", "failure-checkpoint"]
+    assert events == ["evidence", "failure-checkpoint"]
 
 
 def test_assembly_preserves_plan_order_and_deterministic_manifest(

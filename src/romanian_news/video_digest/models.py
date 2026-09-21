@@ -23,6 +23,10 @@ StoryId = NewType("StoryId", str)
 GenerationRequestId = NewType("GenerationRequestId", str)
 PublicationId = NewType("PublicationId", str)
 
+PUBLIC_MEDIA_CACHE_CONTROL = "public,max-age=31536000,immutable"
+PUBLIC_MEDIA_VISIBILITY = "public"
+PUBLIC_MEDIA_RETENTION = "permanent"
+
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
 EditionIdField = Annotated[EditionId, Field(pattern=_SHA256_PATTERN)]
 SlotIdField = Annotated[SlotId, Field(pattern=_SHA256_PATTERN)]
@@ -389,7 +393,7 @@ class SubtitleObjectMetadata(NewsModel):
     expected_key: PublicObjectKey
     content_digest: Sha256
     byte_size: Annotated[int, Field(gt=0)]
-    media_type: NonEmptyText
+    media_type: Literal["text/vtt"]
 
 
 def publication_id(
@@ -402,6 +406,9 @@ def publication_id(
     subtitle: SubtitleObjectMetadata | None,
     source_video_version_id: Sha256,
     source_subtitle_version_id: Sha256 | None,
+    cache_control: str = PUBLIC_MEDIA_CACHE_CONTROL,
+    visibility: str = PUBLIC_MEDIA_VISIBILITY,
+    retention: str = PUBLIC_MEDIA_RETENTION,
 ) -> PublicationId:
     return PublicationId(
         sha256(
@@ -409,12 +416,15 @@ def publication_id(
                 {
                     "edition_id": edition_id_value,
                     "expected_video_key": expected_video_key,
+                    "cache_control": cache_control,
+                    "retention": retention,
                     "source_subtitle_version_id": source_subtitle_version_id,
                     "source_video_version_id": source_video_version_id,
                     "subtitle": subtitle.model_dump(mode="json") if subtitle is not None else None,
                     "video_byte_size": video_byte_size,
                     "video_digest": video_digest,
                     "video_media_type": video_media_type,
+                    "visibility": visibility,
                 }
             )
         )
@@ -427,16 +437,33 @@ class PublicationIntent(NewsModel):
     expected_video_key: PublicObjectKey
     video_digest: Sha256
     video_byte_size: Annotated[int, Field(gt=0)]
-    video_media_type: NonEmptyText
+    video_media_type: Literal["video/mp4"]
     subtitle: SubtitleObjectMetadata | None = None
     source_video_version_id: Sha256
     source_subtitle_version_id: Sha256 | None = None
+    cache_control: Literal["public,max-age=31536000,immutable"] = PUBLIC_MEDIA_CACHE_CONTROL
+    visibility: Literal["public"] = PUBLIC_MEDIA_VISIBILITY
+    retention: Literal["permanent"] = PUBLIC_MEDIA_RETENTION
 
     @model_validator(mode="after")
     def validate_publication(self) -> PublicationIntent:
         if (self.subtitle is None) != (self.source_subtitle_version_id is None):
             raise ValueError(
                 "Subtitle object metadata and source subtitle version must be provided together"
+            )
+        if self.edition_id not in self.expected_video_key or self.video_digest not in (
+            self.expected_video_key
+        ):
+            raise ValueError("Public video key must include the edition ID and content digest")
+        if not self.expected_video_key.endswith(".mp4"):
+            raise ValueError("Public video key must end in .mp4")
+        if self.subtitle is not None and (
+            self.edition_id not in self.subtitle.expected_key
+            or self.subtitle.content_digest not in self.subtitle.expected_key
+            or not self.subtitle.expected_key.endswith(".vtt")
+        ):
+            raise ValueError(
+                "Public subtitle key must include the edition ID and content digest and end in .vtt"
             )
         expected = publication_id(
             edition_id_value=self.edition_id,
@@ -447,6 +474,9 @@ class PublicationIntent(NewsModel):
             subtitle=self.subtitle,
             source_video_version_id=self.source_video_version_id,
             source_subtitle_version_id=self.source_subtitle_version_id,
+            cache_control=self.cache_control,
+            visibility=self.visibility,
+            retention=self.retention,
         )
         if self.publication_id != expected:
             raise ValueError("Publication ID does not match its intent")
@@ -462,6 +492,29 @@ class PublicationStatus(NewsModel):
     publication_id: PublicationIdField
     edition_id: EditionIdField
     stage: PublicationState
+
+
+class PublicationAttemptReady(NewsModel):
+    kind: Literal["ready"] = "ready"
+    attempt_index: Annotated[int, Field(ge=0, le=4)]
+
+
+class PublicationAttemptWaiting(NewsModel):
+    kind: Literal["waiting"] = "waiting"
+    attempt_index: Annotated[int, Field(ge=0, le=3)]
+    retry_at: AwareDatetime
+
+
+class PublicationCheckpointSuperseded(NewsModel):
+    kind: Literal["superseded"] = "superseded"
+    status: PublicationStatus
+    retry_at: AwareDatetime | None = None
+
+
+PublicationAttempt = Annotated[
+    PublicationAttemptReady | PublicationAttemptWaiting | PublicationCheckpointSuperseded,
+    Field(discriminator="kind"),
+]
 
 
 class UploadingPublication(NewsModel):

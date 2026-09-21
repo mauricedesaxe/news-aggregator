@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal, LiteralString, TypeVar, cast
 from urllib.parse import urlsplit
 
-from pydantic import Field, ValidationError
+from pydantic import AwareDatetime, Field, TypeAdapter, ValidationError
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.catalog.artifacts import (
@@ -52,6 +52,10 @@ from romanian_news.video_digest.models import (
     MeasuredAttemptCost,
     PendingAttemptCost,
     PlannedStory,
+    PublicationAttempt,
+    PublicationAttemptReady,
+    PublicationAttemptWaiting,
+    PublicationCheckpointSuperseded,
     PublicationId,
     PublicationIntent,
     PublicationProgress,
@@ -113,6 +117,56 @@ _ACTIVE_STAGES = frozenset(
     }
 )
 _Result = TypeVar("_Result")
+
+
+class _StartedPublicationAttempt(NewsModel):
+    publication_id: Sha256
+    attempt_index: Annotated[int, Field(ge=0, le=4)]
+    state: Literal["started"]
+    retry_at: None
+    failure_evidence_artifact_version_id: None
+    started_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+class _RetryablePublicationAttempt(NewsModel):
+    publication_id: Sha256
+    attempt_index: Annotated[int, Field(ge=0, le=3)]
+    state: Literal["retryable"]
+    retry_at: AwareDatetime
+    failure_evidence_artifact_version_id: Sha256
+    started_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+class _SuccessfulPublicationAttempt(NewsModel):
+    publication_id: Sha256
+    attempt_index: Annotated[int, Field(ge=0, le=4)]
+    state: Literal["succeeded"]
+    retry_at: None
+    failure_evidence_artifact_version_id: None
+    started_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+class _FailedPublicationAttempt(NewsModel):
+    publication_id: Sha256
+    attempt_index: Annotated[int, Field(ge=0, le=4)]
+    state: Literal["conflict", "failed"]
+    retry_at: None
+    failure_evidence_artifact_version_id: Sha256
+    started_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
+_StoredPublicationAttempt = Annotated[
+    _StartedPublicationAttempt
+    | _RetryablePublicationAttempt
+    | _SuccessfulPublicationAttempt
+    | _FailedPublicationAttempt,
+    Field(discriminator="state"),
+]
+_STORED_PUBLICATION_ATTEMPT_ADAPTER = TypeAdapter(_StoredPublicationAttempt)
 
 
 class PlanningAttemptReference(NewsModel):
@@ -2246,9 +2300,10 @@ def record_publication_intent(
                      video_byte_size, video_media_type, subtitle_expected_key,
                      subtitle_digest, subtitle_byte_size, subtitle_media_type,
                      source_video_artifact_version_id,
-                     source_subtitle_artifact_version_id, stage, created_at, updated_at)
+                     source_subtitle_artifact_version_id, cache_control, visibility,
+                     retention, stage, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        'pending', %s, %s)
+                        %s, %s, %s, 'pending', %s, %s)
                 ON CONFLICT DO NOTHING
                 """,
                 (
@@ -2264,6 +2319,9 @@ def record_publication_intent(
                     subtitle.media_type if subtitle is not None else None,
                     intent.source_video_version_id,
                     intent.source_subtitle_version_id,
+                    intent.cache_control,
+                    intent.visibility,
+                    intent.retention,
                     current,
                     current,
                 ),
@@ -2278,14 +2336,149 @@ def record_publication_intent(
     return _checkpoint_transaction(checkpoint)
 
 
+def begin_publication_attempt(
+    lease: SlotLease,
+    publication_id: PublicationId,
+    *,
+    recorded_at: datetime,
+) -> PublicationAttempt:
+    _utc(recorded_at, "recorded_at")
+
+    def checkpoint(connection: CatalogConnection) -> PublicationAttempt:
+        slot_row = _lock_slot(connection, lease.slot_id)
+        if str(slot_row["stage"]) in {SlotStage.FAILED.value, SlotStage.PUBLISHED.value}:
+            if not _terminal_fence_matches(slot_row, lease):
+                raise VideoDigestLeaseLostError("Video digest slot lease was lost")
+            publication = _required_publication(connection, publication_id, lease.edition_id)
+            return PublicationCheckpointSuperseded(status=_publication_status(publication))
+        current = _validate_locked_lease(connection, slot_row, lease)
+        if str(slot_row["stage"]) != SlotStage.PUBLISHING.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with the publication attempt"
+            )
+        publication = _required_publication(connection, publication_id, lease.edition_id)
+        if str(publication["stage"]) not in {
+            PublicationState.PENDING.value,
+            PublicationState.UPLOADING.value,
+            PublicationState.UPLOADED.value,
+            PublicationState.VERIFIED.value,
+        }:
+            raise VideoDigestCheckpointConflictError("Stored publication is terminal")
+        attempts = _lock_publication_attempts(connection, publication_id)
+        if not attempts:
+            attempt_index = 0
+        else:
+            latest = attempts[-1]
+            latest_state = latest.state
+            attempt_index = latest.attempt_index
+            if latest_state == "started":
+                return PublicationAttemptReady(attempt_index=attempt_index)
+            if latest_state != "retryable":
+                raise VideoDigestCheckpointConflictError("Stored publication attempt is terminal")
+            if not isinstance(latest, _RetryablePublicationAttempt):
+                raise VideoDigestCheckpointConflictError(
+                    "Stored retryable publication attempt is invalid"
+                )
+            retry_at = latest.retry_at
+            if current < retry_at:
+                return PublicationAttemptWaiting(
+                    attempt_index=attempt_index,
+                    retry_at=retry_at,
+                )
+            attempt_index += 1
+        if attempt_index > 4:
+            raise VideoDigestCheckpointConflictError("Publication attempt bound was exceeded")
+        connection.execute(
+            """
+            INSERT INTO video_digest_publication_attempts
+                (publication_id, attempt_index, state, started_at, updated_at)
+            VALUES (%s, %s, 'started', %s, %s)
+            """,
+            (publication_id, attempt_index, current, current),
+        )
+        return PublicationAttemptReady(attempt_index=attempt_index)
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def checkpoint_publication_retry(
+    lease: SlotLease,
+    publication_id: PublicationId,
+    attempt_index: int,
+    *,
+    expected_stage: PublicationState,
+    evidence_file: ArtifactFile,
+    recorded_at: datetime,
+) -> PublicationAttemptWaiting | PublicationCheckpointSuperseded:
+    _utc(recorded_at, "recorded_at")
+    if attempt_index < 0 or attempt_index > 3:
+        raise ValueError("Retryable publication attempt index must be between 0 and 3")
+    if (
+        evidence_file.artifact_id != f"{publication_id}:attempt-{attempt_index}-failure"
+        or evidence_file.artifact_kind != "video_digest_publication_attempt_failure"
+    ):
+        raise ValueError("Publication attempt failure artifact identity is invalid")
+
+    def checkpoint(
+        connection: CatalogConnection,
+    ) -> PublicationAttemptWaiting | PublicationCheckpointSuperseded:
+        slot_row = _lock_slot(connection, lease.slot_id)
+        if str(slot_row["stage"]) in {SlotStage.FAILED.value, SlotStage.PUBLISHED.value}:
+            if not _terminal_fence_matches(slot_row, lease):
+                raise VideoDigestLeaseLostError("Video digest slot lease was lost")
+            publication = _required_publication(connection, publication_id, lease.edition_id)
+            return PublicationCheckpointSuperseded(status=_publication_status(publication))
+        current = _validate_locked_lease(connection, slot_row, lease)
+        if str(slot_row["stage"]) != SlotStage.PUBLISHING.value:
+            raise VideoDigestCheckpointConflictError(
+                "Stored video digest slot conflicts with the publication retry"
+            )
+        publication = _required_publication(connection, publication_id, lease.edition_id)
+        if str(publication["stage"]) != expected_stage.value:
+            return PublicationCheckpointSuperseded(status=_publication_status(publication))
+        attempt = _required_publication_attempt(connection, publication_id, attempt_index)
+        if not isinstance(attempt, _StartedPublicationAttempt):
+            retry_at = (
+                attempt.retry_at if isinstance(attempt, _RetryablePublicationAttempt) else None
+            )
+            return PublicationCheckpointSuperseded(
+                status=_publication_status(publication),
+                retry_at=retry_at,
+            )
+        _register_artifact(connection, evidence_file, current)
+        retry_at = current + timedelta(seconds=60 * (2**attempt_index))
+        _execute_returning(
+            connection,
+            """
+            UPDATE video_digest_publication_attempts
+            SET state = 'retryable', retry_at = %s,
+                failure_evidence_artifact_version_id = %s, updated_at = %s
+            WHERE publication_id = %s AND attempt_index = %s AND state = 'started'
+            RETURNING publication_id
+            """,
+            (
+                retry_at,
+                evidence_file.version_id,
+                current,
+                publication_id,
+                attempt_index,
+            ),
+            VideoDigestCheckpointConflictError("Stored publication attempt conflicts with retry"),
+        )
+        return PublicationAttemptWaiting(attempt_index=attempt_index, retry_at=retry_at)
+
+    return _checkpoint_transaction(checkpoint)
+
+
 def checkpoint_publication_progress(
     lease: SlotLease,
     publication_id: PublicationId,
+    attempt_index: int,
     progress: PublicationProgress,
     *,
     evidence_file: ArtifactFile | None = None,
     recorded_at: datetime,
-) -> PublicationStatus:
+) -> PublicationStatus | PublicationCheckpointSuperseded:
     _utc(recorded_at, "recorded_at")
     target = PublicationState(progress.kind)
     if isinstance(progress, UploadingPublication):
@@ -2306,31 +2499,44 @@ def checkpoint_publication_progress(
         ):
             raise ValueError("Publication progress evidence identity is invalid")
 
-    def checkpoint(connection: CatalogConnection) -> PublicationStatus:
+    def checkpoint(
+        connection: CatalogConnection,
+    ) -> PublicationStatus | PublicationCheckpointSuperseded:
         slot_row = _lock_slot(connection, lease.slot_id)
         slot_stage = SlotStage(str(slot_row["stage"]))
-        terminal_replay = slot_stage == SlotStage.PUBLISHED
+        terminal_replay = slot_stage in {SlotStage.FAILED, SlotStage.PUBLISHED}
         if terminal_replay:
             if not _terminal_fence_matches(slot_row, lease):
                 raise VideoDigestLeaseLostError("Video digest slot lease was lost")
             current = None
         else:
             current = _validate_locked_lease(connection, slot_row, lease)
-        if slot_stage not in {SlotStage.PUBLISHING, SlotStage.PUBLISHED}:
+        if slot_stage not in {SlotStage.PUBLISHING, SlotStage.FAILED, SlotStage.PUBLISHED}:
             raise VideoDigestCheckpointConflictError(
                 "Stored video digest slot conflicts with publication progress"
             )
         row = _required_publication(connection, publication_id, lease.edition_id)
-        if isinstance(progress, VerifiedPublication):
-            _validate_verified_publication(progress, row)
         current_stage = PublicationState(str(row["stage"]))
         if terminal_replay:
+            if slot_stage == SlotStage.FAILED:
+                return PublicationCheckpointSuperseded(status=_publication_status(row))
             if current_stage != PublicationState.PUBLISHED:
                 raise VideoDigestCheckpointConflictError(
                     "Stored publication completion conflicts with progress"
                 )
             _require_progress_evidence(connection, row, progress, evidence_file)
             return _publication_status(row)
+        if isinstance(progress, VerifiedPublication):
+            _validate_verified_publication(progress, row)
+        attempt = _required_publication_attempt(connection, publication_id, attempt_index)
+        if not isinstance(attempt, _StartedPublicationAttempt):
+            retry_at = (
+                attempt.retry_at if isinstance(attempt, _RetryablePublicationAttempt) else None
+            )
+            return PublicationCheckpointSuperseded(
+                status=_publication_status(row),
+                retry_at=retry_at,
+            )
         ranks = {
             PublicationState.PENDING: 0,
             PublicationState.UPLOADING: 1,
@@ -2342,6 +2548,8 @@ def checkpoint_publication_progress(
                 "Stored publication is terminal or incompatible with progress"
             )
         if ranks[current_stage] >= ranks[target]:
+            if ranks[current_stage] > ranks[target]:
+                return PublicationCheckpointSuperseded(status=_publication_status(row))
             _require_progress_evidence(connection, row, progress, evidence_file)
             return _publication_status(row)
         if ranks[target] != ranks[current_stage] + 1:
@@ -2398,13 +2606,21 @@ def checkpoint_publication_progress(
 def complete_publication(
     lease: SlotLease,
     publication_id: PublicationId,
+    attempt_index: int,
     *,
     recorded_at: datetime,
-) -> PublishedPublication:
+) -> PublishedPublication | PublicationCheckpointSuperseded:
     _utc(recorded_at, "recorded_at")
 
-    def checkpoint(connection: CatalogConnection) -> PublishedPublication:
+    def checkpoint(
+        connection: CatalogConnection,
+    ) -> PublishedPublication | PublicationCheckpointSuperseded:
         slot_row = _lock_slot(connection, lease.slot_id)
+        if str(slot_row["stage"]) == SlotStage.FAILED.value:
+            if not _terminal_fence_matches(slot_row, lease):
+                raise VideoDigestLeaseLostError("Video digest slot lease was lost")
+            row = _required_publication(connection, publication_id, lease.edition_id)
+            return PublicationCheckpointSuperseded(status=_publication_status(row))
         if str(slot_row["stage"]) == SlotStage.PUBLISHED.value:
             if not _terminal_fence_matches(slot_row, lease):
                 raise VideoDigestLeaseLostError("Video digest slot lease was lost")
@@ -2412,6 +2628,11 @@ def complete_publication(
             if str(row["stage"]) != PublicationState.PUBLISHED.value or row["published_at"] is None:
                 raise VideoDigestCheckpointConflictError(
                     "Stored publication completion conflicts with the request"
+                )
+            attempt = _required_publication_attempt(connection, publication_id, attempt_index)
+            if not isinstance(attempt, _SuccessfulPublicationAttempt):
+                raise VideoDigestCheckpointConflictError(
+                    "Stored publication attempt conflicts with completion"
                 )
             return PublishedPublication(
                 publication_id=publication_id,
@@ -2433,6 +2654,20 @@ def complete_publication(
             )
         ):
             raise VideoDigestCheckpointConflictError("Stored publication is not verified")
+        _required_started_publication_attempt(connection, publication_id, attempt_index)
+        _execute_returning(
+            connection,
+            """
+            UPDATE video_digest_publication_attempts
+            SET state = 'succeeded', updated_at = %s
+            WHERE publication_id = %s AND attempt_index = %s AND state = 'started'
+            RETURNING publication_id
+            """,
+            (current, publication_id, attempt_index),
+            VideoDigestCheckpointConflictError(
+                "Stored publication attempt conflicts with completion"
+            ),
+        )
         _execute_returning(
             connection,
             """
@@ -2475,7 +2710,9 @@ def fail_slot(
     _validate_failure_file(lease.slot_id, evidence_file)
     _utc(recorded_at, "recorded_at")
 
-    def checkpoint(connection: CatalogConnection) -> TerminalSlot:
+    def checkpoint(
+        connection: CatalogConnection,
+    ) -> TerminalSlot:
         slot_row = _lock_slot(connection, lease.slot_id)
         if str(slot_row["stage"]) == SlotStage.FAILED.value:
             _require_terminal_failure_replay(connection, slot_row, lease, evidence_file)
@@ -2553,7 +2790,9 @@ def fail_slot_deadline(
         media_type="application/json",
     )
 
-    def checkpoint(connection: CatalogConnection) -> TerminalSlot:
+    def checkpoint(
+        connection: CatalogConnection,
+    ) -> TerminalSlot:
         slot_row = _lock_slot(connection, lease.slot_id)
         if str(slot_row["stage"]) == SlotStage.FAILED.value:
             _require_terminal_failure_replay(connection, slot_row, lease, evidence_file)
@@ -2571,6 +2810,18 @@ def fail_slot_deadline(
                 cost_kind = 'unknown', cost_usd = NULL,
                 cost_unknown_reason = 'deadline', updated_at = %s
             WHERE edition_id = %s AND stage IN ('pending', 'submitted', 'processing')
+            """,
+            (evidence_file.version_id, current, lease.edition_id),
+        )
+        connection.execute(
+            """
+            UPDATE video_digest_publication_attempts AS attempt
+            SET state = 'failed', retry_at = NULL,
+                failure_evidence_artifact_version_id = %s, updated_at = %s
+            FROM video_digest_publication_intents AS publication
+            WHERE publication.edition_id = %s
+              AND attempt.publication_id = publication.publication_id
+              AND attempt.state = 'started'
             """,
             (evidence_file.version_id, current, lease.edition_id),
         )
@@ -2612,11 +2863,13 @@ def fail_slot_deadline(
 def fail_publication(
     lease: SlotLease,
     publication_id: PublicationId,
+    attempt_index: int,
     *,
+    expected_stage: PublicationState,
     state: Literal[PublicationState.CONFLICT, PublicationState.FAILED],
     evidence_file: ArtifactFile,
     recorded_at: datetime,
-) -> TerminalSlot:
+) -> TerminalSlot | PublicationCheckpointSuperseded:
     _utc(recorded_at, "recorded_at")
     if (
         evidence_file.artifact_id != f"{publication_id}:failure"
@@ -2624,17 +2877,33 @@ def fail_publication(
     ):
         raise ValueError("Publication failure artifact identity is invalid")
 
-    def checkpoint(connection: CatalogConnection) -> TerminalSlot:
+    def checkpoint(
+        connection: CatalogConnection,
+    ) -> TerminalSlot | PublicationCheckpointSuperseded:
         slot_row = _lock_slot(connection, lease.slot_id)
+        if str(slot_row["stage"]) == SlotStage.PUBLISHED.value:
+            if not _terminal_fence_matches(slot_row, lease):
+                raise VideoDigestLeaseLostError("Video digest slot lease was lost")
+            row = _required_publication(connection, publication_id, lease.edition_id)
+            return PublicationCheckpointSuperseded(status=_publication_status(row))
         if str(slot_row["stage"]) == SlotStage.FAILED.value:
-            _require_terminal_failure_replay(connection, slot_row, lease, evidence_file)
+            if not _terminal_fence_matches(slot_row, lease):
+                raise VideoDigestLeaseLostError("Video digest slot lease was lost")
             row = _required_publication(connection, publication_id, lease.edition_id)
             if (
                 str(row["stage"]) != state.value
                 or row["failure_evidence_artifact_version_id"] != evidence_file.version_id
             ):
+                return PublicationCheckpointSuperseded(status=_publication_status(row))
+            _require_terminal_failure_replay(connection, slot_row, lease, evidence_file)
+            attempt = _required_publication_attempt(connection, publication_id, attempt_index)
+            expected_attempt_state = "conflict" if state == PublicationState.CONFLICT else "failed"
+            if (
+                attempt.state != expected_attempt_state
+                or attempt.failure_evidence_artifact_version_id != evidence_file.version_id
+            ):
                 raise VideoDigestCheckpointConflictError(
-                    "Stored publication failure conflicts with the request"
+                    "Stored publication attempt conflicts with failure"
                 )
             return TerminalSlot(state=TerminalSlotState.FAILED)
 
@@ -2644,14 +2913,30 @@ def fail_publication(
                 "Stored video digest slot conflicts with publication failure"
             )
         row = _required_publication(connection, publication_id, lease.edition_id)
-        if str(row["stage"]) not in {
-            PublicationState.PENDING.value,
-            PublicationState.UPLOADING.value,
-            PublicationState.UPLOADED.value,
-            PublicationState.VERIFIED.value,
-        }:
-            raise VideoDigestCheckpointConflictError("Stored publication conflicts with failure")
+        if str(row["stage"]) != expected_stage.value:
+            return PublicationCheckpointSuperseded(status=_publication_status(row))
+        attempt = _required_publication_attempt(connection, publication_id, attempt_index)
+        if not isinstance(attempt, _StartedPublicationAttempt):
+            return PublicationCheckpointSuperseded(status=_publication_status(row))
         _register_artifact(connection, evidence_file, current)
+        attempt_state = "conflict" if state == PublicationState.CONFLICT else "failed"
+        _execute_returning(
+            connection,
+            """
+            UPDATE video_digest_publication_attempts
+            SET state = %s, failure_evidence_artifact_version_id = %s, updated_at = %s
+            WHERE publication_id = %s AND attempt_index = %s AND state = 'started'
+            RETURNING publication_id
+            """,
+            (
+                attempt_state,
+                evidence_file.version_id,
+                current,
+                publication_id,
+                attempt_index,
+            ),
+            VideoDigestCheckpointConflictError("Stored publication attempt conflicts with failure"),
+        )
         _execute_returning(
             connection,
             """
@@ -2834,6 +3119,7 @@ def _lock_publication_for_edition(
                video_byte_size, video_media_type, subtitle_expected_key,
                subtitle_digest, subtitle_byte_size, subtitle_media_type,
                source_video_artifact_version_id, source_subtitle_artifact_version_id,
+               cache_control, visibility, retention,
                stage, evidence_required, upload_evidence_artifact_version_id,
                verification_evidence_artifact_version_id,
                failure_evidence_artifact_version_id, published_at
@@ -2883,6 +3169,9 @@ def _publication_intent_matches(row: Mapping[str, Any], intent: PublicationInten
             if row["source_subtitle_artifact_version_id"] is not None
             else None
         ),
+        str(row["cache_control"]),
+        str(row["visibility"]),
+        str(row["retention"]),
     ) == (
         intent.publication_id,
         intent.edition_id,
@@ -2896,7 +3185,60 @@ def _publication_intent_matches(row: Mapping[str, Any], intent: PublicationInten
         subtitle.media_type if subtitle is not None else None,
         intent.source_video_version_id,
         intent.source_subtitle_version_id,
+        intent.cache_control,
+        intent.visibility,
+        intent.retention,
     )
+
+
+def _lock_publication_attempts(
+    connection: CatalogConnection,
+    publication_id: PublicationId,
+) -> tuple[_StoredPublicationAttempt, ...]:
+    rows = connection.execute(
+        """
+        SELECT publication_id, attempt_index, state, retry_at,
+               failure_evidence_artifact_version_id, started_at, updated_at
+        FROM video_digest_publication_attempts
+        WHERE publication_id = %s
+        ORDER BY attempt_index
+        FOR UPDATE
+        """,
+        (publication_id,),
+    ).fetchall()
+    try:
+        return tuple(
+            _STORED_PUBLICATION_ATTEMPT_ADAPTER.validate_python(row, strict=True) for row in rows
+        )
+    except ValidationError as error:
+        raise VideoDigestCheckpointConflictError(
+            "Stored publication attempt data is invalid"
+        ) from error
+
+
+def _required_publication_attempt(
+    connection: CatalogConnection,
+    publication_id: PublicationId,
+    attempt_index: int,
+) -> _StoredPublicationAttempt:
+    rows = _lock_publication_attempts(connection, publication_id)
+    if attempt_index < 0 or attempt_index >= len(rows):
+        raise VideoDigestCheckpointConflictError("Video digest publication attempt is unavailable")
+    row = rows[attempt_index]
+    if row.attempt_index != attempt_index:
+        raise VideoDigestCheckpointConflictError("Stored publication attempts are not contiguous")
+    return row
+
+
+def _required_started_publication_attempt(
+    connection: CatalogConnection,
+    publication_id: PublicationId,
+    attempt_index: int,
+) -> _StartedPublicationAttempt:
+    row = _required_publication_attempt(connection, publication_id, attempt_index)
+    if not isinstance(row, _StartedPublicationAttempt):
+        raise VideoDigestCheckpointConflictError("Stored publication attempt is not active")
+    return row
 
 
 def _validate_intent_sources(

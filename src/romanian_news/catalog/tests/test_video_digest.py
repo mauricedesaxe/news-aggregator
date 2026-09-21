@@ -28,9 +28,13 @@ from romanian_news.video_digest.models import (
     GenerationStage,
     MeasuredAttemptCost,
     PlannedStory,
+    PublicationAttemptWaiting,
+    PublicationCheckpointSuperseded,
     PublicationIntent,
     PublicationState,
+    PublicationStatus,
     PublishedEdition,
+    PublishedPublication,
     PublishedStory,
     ScheduledSlot,
     SkippedSlot,
@@ -207,12 +211,13 @@ SUBTITLE_FAILURE_FILE = artifact_file(
     media_type="application/json",
 )
 SUBTITLE_FAILURE = FailedSubtitles(evidence_artifact_version_id=SUBTITLE_FAILURE_FILE.version_id)
+PUBLIC_VIDEO_KEY = f"video-digests/{EDITION.edition_id}/{ASSEMBLED_FILE.content_digest}.mp4"
 PUBLICATION_ID = publication_id(
     edition_id_value=EDITION.edition_id,
-    expected_video_key="video-digests/edition.mp4",
+    expected_video_key=PUBLIC_VIDEO_KEY,
     video_digest=ASSEMBLED_FILE.content_digest,
     video_byte_size=len(ASSEMBLED_FILE.content),
-    video_media_type=ASSEMBLED_FILE.media_type,
+    video_media_type="video/mp4",
     subtitle=None,
     source_video_version_id=ASSEMBLED_FILE.version_id,
     source_subtitle_version_id=None,
@@ -220,10 +225,10 @@ PUBLICATION_ID = publication_id(
 PUBLICATION = PublicationIntent(
     publication_id=PUBLICATION_ID,
     edition_id=EDITION.edition_id,
-    expected_video_key="video-digests/edition.mp4",
+    expected_video_key=PUBLIC_VIDEO_KEY,
     video_digest=ASSEMBLED_FILE.content_digest,
     video_byte_size=len(ASSEMBLED_FILE.content),
-    video_media_type=ASSEMBLED_FILE.media_type,
+    video_media_type="video/mp4",
     source_video_version_id=ASSEMBLED_FILE.version_id,
 )
 UPLOAD_FILE = artifact_file(
@@ -464,6 +469,9 @@ def _publication_row(**updates: object) -> dict[str, object]:
         "subtitle_media_type": None,
         "source_video_artifact_version_id": PUBLICATION.source_video_version_id,
         "source_subtitle_artifact_version_id": None,
+        "cache_control": PUBLICATION.cache_control,
+        "visibility": PUBLICATION.visibility,
+        "retention": PUBLICATION.retention,
         "stage": "pending",
         "evidence_required": True,
         "upload_evidence_artifact_version_id": None,
@@ -473,6 +481,24 @@ def _publication_row(**updates: object) -> dict[str, object]:
     }
     row.update(updates)
     return row
+
+
+def _publication_attempt_row(
+    attempt_index: int,
+    state: str = "started",
+    *,
+    retry_at: datetime | None = None,
+    failure_evidence_artifact_version_id: str | None = None,
+) -> dict[str, object]:
+    return {
+        "publication_id": PUBLICATION_ID,
+        "attempt_index": attempt_index,
+        "state": state,
+        "retry_at": retry_at,
+        "failure_evidence_artifact_version_id": failure_evidence_artifact_version_id,
+        "started_at": NOW - timedelta(minutes=1),
+        "updated_at": NOW,
+    }
 
 
 def _artifact_steps() -> list[tuple[str, _Rows]]:
@@ -2289,6 +2315,217 @@ def test_publication_intent_rejects_wrong_edition_sources(
     assert connection.steps == []
 
 
+def test_publication_attempt_starts_once_and_resumes_after_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="publishing")),
+            ("FROM video_digest_publication_intents", _publication_row()),
+            ("FROM video_digest_publication_attempts", []),
+            ("INSERT INTO video_digest_publication_attempts", None),
+        ],
+    )
+
+    first = video_digest.begin_publication_attempt(_lease(), PUBLICATION_ID, recorded_at=NOW)
+
+    assert first.kind == "ready"
+    assert first.attempt_index == 0
+    assert started.steps == []
+
+    resumed = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="publishing")),
+            ("FROM video_digest_publication_intents", _publication_row(stage="uploading")),
+            ("FROM video_digest_publication_attempts", [_publication_attempt_row(0)]),
+        ],
+    )
+
+    replay = video_digest.begin_publication_attempt(_lease(), PUBLICATION_ID, recorded_at=NOW)
+
+    assert replay == first
+    assert resumed.steps == []
+
+
+def test_publication_attempt_waits_without_consuming_an_index(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retry_at = NOW + timedelta(minutes=1)
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="publishing")),
+            ("FROM video_digest_publication_intents", _publication_row(stage="uploading")),
+            (
+                "FROM video_digest_publication_attempts",
+                [
+                    _publication_attempt_row(
+                        0,
+                        "retryable",
+                        retry_at=retry_at,
+                        failure_evidence_artifact_version_id=PUBLICATION_FAILURE_FILE.version_id,
+                    )
+                ],
+            ),
+        ],
+    )
+
+    waiting = video_digest.begin_publication_attempt(_lease(), PUBLICATION_ID, recorded_at=NOW)
+
+    assert waiting.kind == "waiting"
+    assert waiting.attempt_index == 0
+    assert waiting.retry_at == retry_at
+    assert connection.steps == []
+
+
+def test_publication_attempt_converges_after_another_worker_terminalizes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            (
+                "FROM video_digest_slots",
+                _slot_row(
+                    stage="failed",
+                    edition_id=EDITION.edition_id,
+                    claim_count=1,
+                    terminal_lease_owner_token="owner-a",
+                    terminal_lease_expires_at=NOW + timedelta(hours=1),
+                    terminal_claim_count=1,
+                ),
+            ),
+            ("FROM video_digest_publication_intents", _publication_row(stage="failed")),
+        ],
+    )
+
+    result = video_digest.begin_publication_attempt(_lease(), PUBLICATION_ID, recorded_at=NOW)
+
+    assert isinstance(result, PublicationCheckpointSuperseded)
+    assert result.status.stage is PublicationState.FAILED
+    assert connection.steps == []
+
+
+def test_publication_attempts_are_bounded_to_indexes_zero_through_four(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = [
+        _publication_attempt_row(
+            index,
+            "retryable",
+            retry_at=NOW - timedelta(seconds=1),
+            failure_evidence_artifact_version_id=str(index) * 64,
+        )
+        for index in range(4)
+    ]
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="publishing")),
+            ("FROM video_digest_publication_intents", _publication_row(stage="uploading")),
+            ("FROM video_digest_publication_attempts", attempts),
+            ("INSERT INTO video_digest_publication_attempts", None),
+        ],
+    )
+
+    attempt = video_digest.begin_publication_attempt(_lease(), PUBLICATION_ID, recorded_at=NOW)
+
+    assert attempt.kind == "ready"
+    assert attempt.attempt_index == 4
+    assert connection.parameters[-1][1] == 4
+
+
+@pytest.mark.parametrize(
+    ("attempt_index", "delay"),
+    ((0, 60), (1, 120), (2, 240), (3, 480)),
+)
+def test_publication_retry_stores_true_exponential_absolute_time(
+    monkeypatch: pytest.MonkeyPatch,
+    attempt_index: int,
+    delay: int,
+) -> None:
+    evidence = artifact_file(
+        artifact_id=f"{PUBLICATION_ID}:attempt-{attempt_index}-failure",
+        artifact_kind="video_digest_publication_attempt_failure",
+        title="Publication retry",
+        content=f"failure-{attempt_index}".encode(),
+        r2_key=f"publication/retry-{attempt_index}.json",
+        media_type="application/json",
+    )
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="publishing")),
+            ("FROM video_digest_publication_intents", _publication_row(stage="uploading")),
+            (
+                "FROM video_digest_publication_attempts",
+                [
+                    _publication_attempt_row(
+                        index,
+                        "retryable",
+                        retry_at=NOW,
+                        failure_evidence_artifact_version_id=str(index) * 64,
+                    )
+                    for index in range(attempt_index)
+                ]
+                + [_publication_attempt_row(attempt_index)],
+            ),
+            *_artifact_steps(),
+            ("UPDATE video_digest_publication_attempts", {"publication_id": PUBLICATION_ID}),
+        ],
+    )
+
+    waiting = video_digest.checkpoint_publication_retry(
+        _lease(),
+        PUBLICATION_ID,
+        attempt_index,
+        expected_stage=PublicationState.UPLOADING,
+        evidence_file=evidence,
+        recorded_at=NOW,
+    )
+
+    assert isinstance(waiting, PublicationAttemptWaiting)
+    assert waiting.retry_at == NOW + timedelta(seconds=delay)
+    assert NOW + timedelta(seconds=delay) in connection.parameters[-1]
+    assert connection.transaction_count == 1
+
+
+def test_stale_publication_retry_cannot_consume_an_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence = artifact_file(
+        artifact_id=f"{PUBLICATION_ID}:attempt-0-failure",
+        artifact_kind="video_digest_publication_attempt_failure",
+        title="Publication retry",
+        content=b"failure",
+        r2_key="publication/retry-0.json",
+        media_type="application/json",
+    )
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="publishing")),
+            ("FROM video_digest_publication_intents", _publication_row(stage="verified")),
+        ],
+    )
+
+    result = video_digest.checkpoint_publication_retry(
+        _lease(),
+        PUBLICATION_ID,
+        0,
+        expected_stage=PublicationState.UPLOADING,
+        evidence_file=evidence,
+        recorded_at=NOW,
+    )
+
+    assert isinstance(result, PublicationCheckpointSuperseded)
+    assert result.kind == "superseded"
+    assert result.status.stage is PublicationState.VERIFIED
+    assert connection.steps == []
+
+
 def test_publication_progress_records_ordered_durable_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2297,6 +2534,7 @@ def test_publication_progress_records_ordered_durable_evidence(
         [
             ("FROM video_digest_slots", _active_row(stage="publishing")),
             ("FROM video_digest_publication_intents", _publication_row()),
+            ("FROM video_digest_publication_attempts", [_publication_attempt_row(0)]),
             (
                 "UPDATE video_digest_publication_intents",
                 {"publication_id": PUBLICATION_ID},
@@ -2304,8 +2542,9 @@ def test_publication_progress_records_ordered_durable_evidence(
         ],
     )
     uploading = video_digest.checkpoint_publication_progress(
-        _lease(), PUBLICATION_ID, UploadingPublication(), recorded_at=NOW
+        _lease(), PUBLICATION_ID, 0, UploadingPublication(), recorded_at=NOW
     )
+    assert isinstance(uploading, PublicationStatus)
     assert uploading.stage is PublicationState.UPLOADING
     assert uploading_connection.steps == []
 
@@ -2317,6 +2556,7 @@ def test_publication_progress_records_ordered_durable_evidence(
                 "FROM video_digest_publication_intents",
                 _publication_row(stage="uploading"),
             ),
+            ("FROM video_digest_publication_attempts", [_publication_attempt_row(0)]),
             *_artifact_steps(),
             (
                 "UPDATE video_digest_publication_intents",
@@ -2327,10 +2567,12 @@ def test_publication_progress_records_ordered_durable_evidence(
     uploaded = video_digest.checkpoint_publication_progress(
         _lease(),
         PUBLICATION_ID,
+        0,
         UploadedPublication(evidence_artifact_version_id=UPLOAD_FILE.version_id),
         evidence_file=UPLOAD_FILE,
         recorded_at=NOW,
     )
+    assert isinstance(uploaded, PublicationStatus)
     assert uploaded.stage is PublicationState.UPLOADED
     assert uploaded_connection.steps == []
 
@@ -2351,6 +2593,7 @@ def test_publication_progress_records_ordered_durable_evidence(
                     upload_evidence_artifact_version_id=UPLOAD_FILE.version_id,
                 ),
             ),
+            ("FROM video_digest_publication_attempts", [_publication_attempt_row(0)]),
             *_artifact_steps(),
             (
                 "UPDATE video_digest_publication_intents",
@@ -2361,6 +2604,7 @@ def test_publication_progress_records_ordered_durable_evidence(
     verified = video_digest.checkpoint_publication_progress(
         _lease(),
         PUBLICATION_ID,
+        0,
         VerifiedPublication(
             evidence_artifact_version_id=VERIFICATION_FILE.version_id,
             video=verified_object,
@@ -2368,6 +2612,7 @@ def test_publication_progress_records_ordered_durable_evidence(
         evidence_file=VERIFICATION_FILE,
         recorded_at=NOW,
     )
+    assert isinstance(verified, PublicationStatus)
     assert verified.stage is PublicationState.VERIFIED
     assert verified_connection.steps == []
 
@@ -2380,6 +2625,7 @@ def test_publication_progress_rejects_skipped_stage(
         [
             ("FROM video_digest_slots", _active_row(stage="publishing")),
             ("FROM video_digest_publication_intents", _publication_row()),
+            ("FROM video_digest_publication_attempts", [_publication_attempt_row(0)]),
         ],
     )
 
@@ -2387,10 +2633,49 @@ def test_publication_progress_rejects_skipped_stage(
         video_digest.checkpoint_publication_progress(
             _lease(),
             PUBLICATION_ID,
+            0,
             UploadedPublication(evidence_artifact_version_id=UPLOAD_FILE.version_id),
             evidence_file=UPLOAD_FILE,
             recorded_at=NOW,
         )
+    assert connection.steps == []
+
+
+def test_retryable_attempt_cannot_checkpoint_late_publication_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retry_at = NOW + timedelta(minutes=1)
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="publishing")),
+            ("FROM video_digest_publication_intents", _publication_row(stage="uploading")),
+            (
+                "FROM video_digest_publication_attempts",
+                [
+                    _publication_attempt_row(
+                        0,
+                        "retryable",
+                        retry_at=retry_at,
+                        failure_evidence_artifact_version_id=PUBLICATION_FAILURE_FILE.version_id,
+                    )
+                ],
+            ),
+        ],
+    )
+
+    result = video_digest.checkpoint_publication_progress(
+        _lease(),
+        PUBLICATION_ID,
+        0,
+        UploadedPublication(evidence_artifact_version_id=UPLOAD_FILE.version_id),
+        evidence_file=UPLOAD_FILE,
+        recorded_at=NOW,
+    )
+
+    assert isinstance(result, PublicationCheckpointSuperseded)
+    assert result.kind == "superseded"
+    assert result.status.stage is PublicationState.UPLOADING
     assert connection.steps == []
 
 
@@ -2408,6 +2693,7 @@ def test_publication_progress_rejects_mismatched_replay_evidence(
                     verification_evidence_artifact_version_id="0" * 64,
                 ),
             ),
+            ("FROM video_digest_publication_attempts", [_publication_attempt_row(0)]),
         ],
     )
 
@@ -2415,6 +2701,7 @@ def test_publication_progress_rejects_mismatched_replay_evidence(
         video_digest.checkpoint_publication_progress(
             _lease(),
             PUBLICATION_ID,
+            0,
             VerifiedPublication(
                 evidence_artifact_version_id=VERIFICATION_FILE.version_id,
                 video=VerifiedPublicObject(
@@ -2446,6 +2733,11 @@ def test_publication_completion_updates_intent_before_terminal_slot(
                     verification_evidence_artifact_version_id=VERIFICATION_FILE.version_id,
                 ),
             ),
+            ("FROM video_digest_publication_attempts", [_publication_attempt_row(0)]),
+            (
+                "UPDATE video_digest_publication_attempts",
+                {"publication_id": PUBLICATION_ID},
+            ),
             (
                 "UPDATE video_digest_publication_intents",
                 {"publication_id": PUBLICATION_ID},
@@ -2455,13 +2747,15 @@ def test_publication_completion_updates_intent_before_terminal_slot(
     )
 
     published = video_digest.complete_publication(
-        _lease(), PUBLICATION_ID, recorded_at=NOW - timedelta(days=1)
+        _lease(), PUBLICATION_ID, 0, recorded_at=NOW - timedelta(days=1)
     )
 
+    assert isinstance(published, PublishedPublication)
     assert published.published_at == NOW
     assert "video_digest_publication_intents" in connection.statements[-2]
     assert "video_digest_slots" in connection.statements[-1]
     assert "owner-a" in connection.parameters[-1]
+    assert connection.transaction_count == 1
     assert connection.steps == []
 
 
@@ -2487,11 +2781,16 @@ def test_publication_completion_replays_original_terminal_timestamp(
                 "FROM video_digest_publication_intents",
                 _publication_row(stage="published", published_at=published_at),
             ),
+            (
+                "FROM video_digest_publication_attempts",
+                [_publication_attempt_row(0, "succeeded")],
+            ),
         ],
     )
 
-    published = video_digest.complete_publication(_lease(), PUBLICATION_ID, recorded_at=NOW)
+    published = video_digest.complete_publication(_lease(), PUBLICATION_ID, 0, recorded_at=NOW)
 
+    assert isinstance(published, PublishedPublication)
     assert published.published_at == published_at
     assert connection.steps == []
 
@@ -2538,11 +2837,13 @@ def test_publication_progress_replays_verified_after_completion(
     status = video_digest.checkpoint_publication_progress(
         _lease(),
         PUBLICATION_ID,
+        0,
         verified,
         evidence_file=VERIFICATION_FILE,
         recorded_at=NOW,
     )
 
+    assert isinstance(status, PublicationStatus)
     assert status.stage is PublicationState.PUBLISHED
     assert connection.steps == []
 
@@ -2558,7 +2859,12 @@ def test_publication_failure_terminalizes_intent_before_slot(
                 "FROM video_digest_publication_intents",
                 _publication_row(stage="uploading"),
             ),
+            ("FROM video_digest_publication_attempts", [_publication_attempt_row(0)]),
             *_artifact_steps(),
+            (
+                "UPDATE video_digest_publication_attempts",
+                {"publication_id": PUBLICATION_ID},
+            ),
             (
                 "UPDATE video_digest_publication_intents",
                 {"publication_id": PUBLICATION_ID},
@@ -2570,6 +2876,8 @@ def test_publication_failure_terminalizes_intent_before_slot(
     terminal = video_digest.fail_publication(
         _lease(),
         PUBLICATION_ID,
+        0,
+        expected_stage=PublicationState.UPLOADING,
         state=PublicationState.CONFLICT,
         evidence_file=PUBLICATION_FAILURE_FILE,
         recorded_at=NOW,
@@ -2578,6 +2886,34 @@ def test_publication_failure_terminalizes_intent_before_slot(
     assert terminal == TerminalSlot(state=TerminalSlotState.FAILED)
     assert "video_digest_publication_intents" in connection.statements[-2]
     assert "video_digest_slots" in connection.statements[-1]
+    assert connection.transaction_count == 1
+
+
+def test_stale_publication_failure_cannot_terminalize_verified_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="publishing")),
+            ("FROM video_digest_publication_intents", _publication_row(stage="verified")),
+        ],
+    )
+
+    result = video_digest.fail_publication(
+        _lease(),
+        PUBLICATION_ID,
+        0,
+        expected_stage=PublicationState.UPLOADING,
+        state=PublicationState.CONFLICT,
+        evidence_file=PUBLICATION_FAILURE_FILE,
+        recorded_at=NOW,
+    )
+
+    assert isinstance(result, PublicationCheckpointSuperseded)
+    assert result.kind == "superseded"
+    assert result.status.stage is PublicationState.VERIFIED
+    assert connection.steps == []
 
 
 def test_publication_failure_replays_matching_terminal_evidence(
@@ -2598,7 +2934,6 @@ def test_publication_failure_replays_matching_terminal_evidence(
                     failure_evidence_artifact_version_id=PUBLICATION_FAILURE_FILE.version_id,
                 ),
             ),
-            ("FROM artifacts AS artifact", _artifact_row(PUBLICATION_FAILURE_FILE)),
             (
                 "FROM video_digest_publication_intents",
                 _publication_row(
@@ -2606,12 +2941,25 @@ def test_publication_failure_replays_matching_terminal_evidence(
                     failure_evidence_artifact_version_id=PUBLICATION_FAILURE_FILE.version_id,
                 ),
             ),
+            ("FROM artifacts AS artifact", _artifact_row(PUBLICATION_FAILURE_FILE)),
+            (
+                "FROM video_digest_publication_attempts",
+                [
+                    _publication_attempt_row(
+                        0,
+                        "conflict",
+                        failure_evidence_artifact_version_id=PUBLICATION_FAILURE_FILE.version_id,
+                    )
+                ],
+            ),
         ],
     )
 
     terminal = video_digest.fail_publication(
         _lease(),
         PUBLICATION_ID,
+        0,
+        expected_stage=PublicationState.UPLOADING,
         state=PublicationState.CONFLICT,
         evidence_file=PUBLICATION_FAILURE_FILE,
         recorded_at=NOW,
@@ -2669,6 +3017,7 @@ def test_deadline_failure_terminalizes_with_deterministic_reason_and_fence(
             ("FROM video_digest_slots", _active_row(stage="generating")),
             *_artifact_steps(),
             ("UPDATE video_digest_generation_requests", None),
+            ("UPDATE video_digest_publication_attempts", None),
             ("UPDATE video_digest_stories", None),
             ("UPDATE video_digest_publication_intents", None),
             ("UPDATE video_digest_slots", {"slot_id": SLOT.slot_id}),

@@ -38,6 +38,7 @@ from romanian_news.video_digest.models import (
     MeasuredAttemptCost,
     PlannedStory,
     PublicationIntent,
+    PublishedPublication,
     ScheduledSlot,
     SkippedSlot,
     SlotName,
@@ -328,7 +329,7 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         ).fetchall()
 
     assert "debt_transcript_projection_items" not in tables
-    assert len(tables) == 49
+    assert len(tables) == 51
     assert migrations == [
         (1, "initial", news_schema.NEWS_CATALOG_MIGRATIONS[0].sha256),
         (2, "video_digest", news_schema.NEWS_CATALOG_MIGRATIONS[1].sha256),
@@ -346,6 +347,7 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         (6, "video_digest_generation_admission", news_schema.NEWS_CATALOG_MIGRATIONS[5].sha256),
         (7, "video_digest_media_evidence", news_schema.NEWS_CATALOG_MIGRATIONS[6].sha256),
         (8, "video_digest_orchestration", news_schema.NEWS_CATALOG_MIGRATIONS[7].sha256),
+        (9, "video_digest_publication", news_schema.NEWS_CATALOG_MIGRATIONS[8].sha256),
     ]
 
 
@@ -1044,6 +1046,17 @@ def test_video_digest_publication_and_slot_complete_together(
                 (slot_id,),
             )
 
+        connection.execute(
+            "INSERT INTO video_digest_publication_attempts "
+            "(publication_id, attempt_index, state, started_at, updated_at) "
+            "VALUES (%s, 0, 'started', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            (publication_id,),
+        )
+        connection.execute(
+            "UPDATE video_digest_publication_attempts SET state = 'succeeded', "
+            "updated_at = CURRENT_TIMESTAMP WHERE publication_id = %s AND attempt_index = 0",
+            (publication_id,),
+        )
         with connection.transaction():
             connection.execute(
                 "UPDATE video_digest_publication_intents SET stage = 'published', "
@@ -1331,12 +1344,15 @@ def test_video_digest_generation_checkpoints_complete_atomically(
         artifact_file=subtitle_failure_file,
         recorded_at=recorded_at,
     )
+    public_video_key = (
+        f"contracts/video-digest/{identity.edition_id}/{assembled_file.content_digest}.mp4"
+    )
     publication_id_value = publication_id(
         edition_id_value=identity.edition_id,
-        expected_video_key="contracts/video-digest/public.mp4",
+        expected_video_key=public_video_key,
         video_digest=assembled_file.content_digest,
         video_byte_size=len(assembled_file.content),
-        video_media_type=assembled_file.media_type,
+        video_media_type="video/mp4",
         subtitle=None,
         source_video_version_id=assembled_file.version_id,
         source_subtitle_version_id=None,
@@ -1344,16 +1360,32 @@ def test_video_digest_generation_checkpoints_complete_atomically(
     publication = PublicationIntent(
         publication_id=publication_id_value,
         edition_id=identity.edition_id,
-        expected_video_key="contracts/video-digest/public.mp4",
+        expected_video_key=public_video_key,
         video_digest=assembled_file.content_digest,
         video_byte_size=len(assembled_file.content),
-        video_media_type=assembled_file.media_type,
+        video_media_type="video/mp4",
         source_video_version_id=assembled_file.version_id,
     )
     video_digest_catalog.record_publication_intent(lease, publication, recorded_at=recorded_at)
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "INSERT INTO video_digest_publication_attempts "
+                "(publication_id, attempt_index, state, started_at, updated_at) "
+                "VALUES (%s, 0, 'succeeded', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                (publication_id_value,),
+            )
+    publication_attempt = video_digest_catalog.begin_publication_attempt(
+        lease,
+        publication_id_value,
+        recorded_at=recorded_at,
+    )
+    assert publication_attempt.kind == "ready"
+    assert publication_attempt.attempt_index == 0
     video_digest_catalog.checkpoint_publication_progress(
         lease,
         publication_id_value,
+        0,
         UploadingPublication(),
         recorded_at=recorded_at,
     )
@@ -1368,6 +1400,7 @@ def test_video_digest_generation_checkpoints_complete_atomically(
     video_digest_catalog.checkpoint_publication_progress(
         lease,
         publication_id_value,
+        0,
         UploadedPublication(evidence_artifact_version_id=upload_file.version_id),
         evidence_file=upload_file,
         recorded_at=recorded_at,
@@ -1383,6 +1416,7 @@ def test_video_digest_generation_checkpoints_complete_atomically(
     video_digest_catalog.checkpoint_publication_progress(
         lease,
         publication_id_value,
+        0,
         VerifiedPublication(
             evidence_artifact_version_id=public_verification_file.version_id,
             video=VerifiedPublicObject(
@@ -1410,22 +1444,29 @@ def test_video_digest_generation_checkpoints_complete_atomically(
         )
     with pytest.raises(VideoDigestCheckpointConflictError):
         video_digest_catalog.complete_publication(
-            lease, publication_id_value, recorded_at=recorded_at
+            lease, publication_id_value, 0, recorded_at=recorded_at
         )
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
         assert connection.execute(
-            "SELECT stage FROM video_digest_publication_intents WHERE publication_id = %s",
+            "SELECT publication.stage, attempt.state, slot.stage "
+            "FROM video_digest_publication_intents AS publication "
+            "JOIN video_digest_publication_attempts AS attempt "
+            "  ON attempt.publication_id = publication.publication_id "
+            "JOIN video_digest_slots AS slot ON slot.edition_id = publication.edition_id "
+            "WHERE publication.publication_id = %s AND attempt.attempt_index = 0",
             (publication_id_value,),
-        ).fetchone() == ("verified",)
+        ).fetchone() == ("verified", "started", "publishing")
         connection.execute("DROP TRIGGER contract_reject_slot_publication ON video_digest_slots")
         connection.execute("DROP FUNCTION reject_contract_slot_publication()")
 
     published = video_digest_catalog.complete_publication(
-        lease, publication_id_value, recorded_at=recorded_at
+        lease, publication_id_value, 0, recorded_at=recorded_at
     )
-    assert published == video_digest_catalog.complete_publication(
-        lease, publication_id_value, recorded_at=recorded_at + timedelta(minutes=1)
+    replayed = video_digest_catalog.complete_publication(
+        lease, publication_id_value, 0, recorded_at=recorded_at + timedelta(minutes=1)
     )
+    assert isinstance(published, PublishedPublication)
+    assert published == replayed
     reader_edition = video_digest_catalog.read_published_edition(
         identity.edition_id,
         public_media_base_url="https://media.example.com",

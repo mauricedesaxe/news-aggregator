@@ -12,6 +12,8 @@ def test_runtime_configuration_has_no_owner_infrastructure_defaults() -> None:
     assert "leetsoftware" not in workflows
     assert "mauricedesaxe" not in workflows
     assert 'os.getenv("NEWS_R2_BUCKET", "")' in config
+    assert 'os.getenv("NEWS_PUBLIC_MEDIA_R2_BUCKET", "")' in config
+    assert 'os.getenv("NEWS_PUBLIC_MEDIA_BASE_URL", "")' in config
     assert 'os.getenv("DAGSTER_CLOUD_GRAPHQL_URL")' in config
 
 
@@ -52,3 +54,9 @@ def test_public_production_logs_exclude_remote_error_payloads() -> None:
     assert "print(response.text)" not in workflow
     assert "print(event)" not in workflow
     assert "stack" not in workflow
+
+
+def test_video_digest_schedule_is_not_activated_by_production_workflow() -> None:
+    production = (ROOT / ".github/workflows/romanian-news-production.yml").read_text()
+
+    assert '"scheduled_video_digest"' not in production
