@@ -85,7 +85,13 @@ jobs:
           uv sync --frozen --group test
 
       - name: Run schema contract
-        run: uv run --no-sync pytest tests/contracts/postgres_news_schema_contract.py
+        run: >
+          uv run --no-sync pytest
+          tests/contracts/postgres_news_schema_contract.py
+          tests/contracts/postgres_catalog_transport.py
+          tests/contracts/postgres_video_digest_slots.py
+          tests/contracts/postgres_video_digest_generation.py
+          tests/contracts/postgres_video_digest_publication.py
 
   reader-image:
     name: Build and start reader image
