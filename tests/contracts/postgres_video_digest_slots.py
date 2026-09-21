@@ -1,10 +1,3 @@
-"""Behavior-driven PostgreSQL contract tests for the video digest slot lifecycle.
-
-These tests exercise schedule_slot, skip_slot, claim_slot, and renew_slot against a
-real PostgreSQL catalog. They assert only returned domain objects, raised error
-types, and the observable database end-state.
-"""
-
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
@@ -201,7 +194,6 @@ def _publish_edition_and_slot(
     *,
     artifact_start: int,
 ) -> EditionIdentity:
-    """Drive one edition through generation and publication with direct catalog writes."""
     (
         report,
         policy,
