@@ -120,9 +120,20 @@ def test_planning_report_rejects_a_version_for_different_content() -> None:
 
 
 def test_production_policy_uses_independent_model_families() -> None:
-    policy = preflight.PRODUCTION_POLICY.definition.policy
+    definition = preflight.PRODUCTION_POLICY.definition
+    policy = definition.policy
 
     assert policy.planning_model.partition("/")[0] != policy.verification_model.partition("/")[0]
+
+    same_family = policy.model_copy(update={"verification_model": policy.planning_model})
+    with pytest.raises(ValueError, match="independent model families"):
+        preflight.VideoDigestPolicyDefinition(
+            policy=same_family,
+            planning_prompt=definition.planning_prompt,
+            verification_prompt=definition.verification_prompt,
+            planning_response_schema_digest=definition.planning_response_schema_digest,
+            verification_response_schema_digest=definition.verification_response_schema_digest,
+        )
 
 
 def _plan_content() -> str:
@@ -146,13 +157,13 @@ def _plan_content() -> str:
     )
 
 
-def _response(response_id: str, content: str) -> ChatCompletion:
+def _response(response_id: str, content: str, model: str) -> ChatCompletion:
     return ChatCompletion.model_validate(
         {
             "id": response_id,
             "object": "chat.completion",
             "created": 1_700_000_000,
-            "model": "fake/model",
+            "model": model,
             "choices": [
                 {
                     "index": 0,
@@ -290,9 +301,13 @@ def test_preflight_preserves_report_order_isolates_verifiers_and_replays_without
         context = _request_context(request)
         if _system_prompt(request) == preflight.PLANNING_PROMPT:
             harness.planning_inputs.append(context)
-            return _response(f"plan-{provider_calls}", _plan_content())
+            return _response(f"plan-{provider_calls}", _plan_content(), request["model"])
         harness.story_inputs.append(context)
-        return _response(f"verify-{provider_calls}", '{"status":"accepted","failures":[]}')
+        return _response(
+            f"verify-{provider_calls}",
+            '{"status":"accepted","failures":[]}',
+            request["model"],
+        )
 
     prepared = preflight.prepare_paid_generation(_lease(), _report(), provider=provider)
 
@@ -333,7 +348,7 @@ def test_preflight_bounds_whole_plan_rewrites_and_returns_structured_exhaustion(
     def provider(request: ProviderChatRequest) -> ChatCompletion:
         requests.append(request)
         if _system_prompt(request) == preflight.PLANNING_PROMPT:
-            return _response(f"plan-{len(requests)}", _plan_content())
+            return _response(f"plan-{len(requests)}", _plan_content(), request["model"])
         return _response(
             f"verify-{len(requests)}",
             json.dumps(
@@ -342,6 +357,7 @@ def test_preflight_bounds_whole_plan_rewrites_and_returns_structured_exhaustion(
                     "failures": [{"code": "unsupported_claim", "message": "No evidence"}],
                 }
             ),
+            request["model"],
         )
 
     with pytest.raises(preflight.PlanningExhaustedError) as raised:
@@ -373,12 +389,30 @@ def test_invalid_plan_is_rejected_before_verifier_calls(
         requests.append(request)
         if _system_prompt(request) != preflight.PLANNING_PROMPT:
             pytest.fail("structurally invalid plan reached the verifier")
-        return _response(f"plan-{len(requests)}", json.dumps(missing_story))
+        return _response(f"plan-{len(requests)}", json.dumps(missing_story), request["model"])
 
     with pytest.raises(preflight.PlanningExhaustedError):
         preflight.prepare_paid_generation(_lease(), _report(), provider=provider)
 
     assert len(requests) == 3
+
+
+def test_provider_model_mismatch_is_recorded_as_a_rejected_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _Harness(monkeypatch)
+
+    def provider(request: ProviderChatRequest) -> ChatCompletion:
+        return _response("wrong-model", _plan_content(), "other/model")
+
+    with pytest.raises(preflight.PlanningExhaustedError) as raised:
+        preflight.prepare_paid_generation(_lease(), _report(), provider=provider)
+
+    assert [item.disposition for item in harness.attempts] == ["rejected"] * 3
+    assert all(
+        "does not match the requested policy model" in item.failures[0].message
+        for item in raised.value.failure.attempts
+    )
 
 
 def test_policy_publication_writes_r2_before_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
