@@ -1,10 +1,15 @@
 ALTER TABLE video_digest_editions
+    ADD COLUMN planning_contract TEXT NOT NULL DEFAULT 'legacy_unverified'
+        CHECK (planning_contract IN ('legacy_unverified', 'verified_v1')),
     ADD COLUMN verification_manifest_artifact_version_id TEXT
         REFERENCES artifact_versions(id)
         CHECK (
             verification_manifest_artifact_version_id IS NULL
             OR verification_manifest_artifact_version_id ~ '^[0-9a-f]{64}$'
         );
+
+ALTER TABLE video_digest_editions
+    ALTER COLUMN planning_contract SET DEFAULT 'verified_v1';
 
 CREATE TABLE video_digest_planning_attempts (
     edition_id TEXT NOT NULL REFERENCES video_digest_editions(edition_id)
@@ -67,11 +72,20 @@ CREATE FUNCTION protect_video_digest_planning_state() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
+        IF NEW.planning_contract <> 'verified_v1' THEN
+            RAISE EXCEPTION 'new video digest edition requires verified planning contract'
+                USING ERRCODE = '23000';
+        END IF;
         IF NEW.verification_manifest_artifact_version_id IS NOT NULL THEN
             RAISE EXCEPTION 'video digest edition must start without verification manifest'
                 USING ERRCODE = '23000';
         END IF;
         RETURN NEW;
+    END IF;
+
+    IF NEW.planning_contract IS DISTINCT FROM OLD.planning_contract THEN
+        RAISE EXCEPTION 'video digest edition planning contract is immutable'
+            USING ERRCODE = '23000';
     END IF;
 
     IF OLD.verification_manifest_artifact_version_id IS NOT NULL
@@ -93,16 +107,27 @@ BEGIN
     END IF;
     IF OLD.verification_manifest_artifact_version_id IS NULL
        AND NEW.verification_manifest_artifact_version_id IS NOT NULL
-       AND (NEW.plan_artifact_version_id IS NULL OR EXISTS (
-           SELECT 1
-           FROM video_digest_stories AS story
+       AND (
+           NEW.planning_contract <> 'verified_v1'
+           OR NEW.plan_artifact_version_id IS NULL
+           OR NOT EXISTS (
+               SELECT 1
+               FROM video_digest_planning_attempts AS attempt
+               WHERE attempt.edition_id = NEW.edition_id
+                 AND attempt.disposition = 'accepted'
+                 AND attempt.accepted_plan_artifact_version_id = NEW.plan_artifact_version_id
+           )
+           OR EXISTS (
+            SELECT 1
+            FROM video_digest_stories AS story
            WHERE story.edition_id = NEW.edition_id
              AND story.mandatory
              AND (
                  story.verification_evidence_artifact_version_id IS NULL
                  OR story.stage NOT IN ('generating', 'accepted')
              )
-       )) THEN
+           )
+       ) THEN
         RAISE EXCEPTION 'video digest verification manifest requires generation-ready stories'
             USING ERRCODE = '23000';
     END IF;
@@ -117,8 +142,16 @@ BEGIN
         SELECT 1
         FROM video_digest_editions AS edition
         WHERE edition.edition_id = NEW.edition_id
+          AND edition.planning_contract = 'verified_v1'
           AND edition.plan_artifact_version_id IS NOT NULL
           AND edition.verification_manifest_artifact_version_id IS NOT NULL
+          AND EXISTS (
+              SELECT 1
+              FROM video_digest_planning_attempts AS attempt
+              WHERE attempt.edition_id = edition.edition_id
+                AND attempt.disposition = 'accepted'
+                AND attempt.accepted_plan_artifact_version_id = edition.plan_artifact_version_id
+          )
     ) THEN
         RAISE EXCEPTION 'video digest generation requires an edition verification manifest'
             USING ERRCODE = '23000';
@@ -134,6 +167,44 @@ BEGIN
           )
     ) THEN
         RAISE EXCEPTION 'video digest generation requires every mandatory story to be ready'
+            USING ERRCODE = '23000';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION require_video_digest_generation_submission_authorization() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.stage = 'pending' AND NEW.stage = 'submitted' AND (
+        NOT EXISTS (
+            SELECT 1
+            FROM video_digest_editions AS edition
+            WHERE edition.edition_id = NEW.edition_id
+              AND edition.planning_contract = 'verified_v1'
+              AND edition.plan_artifact_version_id IS NOT NULL
+              AND edition.verification_manifest_artifact_version_id IS NOT NULL
+              AND EXISTS (
+                  SELECT 1
+                  FROM video_digest_planning_attempts AS attempt
+                  WHERE attempt.edition_id = edition.edition_id
+                    AND attempt.disposition = 'accepted'
+                    AND attempt.accepted_plan_artifact_version_id =
+                        edition.plan_artifact_version_id
+              )
+        )
+        OR EXISTS (
+            SELECT 1
+            FROM video_digest_stories AS story
+            WHERE story.edition_id = NEW.edition_id
+              AND story.mandatory
+              AND (
+                  story.verification_evidence_artifact_version_id IS NULL
+                  OR story.stage NOT IN ('generating', 'accepted')
+              )
+        )
+    ) THEN
+        RAISE EXCEPTION 'video digest submission requires verified generation authorization'
             USING ERRCODE = '23000';
     END IF;
     RETURN NEW;
@@ -159,3 +230,7 @@ FOR EACH ROW EXECUTE FUNCTION protect_video_digest_planning_state();
 CREATE TRIGGER video_digest_generation_requests_require_authorization
 BEFORE INSERT ON video_digest_generation_requests
 FOR EACH ROW EXECUTE FUNCTION require_video_digest_generation_authorization();
+
+CREATE TRIGGER video_digest_generation_requests_require_submission_authorization
+BEFORE UPDATE ON video_digest_generation_requests
+FOR EACH ROW EXECUTE FUNCTION require_video_digest_generation_submission_authorization();

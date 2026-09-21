@@ -22,7 +22,6 @@ from romanian_news.video_digest.errors import VideoDigestCheckpointConflictError
 from romanian_news.video_digest.models import (
     AvailableSubtitles,
     ClaimedSlot,
-    DigestPlan,
     EditionId,
     EditionIdentity,
     EstimatedAttemptCost,
@@ -46,10 +45,10 @@ from romanian_news.video_digest.models import (
     VerifiedPublicObject,
     edition_id,
     generation_request_id,
-    planned_story_id,
     publication_id,
     scheduled_slot_id,
 )
+from tests.contracts.video_digest_planning_fixtures import accepted_planning_files
 
 PUBLIC_MEDIA_BASE_URL = "https://media.example.com"
 
@@ -276,45 +275,25 @@ def _walk_publication_pipeline(
     assert isinstance(claimed, ClaimedSlot)
     lease = claimed.lease
 
-    plan_file = artifact_file(
-        artifact_id=identity.edition_id,
-        artifact_kind="video_digest_plan",
-        title=f"Edition plan {seed}",
-        content=f"plan {seed}".encode(),
-        r2_key=f"video-digest/{seed}/plan.json",
-        media_type="application/json",
+    plan, plan_file, planning_attempt_file = accepted_planning_files(
+        identity,
+        tuple(
+            (
+                _sha256_id(seed * 1000 + position),
+                f"Story {seed}.{position}",
+                15_000,
+            )
+            for position in range(story_count)
+        ),
+        seed=str(seed),
     )
-    stories = tuple(
-        PlannedStory(
-            story_id=planned_story_id(
-                identity.edition_id, position, _sha256_id(seed * 1000 + position)
-            ),
-            edition_id=identity.edition_id,
-            position=position,
-            report_subject_id=_sha256_id(seed * 1000 + position),
-            title=f"Story {seed}.{position}",
-            requested_duration_ms=15_000,
-        )
-        for position in range(story_count)
-    )
-    planning_attempt_file = artifact_file(
-        artifact_id=f"{identity.edition_id}:0:planning-attempt",
-        artifact_kind="video_digest_planning_attempt",
-        title=f"Planning attempt {seed}",
-        content=f"planning attempt {seed}".encode(),
-        r2_key=f"video-digest/{seed}/planning-attempt.json",
-        media_type="application/json",
-    )
+    stories = plan.stories
     video_digest_catalog.checkpoint_planning_attempt(
         lease,
         0,
         "accepted",
         evidence_file=planning_attempt_file,
-        accepted_plan=DigestPlan(
-            edition_id=identity.edition_id,
-            artifact_version_id=plan_file.version_id,
-            stories=stories,
-        ),
+        accepted_plan=plan,
         plan_file=plan_file,
         recorded_at=recorded_at,
     )

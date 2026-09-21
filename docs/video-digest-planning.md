@@ -23,8 +23,10 @@ for story in prepared.plan.stories:
 - `VerifiedDigestPlan` contains the accepted screenplay and exact report subjects in report order.
 - `GenerationAuthorization` binds the accepted plan to its ordered verification evidence.
 - Draft attempts use an append-only ledger. They never enter canonical story tables.
-- One fenced catalog transaction commits the accepted plan, story evidence, and authorization.
+- The catalog parses canonical attempt and plan artifacts and rejects any mismatch between their bytes, provider evidence, accepted screenplay, or relational plan projection.
+- Fenced, replay-safe checkpoints persist the accepted plan and each story verification before the final edition manifest authorizes generation.
 - PostgreSQL rejects generation requests without the edition authorization.
+- Editions created before this planning contract remain explicitly legacy: already-submitted work may settle, but they cannot start new paid work without complete original evidence.
 - The Fal boundary accepts `GenerationAuthorization`, so application code cannot submit an unverified story accidentally.
 
 Validation stays in pure planning and verification functions. OpenRouter payload parsing, R2 publication, PostgreSQL rows, and Dagster contexts remain at their respective boundaries.
@@ -36,7 +38,7 @@ The convergent preflight design is the base because it preserves the existing im
 ## Tradeoffs accepted
 
 - We accept private orphaned content-addressed R2 objects after a catalog failure in exchange for retry-safe R2-first publication.
-- We accept one larger final catalog transaction in exchange for never exposing a partially verified edition.
+- We accept visible intermediate checkpoints for resumable recovery; the manifest barrier keeps every partial edition unauthorized for paid generation.
 - We retain detailed attempt evidence in immutable artifacts and index only the identities PostgreSQL needs to enforce bounds and readiness.
 
 ## Alternatives considered
@@ -49,7 +51,3 @@ The convergent preflight design is the base because it preserves the existing im
 
 - Later editions that depend on prior published coverage need that comparison baseline included in an immutable input identity.
 - Synchronous planning model calls retain a small crash window after provider completion and before attempt recording. This can repeat an unpaid planning call but cannot authorize Fal generation.
-
-## Next step
-
-Implement the policy, attempt, verified-plan, and authorization types with pure coverage and evidence gates before adding persistence or provider calls.
