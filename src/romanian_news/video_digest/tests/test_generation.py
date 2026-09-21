@@ -4,8 +4,10 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
+import requests
 
-from romanian_news.catalog.artifacts import ArtifactFile, CatalogArtifactReference
+from romanian_news.artifacts import ArtifactReference
+from romanian_news.catalog.artifacts import ArtifactFile
 from romanian_news.reports import (
     DailyReport,
     DailyReportSection,
@@ -35,6 +37,7 @@ from romanian_news.video_digest.planning import (
     record_planning_attempt,
     screenplay_story_digest,
 )
+from romanian_news.video_digest.planning_artifacts import verified_plan_file
 
 REPORT_VERSION = "a" * 64
 SUBJECTS = ("1" * 64, "2" * 64)
@@ -86,7 +89,7 @@ def _prepared() -> preflight.PreparedPaidGeneration:
     )
     attempt = record_planning_attempt(0, plan, evidence, "accepted")
     verified = accept_planning_attempt(report, policy.definition.policy, attempt)
-    _, digest_plan = preflight._canonical_plan_file(verified)
+    _, digest_plan = verified_plan_file(verified)
     return preflight.PreparedPaidGeneration(
         authorization=authorize_generation(verified),
         plan=digest_plan,
@@ -150,8 +153,8 @@ def _references() -> generation.H3ReferencePack:
     )
 
 
-def _artifact_reference(name: str, digest: str) -> CatalogArtifactReference:
-    return CatalogArtifactReference(
+def _artifact_reference(name: str, digest: str) -> ArtifactReference:
+    return ArtifactReference(
         artifact_id=f"reference-{name}",
         version_id=digest,
         content_digest=digest,
@@ -186,6 +189,20 @@ class _Provider:
         return f"candidate:{url}".encode()
 
 
+class _TransportFailureProvider(_Provider):
+    def result(
+        self, receipt: generation.FalSubmissionReceipt
+    ) -> tuple[generation.FalH3Result, dict[str, object]]:
+        del receipt
+        raise requests.Timeout("result timed out")
+
+
+class _RejectedProvider(_Provider):
+    def submit(self, arguments: dict[str, object]) -> generation.FalSubmissionReceipt:
+        del arguments
+        raise generation.FalSubmissionRejectedError("Fal rejected submission with HTTP 400")
+
+
 def _receipt(receipt_id: str) -> generation.FalSubmissionReceipt:
     return generation.FalSubmissionReceipt.model_validate(
         {
@@ -208,8 +225,9 @@ class _Harness:
         self.failed_slot = False
         self.deny_admission = False
         self.deadline = datetime(2027, 1, 1, tzinfo=UTC)
+        self.policy_publications = 0
 
-        monkeypatch.setattr(generation, "publish_generation_policy", lambda _policy: "8" * 64)
+        monkeypatch.setattr(generation, "publish_generation_policy", self.publish_policy)
         monkeypatch.setattr(
             generation,
             "read_generation_deadline",
@@ -230,6 +248,10 @@ class _Harness:
 
     def publish(self, objects) -> None:
         self.objects.update(objects)
+
+    def publish_policy(self, _policy: generation.GenerationPolicyArtifact) -> str:
+        self.policy_publications += 1
+        return "8" * 64
 
     def read(self, key: str, digest: str) -> bytes:
         content = self.objects[key]
@@ -365,8 +387,8 @@ class _Harness:
         )
 
 
-def _reference(file: ArtifactFile) -> CatalogArtifactReference:
-    return CatalogArtifactReference(
+def _reference(file: ArtifactFile) -> ArtifactReference:
+    return ArtifactReference(
         artifact_id=file.artifact_id,
         version_id=file.version_id,
         content_digest=file.content_digest,
@@ -429,6 +451,86 @@ def test_generation_reuses_stored_receipt_without_submission(
     assert isinstance(resumed, generation.CandidateReady)
     assert provider.submitted_positions == [0]
     assert provider.status_calls == ["fal-0-1", "fal-0-1"]
+
+
+def test_active_poll_does_not_republish_generation_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+    provider = _Provider()
+    first = generation.generate_next_candidate(
+        _lease(prepared),
+        prepared,
+        _references(),
+        provider=provider,
+        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+    )
+    assert isinstance(first, generation.CandidateReady)
+    harness.attempts[0] = harness.attempts[0].model_copy(
+        update={"stage": GenerationStage.SUBMITTED, "response_evidence": None}
+    )
+    harness.policy_publications = 0
+
+    generation.generate_next_candidate(_lease(prepared), prepared, _references(), provider=provider)
+
+    assert harness.policy_publications == 0
+
+
+def test_completed_request_transport_failure_preserves_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+
+    with pytest.raises(requests.Timeout, match="result timed out"):
+        generation.generate_next_candidate(
+            _lease(prepared),
+            prepared,
+            _references(),
+            provider=_TransportFailureProvider(),
+            sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+        )
+
+    assert harness.attempts[0].stage is GenerationStage.SUBMITTED
+    assert harness.failed_slot is False
+
+
+def test_confirmed_submission_rejection_allows_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+
+    outcome = generation.generate_next_candidate(
+        _lease(prepared),
+        prepared,
+        _references(),
+        provider=_RejectedProvider(),
+        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+    )
+
+    assert isinstance(outcome, generation.GenerationRetryAvailable)
+    assert harness.attempts[0].stage is GenerationStage.FAILED
+    assert harness.failed_slot is False
+
+
+def test_default_reference_signature_covers_generation_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    _Harness(monkeypatch, prepared)
+    expirations: list[int] = []
+
+    def sign(_key: str, *, expires_in: int) -> str:
+        expirations.append(expires_in)
+        return "https://r2.example/reference"
+
+    monkeypatch.setattr(generation, "presigned_r2_url", sign)
+
+    generation.generate_next_candidate(
+        _lease(prepared), prepared, _references(), provider=_Provider()
+    )
+
+    assert expirations == [5_400, 5_400]
 
 
 def test_pending_restart_fails_closed_without_duplicate_submission(
@@ -531,3 +633,72 @@ def test_deadline_stops_before_request_admission(monkeypatch: pytest.MonkeyPatch
     assert harness.failed_slot is True
     assert harness.admissions == []
     assert provider.submitted_positions == []
+
+
+@pytest.mark.parametrize("status_code", [429, 503])
+def test_fal_submit_maps_uncertain_http_failures_to_ambiguous(
+    monkeypatch: pytest.MonkeyPatch, status_code: int
+) -> None:
+    response = requests.Response()
+    response.status_code = status_code
+    response.url = "https://queue.fal.run/minimax/h3-max/reference-to-video"
+    monkeypatch.setattr(generation.requests, "post", lambda *args, **kwargs: response)
+
+    with pytest.raises(generation.FalSubmissionAmbiguousError):
+        generation.FalH3Client("secret").submit({})
+
+
+def test_fal_submit_distinguishes_confirmed_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
+    response = requests.Response()
+    response.status_code = 400
+    response.url = "https://queue.fal.run/minimax/h3-max/reference-to-video"
+    monkeypatch.setattr(generation.requests, "post", lambda *args, **kwargs: response)
+
+    with pytest.raises(generation.FalSubmissionRejectedError):
+        generation.FalH3Client("secret").submit({})
+
+
+def test_fal_receipt_url_cannot_exfiltrate_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested = False
+
+    def get(*args, **kwargs):
+        nonlocal requested
+        requested = True
+        raise AssertionError("untrusted URL was requested")
+
+    monkeypatch.setattr(generation.requests, "get", get)
+    receipt = generation.FalSubmissionReceipt.model_validate(
+        {
+            "request_id": "receipt",
+            "status_url": "https://attacker.example/status",
+            "response_url": "https://queue.fal.run/response",
+        },
+        strict=True,
+    )
+
+    with pytest.raises(ValueError, match="trusted Fal queue host"):
+        generation.FalH3Client("secret").status(receipt)
+
+    assert requested is False
+
+
+def test_fal_download_rejects_oversized_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Response:
+        headers = {"Content-Length": str(generation.FAL_MAX_DOWNLOAD_BYTES + 1)}
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def iter_content(self, *, chunk_size: int):
+            del chunk_size
+            yield b"oversized"
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(generation.requests, "get", lambda *args, **kwargs: Response())
+
+    with pytest.raises(ValueError, match="maximum byte size"):
+        generation.FalH3Client("secret").download("https://media.example/video.mp4")

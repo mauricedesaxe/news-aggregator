@@ -151,7 +151,9 @@ def _expected_schema_objects() -> tuple[set[str], set[str]]:
     for migration in NEWS_CATALOG_MIGRATIONS:
         migration_sql = migration.path.read_text()
         tables.update(re.findall(r"^CREATE TABLE (\w+)", migration_sql, re.MULTILINE))
-        triggers.update(re.findall(r"^CREATE TRIGGER (\w+)", migration_sql, re.MULTILINE))
+        triggers.update(
+            re.findall(r"^CREATE (?:CONSTRAINT )?TRIGGER (\w+)", migration_sql, re.MULTILINE)
+        )
     return tables, triggers
 
 

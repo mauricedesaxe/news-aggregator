@@ -9,9 +9,9 @@ import requests
 from pydantic import Field, HttpUrl, model_validator
 
 from romanian_news import NewsModel, Sha256
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import (
     ArtifactFile,
-    CatalogArtifactReference,
     artifact_file,
     canonical_json,
     sha256,
@@ -59,6 +59,7 @@ from romanian_news.video_digest.preflight import PreparedPaidGeneration
 FAL_H3_ENDPOINT = "minimax/h3-max/reference-to-video"
 FAL_QUEUE_BASE_URL = "https://queue.fal.run"
 FAL_ESTIMATED_ATTEMPT_USD = Decimal("3.25632")
+FAL_MAX_DOWNLOAD_BYTES = 256 * 1024 * 1024
 
 
 class GenerationPolicy(NewsModel):
@@ -117,8 +118,8 @@ PRODUCTION_GENERATION_POLICY = generation_policy_artifact()
 
 
 class H3ReferencePack(NewsModel):
-    videos: Annotated[tuple[CatalogArtifactReference, ...], Field(min_length=1)]
-    audio: Annotated[tuple[CatalogArtifactReference, ...], Field(min_length=1)]
+    videos: Annotated[tuple[ArtifactReference, ...], Field(min_length=1)]
+    audio: Annotated[tuple[ArtifactReference, ...], Field(min_length=1)]
 
 
 class H3GenerationRequest(NewsModel):
@@ -243,6 +244,10 @@ class FalSubmissionAmbiguousError(RuntimeError):
     pass
 
 
+class FalSubmissionRejectedError(RuntimeError):
+    pass
+
+
 class FalH3Client:
     def __init__(self, api_key: str | None = None) -> None:
         key = (api_key or FAL_KEY or "").strip()
@@ -259,9 +264,16 @@ class FalH3Client:
                 json=arguments,
                 timeout=60,
             )
+            response.raise_for_status()
+        except requests.HTTPError as error:
+            status_code = error.response.status_code if error.response is not None else None
+            if status_code is not None and 400 <= status_code < 500 and status_code != 429:
+                raise FalSubmissionRejectedError(
+                    f"Fal rejected submission with HTTP {status_code}"
+                ) from error
+            raise FalSubmissionAmbiguousError("Fal submission outcome is unknown") from error
         except requests.RequestException as error:
             raise FalSubmissionAmbiguousError("Fal submission outcome is unknown") from error
-        response.raise_for_status()
         payload = cast(dict[str, object], response.json())
         return FalSubmissionReceipt.model_validate(
             {key: payload[key] for key in FalSubmissionReceipt.model_fields if key in payload},
@@ -269,7 +281,9 @@ class FalH3Client:
         )
 
     def status(self, receipt: FalSubmissionReceipt) -> FalQueueStatus:
-        response = requests.get(str(receipt.status_url), headers=self._headers, timeout=60)
+        response = requests.get(
+            _trusted_queue_url(receipt.status_url), headers=self._headers, timeout=60
+        )
         response.raise_for_status()
         payload = cast(dict[str, object], response.json())
         return FalQueueStatus.model_validate(
@@ -278,15 +292,30 @@ class FalH3Client:
         )
 
     def result(self, receipt: FalSubmissionReceipt) -> tuple[FalH3Result, dict[str, object]]:
-        response = requests.get(str(receipt.response_url), headers=self._headers, timeout=60)
+        response = requests.get(
+            _trusted_queue_url(receipt.response_url), headers=self._headers, timeout=60
+        )
         response.raise_for_status()
         payload = cast(dict[str, object], response.json())
         return FalH3Result.model_validate({"video": payload.get("video")}, strict=True), payload
 
     def download(self, url: str) -> bytes:
-        response = requests.get(url, timeout=600)
-        response.raise_for_status()
-        return response.content
+        response = requests.get(url, timeout=600, stream=True)
+        try:
+            response.raise_for_status()
+            content_length = response.headers.get("Content-Length")
+            if content_length is not None and int(content_length) > FAL_MAX_DOWNLOAD_BYTES:
+                raise ValueError("Fal candidate exceeds the maximum byte size")
+            chunks: list[bytes] = []
+            byte_size = 0
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                byte_size += len(chunk)
+                if byte_size > FAL_MAX_DOWNLOAD_BYTES:
+                    raise ValueError("Fal candidate exceeds the maximum byte size")
+                chunks.append(chunk)
+            return b"".join(chunks)
+        finally:
+            response.close()
 
 
 def publish_generation_policy(
@@ -302,14 +331,13 @@ def generate_next_candidate(
     references: H3ReferencePack,
     *,
     provider: FalH3Provider | None = None,
-    sign_reference: Callable[[CatalogArtifactReference], str] | None = None,
+    sign_reference: Callable[[ArtifactReference], str] | None = None,
     policy: GenerationPolicyArtifact = PRODUCTION_GENERATION_POLICY,
 ) -> GenerationOutcome:
     if lease.edition_id != prepared.plan.edition_id:
         raise ValueError("Generation inputs do not match the claimed edition")
     if prepared.verified_plan.plan.edition_id != lease.edition_id:
         raise ValueError("Verified screenplay does not match the claimed edition")
-    publish_generation_policy(policy)
     deadline = read_generation_deadline(lease.slot_id)
     attempts = read_generation_attempts(lease.edition_id)
     active = next(
@@ -376,9 +404,10 @@ def _start_attempt(
     position: int,
     attempt_index: int,
     provider: FalH3Provider | None,
-    sign_reference: Callable[[CatalogArtifactReference], str] | None,
+    sign_reference: Callable[[ArtifactReference], str] | None,
     deadline: datetime,
 ) -> GenerationOutcome:
+    publish_generation_policy(policy)
     request_value, request_file, identity = _generation_request(
         prepared, references, policy, position, attempt_index
     )
@@ -394,11 +423,15 @@ def _start_attempt(
         return _fail_ambiguous_submission(lease, identity)
 
     client = provider or FalH3Client()
-    signer = sign_reference or (lambda value: presigned_r2_url(value.r2_key))
+    signer = sign_reference or (
+        lambda value: presigned_r2_url(value.r2_key, expires_in=policy.policy.deadline_minutes * 60)
+    )
     try:
         receipt = client.submit(_fal_arguments(request_value, signer))
     except FalSubmissionAmbiguousError:
         return _fail_ambiguous_submission(lease, identity)
+    except FalSubmissionRejectedError as error:
+        return _fail_request(lease, identity, None, str(error), terminal=False)
     receipt_file = _receipt_file(identity, receipt)
     publish_immutable_r2_objects(((receipt_file.r2_key, receipt_file.content),))
     checkpoint_generation_submission(
@@ -465,7 +498,7 @@ def _poll_submitted(
     try:
         result, raw = provider.result(receipt)
         candidate_bytes = provider.download(str(result.video.url))
-    except (requests.RequestException, ValueError) as error:
+    except ValueError as error:
         return _fail_attempt(lease, active, str(error), terminal=False)
     candidate = CandidateReference(
         r2_key=(
@@ -509,7 +542,7 @@ def _poll_submitted(
 
 def _candidate_from_response(
     active: GenerationAttemptReference,
-    response: CatalogArtifactReference,
+    response: ArtifactReference,
 ) -> CandidateReady:
     evidence = H3CompletionEvidence.model_validate_json(
         read_verified_r2_object(response.r2_key, response.content_digest), strict=True
@@ -591,7 +624,7 @@ def _generation_request(
 
 def _fal_arguments(
     request: H3GenerationRequest,
-    signer: Callable[[CatalogArtifactReference], str],
+    signer: Callable[[ArtifactReference], str],
 ) -> dict[str, object]:
     prompt = (
         f"{request.story.visual_direction}\n\n"
@@ -618,6 +651,12 @@ def _fal_arguments(
         "reference_video_urls": [signer(value) for value in request.references.videos],
         "reference_audio_urls": [signer(value) for value in request.references.audio],
     }
+
+
+def _trusted_queue_url(url: HttpUrl) -> str:
+    if url.scheme != "https" or url.host != "queue.fal.run":
+        raise ValueError("Fal receipt URL must use the trusted Fal queue host")
+    return str(url)
 
 
 def _admission(policy: GenerationPolicyArtifact, story_count: int) -> GenerationAdmission:
@@ -757,8 +796,8 @@ def _fail_without_request(lease: SlotLease, reason: str) -> GenerationFailed:
     return GenerationFailed(edition_id=lease.edition_id, reason=reason)
 
 
-def _reference(file: ArtifactFile) -> CatalogArtifactReference:
-    return CatalogArtifactReference(
+def _reference(file: ArtifactFile) -> ArtifactReference:
+    return ArtifactReference(
         artifact_id=file.artifact_id,
         version_id=file.version_id,
         content_digest=file.content_digest,

@@ -96,16 +96,38 @@ CREATE FUNCTION require_video_digest_generation_reservations() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
     reservation_count BIGINT;
-    distinct_amounts BIGINT;
-    distinct_policies BIGINT;
+    matching_reservation_count BIGINT;
+    story_scope_key TEXT;
+    day_scope_key TEXT;
+    month_scope_key TEXT;
 BEGIN
-    SELECT count(*), count(DISTINCT reservation.reserved_usd),
-           count(DISTINCT reservation.generation_policy_artifact_version_id)
-    INTO reservation_count, distinct_amounts, distinct_policies
+    SELECT story.story_id, slot.bucharest_day::TEXT,
+           date_trunc('month', slot.bucharest_day)::DATE::TEXT
+    INTO story_scope_key, day_scope_key, month_scope_key
+    FROM video_digest_stories AS story
+    JOIN video_digest_slots AS slot ON slot.edition_id = story.edition_id
+    WHERE story.edition_id = NEW.edition_id
+      AND story.position = NEW.story_position
+      AND slot.scheduled_at = NEW.deadline_at - INTERVAL '90 minutes';
+
+    SELECT count(*), count(*) FILTER (
+        WHERE reservation.reserved_usd = NEW.reserved_cost_usd
+          AND reservation.generation_policy_artifact_version_id =
+              NEW.generation_policy_artifact_version_id
+          AND (
+              (reservation.scope_kind = 'story' AND reservation.scope_key = story_scope_key)
+              OR (reservation.scope_kind = 'edition' AND reservation.scope_key = NEW.edition_id)
+              OR (reservation.scope_kind = 'bucharest_day'
+                  AND reservation.scope_key = day_scope_key)
+              OR (reservation.scope_kind = 'calendar_month'
+                  AND reservation.scope_key = month_scope_key)
+          )
+    )
+    INTO reservation_count, matching_reservation_count
     FROM video_digest_generation_reservations AS reservation
     WHERE reservation.request_id = NEW.request_id;
 
-    IF reservation_count <> 4 OR distinct_amounts <> 1 OR distinct_policies <> 1 THEN
+    IF story_scope_key IS NULL OR reservation_count <> 4 OR matching_reservation_count <> 4 THEN
         RAISE EXCEPTION 'video digest generation request requires four matching reservations'
             USING ERRCODE = '23000';
     END IF;

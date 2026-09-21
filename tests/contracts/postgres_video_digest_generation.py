@@ -26,6 +26,8 @@ from romanian_news.video_digest.models import (
     EditionIdentity,
     EstimatedAttemptCost,
     FailedSubtitles,
+    GenerationAdmission,
+    GenerationBudgetLimits,
     GenerationRequestId,
     GenerationRequestIdentity,
     GenerationRequestState,
@@ -58,7 +60,7 @@ from tests.contracts.video_digest_planning_fixtures import (
     rejected_planning_file,
 )
 
-SCHEDULED_AT = datetime(2026, 9, 20, 6, tzinfo=UTC)
+SCHEDULED_AT = datetime(2099, 9, 20, 6, tzinfo=UTC)
 
 
 def _sha256_id(value: int) -> str:
@@ -320,7 +322,20 @@ class _GenerationPipeline:
             self.lease,
             self.request_identity(position, attempt),
             request_file=request_file,
+            admission=self.generation_admission(),
             recorded_at=self.recorded_at,
+        ).state
+
+    def generation_admission(self) -> GenerationAdmission:
+        return GenerationAdmission(
+            generation_policy_artifact_version_id=self.edition.policy_bundle_version_id,
+            reserved_usd=Decimal("3.25632"),
+            limits=GenerationBudgetLimits(
+                story_usd=Decimal("7"),
+                edition_usd=Decimal("7") * self.story_count,
+                bucharest_day_usd=Decimal("150"),
+                calendar_month_usd=Decimal("1000"),
+            ),
         )
 
     def receipt_file(self, position: int, attempt: int = 0) -> ArtifactFile:
@@ -1083,6 +1098,7 @@ def test_generation_request_requires_manifest_before_artifact_registration(
             pipeline.lease,
             pipeline.request_identity(0),
             request_file=request_file,
+            admission=pipeline.generation_admission(),
             recorded_at=pipeline.recorded_at,
         )
 
@@ -1600,23 +1616,9 @@ def test_generation_spend_buckets_costs_and_preserves_decimal_precision(
     pipeline.generate(1, usd="2.2500")
     pipeline.verify_story(2)
 
-    pending_request_id = _sha256_id(30_500)
-    pending_payload = _sha256_id(30_501)
-    assert news_schema.NEWS_POSTGRES_DSN is not None
-    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        _record_artifact_versions(connection, 30_501, 1)
-        connection.execute(
-            "INSERT INTO video_digest_generation_requests "
-            "(request_id, edition_id, story_position, attempt_index, "
-            " request_artifact_version_id, stage, cost_kind, created_at, updated_at) "
-            "VALUES (%s, %s, 2, 0, %s, 'pending', 'pending', "
-            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-            (pending_request_id, pipeline.edition.edition_id, pending_payload),
-        )
-
     spend = video_digest_catalog.read_generation_spend(pipeline.edition.edition_id)
 
     assert str(spend.measured_usd) == "1.10"
     assert str(spend.estimated_usd) == "2.2500"
-    assert spend.pending_requests == 1
+    assert spend.pending_requests == 0
     assert spend.unknown_requests == 1

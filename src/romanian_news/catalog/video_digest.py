@@ -108,9 +108,9 @@ class GenerationAttemptReference(NewsModel):
     stage: GenerationStage
     provider_receipt_id: str | None
     cost: AttemptCost
-    request_evidence: CatalogArtifactReference
-    receipt_evidence: CatalogArtifactReference | None
-    response_evidence: CatalogArtifactReference | None
+    request_evidence: ArtifactReference
+    receipt_evidence: ArtifactReference | None
+    response_evidence: ArtifactReference | None
 
 
 def read_generation_attempts(edition_id: EditionId) -> tuple[GenerationAttemptReference, ...]:
@@ -2912,7 +2912,7 @@ def _generation_attempt_reference(row: Mapping[str, Any]) -> GenerationAttemptRe
     receipt_version = row["receipt_artifact_version_id"]
     receipt = None
     if receipt_version is not None:
-        receipt = CatalogArtifactReference(
+        receipt = ArtifactReference(
             artifact_id=str(row["provider_receipt_id"]),
             version_id=str(receipt_version),
             content_digest=str(row["receipt_content_digest"]),
@@ -2921,7 +2921,7 @@ def _generation_attempt_reference(row: Mapping[str, Any]) -> GenerationAttemptRe
     response_version = row["response_artifact_version_id"]
     response = None
     if response_version is not None:
-        response = CatalogArtifactReference(
+        response = ArtifactReference(
             artifact_id=str(row["response_artifact_id"]),
             version_id=str(response_version),
             content_digest=str(row["response_content_digest"]),
@@ -2940,7 +2940,7 @@ def _generation_attempt_reference(row: Mapping[str, Any]) -> GenerationAttemptRe
             str(row["provider_receipt_id"]) if row["provider_receipt_id"] is not None else None
         ),
         cost=_cost_from_row(row),
-        request_evidence=CatalogArtifactReference(
+        request_evidence=ArtifactReference(
             artifact_id=str(row["request_artifact_id"]),
             version_id=str(row["request_artifact_version_id"]),
             content_digest=str(row["request_content_digest"]),
