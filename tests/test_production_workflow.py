@@ -69,3 +69,16 @@ def test_production_workflow_rejects_noncurrent_or_inspection_activation() -> No
     assert "current Bucharest date" in old.stderr
     assert inspection.returncode != 0
     assert "requires a current-day feed probe" in inspection.stderr
+
+
+def test_production_workflow_checks_morning_report_after_controller_activation() -> None:
+    workflow = WORKFLOW.read_text()
+
+    controller = workflow.index("- name: Start article batch controller")
+    health_check = workflow.index("- name: Run morning report health check")
+    health_check_block = workflow[health_check:]
+
+    assert controller < health_check
+    assert "if: inputs.enable_article_controller && inputs.partition != ''" in health_check_block
+    assert "--job morning_report_check" in health_check_block
+    assert "--wait" in health_check_block
