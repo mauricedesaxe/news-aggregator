@@ -31,6 +31,8 @@ from romanian_news.video_digest.models import (
     EditionIdentity,
     EstimatedAttemptCost,
     FailedSubtitles,
+    GenerationAdmission,
+    GenerationBudgetLimits,
     GenerationRequestIdentity,
     GenerationStage,
     MeasuredAttemptCost,
@@ -915,9 +917,40 @@ def test_video_digest_generation_checkpoints_complete_atomically(
         request_artifact_version_id=request_file.version_id,
     )
     pending = video_digest_catalog.checkpoint_generation_request(
-        lease, request, request_file=request_file, recorded_at=recorded_at
+        lease,
+        request,
+        request_file=request_file,
+        admission=GenerationAdmission(
+            generation_policy_artifact_version_id=policy,
+            reserved_usd=Decimal("3.25632"),
+            limits=GenerationBudgetLimits(
+                story_usd=Decimal("7"),
+                edition_usd=Decimal("7"),
+                bucharest_day_usd=Decimal("150"),
+                calendar_month_usd=Decimal("1000"),
+            ),
+        ),
+        recorded_at=recorded_at,
     )
-    assert pending.stage is GenerationStage.PENDING
+    assert pending.created is True
+    assert pending.state.stage is GenerationStage.PENDING
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        reservations = connection.execute(
+            "SELECT scope_kind, reserved_usd FROM video_digest_generation_reservations "
+            "WHERE request_id = %s ORDER BY scope_kind",
+            (request.request_id,),
+        ).fetchall()
+        assert reservations == [
+            ("bucharest_day", Decimal("3.25632")),
+            ("calendar_month", Decimal("3.25632")),
+            ("edition", Decimal("3.25632")),
+            ("story", Decimal("3.25632")),
+        ]
+        with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+            connection.execute(
+                "DELETE FROM video_digest_generation_reservations WHERE request_id = %s",
+                (request.request_id,),
+            )
 
     receipt_id = f"fal-{request.request_id}"
     receipt_file = artifact_file(

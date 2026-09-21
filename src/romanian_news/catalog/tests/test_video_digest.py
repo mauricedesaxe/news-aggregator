@@ -21,6 +21,8 @@ from romanian_news.video_digest.models import (
     EditionIdentity,
     EstimatedAttemptCost,
     FailedSubtitles,
+    GenerationAdmission,
+    GenerationBudgetLimits,
     GenerationRequestIdentity,
     GenerationStage,
     MeasuredAttemptCost,
@@ -125,6 +127,16 @@ REQUEST = GenerationRequestIdentity(
     story_position=0,
     attempt_index=0,
     request_artifact_version_id=_request_payload_file.version_id,
+)
+GENERATION_ADMISSION = GenerationAdmission(
+    generation_policy_artifact_version_id=POLICY_ID,
+    reserved_usd=Decimal("3.25632"),
+    limits=GenerationBudgetLimits(
+        story_usd=Decimal("7"),
+        edition_usd=Decimal("7"),
+        bucharest_day_usd=Decimal("150"),
+        calendar_month_usd=Decimal("1000"),
+    ),
 )
 REQUEST_FILE = _request_payload_file
 RECEIPT_FILE = artifact_file(
@@ -1465,7 +1477,11 @@ def test_generation_request_requires_manifest_before_artifact_registration(
 
     with pytest.raises(VideoDigestCheckpointConflictError, match="verification manifest"):
         video_digest.checkpoint_generation_request(
-            _lease(), REQUEST, request_file=REQUEST_FILE, recorded_at=NOW
+            _lease(),
+            REQUEST,
+            request_file=REQUEST_FILE,
+            admission=GENERATION_ADMISSION,
+            recorded_at=NOW,
         )
     assert not any("INSERT INTO artifacts" in statement for statement in connection.statements)
     assert connection.steps == []
@@ -1492,7 +1508,11 @@ def test_generation_request_requires_all_mandatory_stories_ready(
 
     with pytest.raises(VideoDigestCheckpointConflictError, match="every mandatory story"):
         video_digest.checkpoint_generation_request(
-            _lease(), REQUEST, request_file=REQUEST_FILE, recorded_at=NOW
+            _lease(),
+            REQUEST,
+            request_file=REQUEST_FILE,
+            admission=GENERATION_ADMISSION,
+            recorded_at=NOW,
         )
     assert connection.steps == []
 
@@ -1518,17 +1538,109 @@ def test_generation_request_checkpoint_starts_pending_once(
             ("FROM video_digest_generation_requests", None),
             *_artifact_steps(),
             ("INSERT INTO video_digest_generation_requests", None),
+            ("INSERT INTO video_digest_generation_reservations", None),
         ],
     )
 
     state = video_digest.checkpoint_generation_request(
-        _lease(), REQUEST, request_file=REQUEST_FILE, recorded_at=NOW
+        _lease(),
+        REQUEST,
+        request_file=REQUEST_FILE,
+        admission=GENERATION_ADMISSION,
+        recorded_at=NOW,
     )
 
-    assert state.request_id == REQUEST.request_id
-    assert state.stage is GenerationStage.PENDING
-    assert state.cost.kind == "pending"
+    assert state.created is True
+    assert state.state.request_id == REQUEST.request_id
+    assert state.state.stage is GenerationStage.PENDING
+    assert state.state.cost.kind == "pending"
     assert connection.steps == []
+
+
+def test_generation_request_replay_requires_the_exact_budget_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reservations = [
+        {
+            "scope_kind": scope,
+            "limit_usd": limit,
+            "reserved_usd": GENERATION_ADMISSION.reserved_usd,
+            "generation_policy_artifact_version_id": POLICY_ID,
+        }
+        for scope, limit in (
+            ("bucharest_day", Decimal("150")),
+            ("calendar_month", Decimal("1000")),
+            ("edition", Decimal("7")),
+            ("story", Decimal("7")),
+        )
+    ]
+    connection = _use_connection(
+        monkeypatch,
+        [
+            ("FROM video_digest_slots", _active_row(stage="generating")),
+            ("FROM video_digest_generation_requests", _generation_row()),
+            ("FROM artifacts AS artifact", _artifact_row(REQUEST_FILE)),
+            ("FROM video_digest_generation_reservations", reservations),
+        ],
+    )
+
+    checkpoint = video_digest.checkpoint_generation_request(
+        _lease(),
+        REQUEST,
+        request_file=REQUEST_FILE,
+        admission=GENERATION_ADMISSION,
+        recorded_at=NOW,
+    )
+
+    assert checkpoint.created is False
+    assert checkpoint.state.stage is GenerationStage.PENDING
+    assert connection.steps == []
+
+
+def test_read_generation_attempts_returns_receipt_and_response_projections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response_file = artifact_file(
+        artifact_id=f"{REQUEST.request_id}:response",
+        artifact_kind="video_digest_generation_response",
+        title="Generation response",
+        content=b"response",
+        r2_key="video-digest/generation/response.json",
+        media_type="application/json",
+    )
+    monkeypatch.setattr(
+        video_digest,
+        "catalog_query",
+        lambda _query, _values: [
+            {
+                **_generation_row(
+                    stage="processing",
+                    provider_receipt_id="fal-receipt-1",
+                    response_artifact_version_id=response_file.version_id,
+                    cost_kind="estimated",
+                    cost_usd=Decimal("3.25632"),
+                ),
+                "request_artifact_id": REQUEST_FILE.artifact_id,
+                "request_content_digest": REQUEST_FILE.content_digest,
+                "request_r2_key": REQUEST_FILE.r2_key,
+                "receipt_artifact_version_id": RECEIPT_FILE.version_id,
+                "receipt_content_digest": RECEIPT_FILE.content_digest,
+                "receipt_r2_key": RECEIPT_FILE.r2_key,
+                "response_artifact_id": response_file.artifact_id,
+                "response_content_digest": response_file.content_digest,
+                "response_r2_key": response_file.r2_key,
+            }
+        ],
+    )
+
+    attempts = video_digest.read_generation_attempts(EDITION.edition_id)
+
+    assert len(attempts) == 1
+    assert attempts[0].request == REQUEST
+    assert attempts[0].receipt_evidence is not None
+    assert attempts[0].receipt_evidence.version_id == RECEIPT_FILE.version_id
+    assert attempts[0].response_evidence is not None
+    assert attempts[0].response_evidence.version_id == response_file.version_id
 
 
 def test_second_generation_request_requires_failed_first_attempt(
@@ -1570,7 +1682,11 @@ def test_second_generation_request_requires_failed_first_attempt(
 
     with pytest.raises(VideoDigestCheckpointConflictError, match="failed first attempt"):
         video_digest.checkpoint_generation_request(
-            _lease(), second_request, request_file=second_file, recorded_at=NOW
+            _lease(),
+            second_request,
+            request_file=second_file,
+            admission=GENERATION_ADMISSION,
+            recorded_at=NOW,
         )
     assert connection.steps == []
 
@@ -1599,7 +1715,11 @@ def test_generation_request_rejects_parallel_paid_work(
 
     with pytest.raises(VideoDigestCheckpointConflictError, match="attempt is active"):
         video_digest.checkpoint_generation_request(
-            _lease(), REQUEST, request_file=REQUEST_FILE, recorded_at=NOW
+            _lease(),
+            REQUEST,
+            request_file=REQUEST_FILE,
+            admission=GENERATION_ADMISSION,
+            recorded_at=NOW,
         )
     assert connection.steps == []
 
