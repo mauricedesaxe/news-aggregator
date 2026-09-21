@@ -18,11 +18,11 @@ class UnsafeNewsRedirect(requests.RequestException):
 def create_news_session() -> requests.Session:
     session = requests.Session()
     retry = Retry(
-        total=1,
-        backoff_factor=0.5,
+        total=3,
+        backoff_factor=10,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset({"GET"}),
-        respect_retry_after_header=False,
+        respect_retry_after_header=True,
     )
     session.mount("https://", HTTPAdapter(max_retries=retry, pool_connections=8, pool_maxsize=8))
     return session
