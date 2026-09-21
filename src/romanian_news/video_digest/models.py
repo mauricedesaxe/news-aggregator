@@ -51,6 +51,11 @@ class SlotStage(StrEnum):
     PUBLISHED = "published"
 
 
+class SlotFailureReason(StrEnum):
+    TERMINAL_FAILURE = "terminal_failure"
+    DEADLINE = "deadline"
+
+
 class StoryStage(StrEnum):
     PLANNED = "planned"
     VERIFYING = "verifying"
@@ -328,6 +333,11 @@ class ClaimedSlot(NewsModel):
     lease: SlotLease
 
 
+class BusySlot(NewsModel):
+    kind: Literal["busy"] = "busy"
+    retry_at: AwareDatetime
+
+
 class SkippedSlot(NewsModel):
     kind: Literal["skipped"] = "skipped"
     reason: SlotSkipReason
@@ -339,6 +349,7 @@ class TerminalSlot(NewsModel):
 
 
 ClaimResult = Annotated[ClaimedSlot | SkippedSlot | TerminalSlot, Field(discriminator="kind")]
+ReacquireResult = Annotated[ClaimedSlot | BusySlot | TerminalSlot, Field(discriminator="kind")]
 
 
 class AvailableSubtitles(NewsModel):
