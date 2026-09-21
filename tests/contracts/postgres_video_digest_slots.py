@@ -213,6 +213,18 @@ def _publish_edition_and_slot(
     story_id = planned_story_id(identity.edition_id, 0, subject_id)
     _insert_story(connection, story_id, identity.edition_id, 0, subject_id)
     connection.execute(
+        "INSERT INTO video_digest_planning_attempts "
+        "(edition_id, attempt_index, disposition, attempt_evidence_artifact_version_id, "
+        "accepted_plan_artifact_version_id, created_at) "
+        "VALUES (%s, 0, 'accepted', %s, %s, CURRENT_TIMESTAMP)",
+        (identity.edition_id, upload_evidence, plan),
+    )
+    connection.execute(
+        "UPDATE video_digest_editions SET plan_artifact_version_id = %s, "
+        "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+        (plan, identity.edition_id),
+    )
+    connection.execute(
         "UPDATE video_digest_stories SET stage = 'verifying', updated_at = CURRENT_TIMESTAMP "
         "WHERE story_id = %s",
         (story_id,),
@@ -227,6 +239,11 @@ def _publish_edition_and_slot(
         "UPDATE video_digest_stories SET stage = 'generating', updated_at = CURRENT_TIMESTAMP "
         "WHERE story_id = %s",
         (story_id,),
+    )
+    connection.execute(
+        "UPDATE video_digest_editions SET verification_manifest_artifact_version_id = %s, "
+        "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+        (publication_verification, identity.edition_id),
     )
     request_id = _sha256_id(artifact_start + 41)
     _insert_generation_request(connection, request_id, identity.edition_id, request_version)

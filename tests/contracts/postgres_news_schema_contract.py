@@ -290,7 +290,8 @@ def test_planning_migration_grandfathers_existing_editions_without_authorizing_p
                 (request_id,),
             )
         new_edition = _sha256_id(914)
-        _insert_edition(connection, new_edition, report, policy)
+        new_report, new_policy = _record_artifact_versions(connection, 904, 2)
+        _insert_edition(connection, new_edition, new_report, new_policy)
         assert connection.execute(
             "SELECT planning_contract FROM video_digest_editions WHERE edition_id = %s",
             (new_edition,),
@@ -545,12 +546,25 @@ def test_video_digest_story_acceptance_requires_matching_generation(
     assert news_schema.NEWS_POSTGRES_DSN is not None
 
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy, verification, request_version, response, clip = _record_artifact_versions(
-            connection, 200, 6
-        )
+        (
+            report,
+            policy,
+            plan,
+            attempt_evidence,
+            verification,
+            request_version,
+            response,
+            clip,
+        ) = _record_artifact_versions(connection, 200, 8)
         edition_id, story_id, request_id = (_sha256_id(value) for value in range(210, 213))
         _insert_edition(connection, edition_id, report, policy)
         _insert_story(connection, story_id, edition_id, 0, _sha256_id(220))
+        _insert_planning_attempt(connection, edition_id, attempt_evidence, plan)
+        connection.execute(
+            "UPDATE video_digest_editions SET plan_artifact_version_id = %s, "
+            "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
+            (plan, edition_id),
+        )
         _advance_story_to_generating(connection, story_id, verification)
         connection.execute(
             "UPDATE video_digest_editions "
