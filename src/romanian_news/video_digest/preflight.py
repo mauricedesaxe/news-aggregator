@@ -63,13 +63,28 @@ VERIFICATION_PROMPT = (
     "supplied evidence. Return structured failures and no editorial rewrite."
 )
 PLANNING_MODEL = "google/gemini-3.8-flash"
-VERIFICATION_MODEL = "google/gemini-3.8-flash"
+VERIFICATION_MODEL = "openai/gpt-4.1-mini"
 MAX_TOKENS = 16_000
 
 
 class PlanningReport(NewsModel):
     version_id: Sha256
     report: DailyReport
+
+    @model_validator(mode="after")
+    def require_exact_artifact_version(self) -> PlanningReport:
+        content = canonical_json(self.report.model_dump(mode="json"))
+        expected = artifact_file(
+            artifact_id=f"news:daily:{self.report.day.isoformat()}",
+            artifact_kind="news_daily_report",
+            title=f"Romanian news report for {self.report.day.isoformat()}",
+            content=content,
+            r2_key=f"news/reports/daily/{self.report.day.isoformat()}/{sha256(content)}.json",
+            media_type="application/json",
+        )
+        if self.version_id != expected.version_id:
+            raise ValueError("Planning report version does not match its content")
+        return self
 
 
 class _PlanningResponse(NewsModel):
