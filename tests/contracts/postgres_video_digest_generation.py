@@ -1603,29 +1603,42 @@ def test_failed_subtitles_leave_the_edition_publishable(postgres_news_schema: st
     assert replayed == outcome
 
 
-def test_generation_spend_buckets_costs_and_preserves_decimal_precision(
+def test_generation_spend_preserves_measured_decimal_precision(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
-    measured_pipeline = _GenerationPipeline(seed=30)
-    measured_pipeline.checkpoint_plan()
-    measured_pipeline.generate(0)
-    measured_pipeline.accept(0, usd="1.10")
+    pipeline = _GenerationPipeline(seed=30)
+    pipeline.checkpoint_plan()
+    pipeline.generate(0)
+    pipeline.accept(0, usd="1.10")
 
-    estimated_pipeline = _GenerationPipeline(seed=130)
-    estimated_pipeline.checkpoint_plan()
-    estimated_pipeline.generate(0, usd="2.2500")
+    spend = video_digest_catalog.read_generation_spend(pipeline.edition.edition_id)
 
-    unknown_pipeline = _GenerationPipeline(seed=230)
-    unknown_pipeline.checkpoint_plan()
-    unknown_pipeline.generate(0)
-    unknown_pipeline.fail_attempt(0, unknown_reason="Provider omitted billing data")
+    assert str(spend.measured_usd) == "1.10"
+    assert spend.pending_requests == 0
 
-    measured = video_digest_catalog.read_generation_spend(measured_pipeline.edition.edition_id)
-    estimated = video_digest_catalog.read_generation_spend(estimated_pipeline.edition.edition_id)
-    unknown = video_digest_catalog.read_generation_spend(unknown_pipeline.edition.edition_id)
 
-    assert str(measured.measured_usd) == "1.10"
-    assert str(estimated.estimated_usd) == "2.2500"
-    assert measured.pending_requests == estimated.pending_requests == 0
-    assert unknown.unknown_requests == 1
+def test_generation_spend_preserves_estimated_decimal_precision(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=30)
+    pipeline.checkpoint_plan()
+    pipeline.generate(0, usd="2.2500")
+
+    spend = video_digest_catalog.read_generation_spend(pipeline.edition.edition_id)
+
+    assert str(spend.estimated_usd) == "2.2500"
+    assert spend.pending_requests == 0
+
+
+def test_generation_spend_counts_unknown_costs(postgres_news_schema: str) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=30)
+    pipeline.checkpoint_plan()
+    pipeline.generate(0)
+    pipeline.fail_attempt(0, unknown_reason="Provider omitted billing data")
+
+    spend = video_digest_catalog.read_generation_spend(pipeline.edition.edition_id)
+
+    assert spend.unknown_requests == 1
