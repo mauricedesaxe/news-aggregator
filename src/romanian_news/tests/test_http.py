@@ -11,15 +11,16 @@ from romanian_news.http import (
 )
 
 
-def test_news_session_retries_get_status_failures_once() -> None:
+def test_news_session_retries_get_status_failures_with_server_aware_backoff() -> None:
     adapter = create_news_session().get_adapter("https://")
     assert isinstance(adapter, HTTPAdapter)
     retry = adapter.max_retries
 
-    assert retry.total == 1
+    assert retry.total == 3
+    assert retry.backoff_factor == 10
     assert all(retry.is_retry("GET", status) for status in (429, 500, 502, 503, 504))
     assert not retry.is_retry("POST", 503)
-    assert retry.respect_retry_after_header is False
+    assert retry.respect_retry_after_header is True
 
 
 def test_get_validates_redirect_before_sending_the_next_request(monkeypatch) -> None:
