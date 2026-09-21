@@ -1,3 +1,4 @@
+import hashlib
 import json
 from types import SimpleNamespace
 from uuid import UUID
@@ -806,7 +807,12 @@ def test_summary_sentence_limits(summary: str, passed: bool) -> None:
 
 
 def test_evaluation_pin_parses_strictly() -> None:
-    NewsEvaluationPin.model_validate_json(evaluation.PIN_PATH.read_bytes(), strict=True)
+    content = evaluation.PIN_PATH.read_bytes()
+
+    NewsEvaluationPin.model_validate_json(content, strict=True)
+    assert hashlib.sha256(content).hexdigest() == (
+        "e944f7839c460f5e0e93f9892e03699b8bc998d1c2259ddcd5fbec07b724a612"
+    )
 
 
 def test_cli_loads_the_pinned_catalog_release_without_credentials(monkeypatch, capsys) -> None:

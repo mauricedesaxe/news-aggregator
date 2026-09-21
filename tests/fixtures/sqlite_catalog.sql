@@ -501,6 +501,24 @@ CREATE TABLE IF NOT EXISTS news_relevance_experiments (
     CHECK (length(trim(policy_id)) > 0)
 );
 
+CREATE TABLE IF NOT EXISTS news_theme_experiments (
+    provider TEXT NOT NULL CHECK (length(trim(provider)) > 0),
+    manifest_artifact_version_id TEXT NOT NULL REFERENCES artifact_versions(id),
+    policy_digest TEXT NOT NULL,
+    implementation_ref TEXT NOT NULL,
+    policy_id TEXT NOT NULL,
+    dataset_id TEXT NOT NULL,
+    dataset_name TEXT NOT NULL,
+    experiment_id TEXT NOT NULL,
+    experiment_name TEXT NOT NULL,
+    experiment_url TEXT,
+    completed_at TEXT NOT NULL,
+    PRIMARY KEY (provider, manifest_artifact_version_id, policy_digest, implementation_ref),
+    CHECK (length(trim(policy_digest)) > 0),
+    CHECK (length(trim(implementation_ref)) > 0),
+    CHECK (length(trim(policy_id)) > 0)
+);
+
 CREATE TABLE IF NOT EXISTS news_feedback_sync_attempts (
     sync_attempt_id TEXT PRIMARY KEY,
     feedback_id TEXT NOT NULL REFERENCES news_feedback(feedback_id),
@@ -1336,6 +1354,40 @@ WHEN EXISTS (
 )
 BEGIN
     SELECT RAISE(ABORT, 'news_relevance_experiments identity conflict');
+END;
+
+CREATE TRIGGER IF NOT EXISTS news_theme_experiments_reject_updates
+BEFORE UPDATE ON news_theme_experiments
+BEGIN
+    SELECT RAISE(ABORT, 'news_theme_experiments are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS news_theme_experiments_reject_deletes
+BEFORE DELETE ON news_theme_experiments
+BEGIN
+    SELECT RAISE(ABORT, 'news_theme_experiments are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS news_theme_experiments_reject_conflicting_inserts
+BEFORE INSERT ON news_theme_experiments
+WHEN EXISTS (
+    SELECT 1
+    FROM news_theme_experiments AS existing
+    WHERE existing.provider = NEW.provider
+      AND existing.manifest_artifact_version_id = NEW.manifest_artifact_version_id
+      AND existing.policy_digest = NEW.policy_digest
+      AND existing.implementation_ref = NEW.implementation_ref
+      AND (
+          existing.policy_id IS NOT NEW.policy_id
+          OR existing.dataset_id IS NOT NEW.dataset_id
+          OR existing.dataset_name IS NOT NEW.dataset_name
+          OR existing.experiment_id IS NOT NEW.experiment_id
+          OR existing.experiment_name IS NOT NEW.experiment_name
+          OR existing.experiment_url IS NOT NEW.experiment_url
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'news_theme_experiments identity conflict');
 END;
 
 CREATE TRIGGER IF NOT EXISTS news_feedback_sync_attempts_reject_updates

@@ -4,14 +4,13 @@ import hashlib
 import sqlite3
 from collections.abc import Callable
 from contextlib import closing
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 import psycopg
 from fasthtml.common import FastHTML
 from starlette.testclient import TestClient
 
-from romanian_news import BUCHAREST
 from romanian_news.reader.app import (
     PRODUCTION_DOMAIN,
     SESSION_COOKIE,
@@ -39,9 +38,11 @@ THEME_ID = "f" * 64
 FEEDBACK_ID = "00000000-0000-4000-8000-000000000001"
 TEST_SESSION_SECRET = "s" * 32
 CAPTURED_AT = "2026-09-20T06:00:00+00:00"
+TEST_DAY = date(2026, 9, 20)
 
 
 def test_feedback_round_trip_through_the_real_domain(monkeypatch) -> None:
+    monkeypatch.setattr("romanian_news.reader.app._bucharest_today", lambda: TEST_DAY)
     with closing(_wire_real_domain(monkeypatch)) as connection:
         app = create_app(_settings(), PRODUCTION_DOMAIN)
         with TestClient(app) as client:
@@ -132,10 +133,6 @@ def _settings() -> ReaderSettings:
         session_secret=TEST_SESSION_SECRET,
         cookie_secure=False,
     )
-
-
-def _bucharest_today() -> date:
-    return datetime.now(BUCHAREST).date()
 
 
 def _daily_report(day: date) -> DailyReport:
@@ -298,7 +295,7 @@ def _r2_reader(payload: bytes) -> Callable[[str, str], bytes]:
 
 
 def _wire_real_domain(monkeypatch) -> sqlite3.Connection:
-    connection, payload = _seed_catalog(_daily_report(_bucharest_today()))
+    connection, payload = _seed_catalog(_daily_report(TEST_DAY))
     _patch_catalog(monkeypatch, connection)
     read = _r2_reader(payload)
     monkeypatch.setattr("romanian_news.feedback.read_verified_r2_object", read)

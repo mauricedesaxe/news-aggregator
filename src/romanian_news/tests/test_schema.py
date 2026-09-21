@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -5,6 +6,22 @@ from pathlib import Path
 import pytest
 
 SCHEMA_PATH = Path(__file__).parents[3] / "tests" / "fixtures" / "sqlite_catalog.sql"
+MIGRATION_PATH = Path(__file__).parents[1] / "catalog" / "migrations" / "0001_initial.sql"
+
+
+def test_sqlite_catalog_covers_the_production_catalog_tables() -> None:
+    production_tables = set(
+        re.findall(r"CREATE TABLE\s+(\w+)", MIGRATION_PATH.read_text(), flags=re.IGNORECASE)
+    ) - {"news_schema_migrations"}
+    fixture_tables = set(
+        re.findall(
+            r"CREATE TABLE(?: IF NOT EXISTS)?\s+(\w+)",
+            SCHEMA_PATH.read_text(),
+            flags=re.IGNORECASE,
+        )
+    )
+
+    assert fixture_tables == production_tables
 
 
 def test_youtube_clip_checkpoints_are_source_scoped_unique_and_immutable() -> None:
