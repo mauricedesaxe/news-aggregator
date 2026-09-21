@@ -4,12 +4,12 @@ from types import SimpleNamespace
 
 from pydantic import HttpUrl
 
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.groups import sentiment as sentiment_module
 from romanian_news.analysis.groups import summary as summary_module
 from romanian_news.analysis.groups.models import GroupAnalysisInput
 from romanian_news.analysis.groups.workflow import analyze_group
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup
 
 _A = "a" * 64
