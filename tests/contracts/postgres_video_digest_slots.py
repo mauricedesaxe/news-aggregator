@@ -241,7 +241,9 @@ def _publish_edition_and_slot(
         response_version,
         upload_evidence,
         publication_verification,
-    ) = _record_artifact_versions(connection, artifact_start, 11)
+        candidate_validation,
+        assembly_manifest,
+    ) = _record_artifact_versions(connection, artifact_start, 13)
     identity = _edition(report, policy)
     _insert_edition(connection, identity.edition_id, report, policy)
     video_digest_catalog.schedule_slot(slot, recorded_at=recorded_at)
@@ -300,9 +302,11 @@ def _publish_edition_and_slot(
     )
     connection.execute(
         "UPDATE video_digest_generation_requests SET stage = 'accepted', "
-        "accepted_clip_artifact_version_id = %s, cost_kind = 'measured', cost_usd = 2, "
+        "accepted_clip_artifact_version_id = %s, "
+        "validation_evidence_artifact_version_id = %s, "
+        "cost_kind = 'measured', cost_usd = 2, "
         "updated_at = CURRENT_TIMESTAMP WHERE request_id = %s",
-        (accepted_clip, request_id),
+        (accepted_clip, candidate_validation, request_id),
     )
     connection.execute(
         "UPDATE video_digest_stories SET stage = 'accepted', "
@@ -317,8 +321,9 @@ def _publish_edition_and_slot(
     )
     connection.execute(
         "UPDATE video_digest_editions SET assembled_video_artifact_version_id = %s, "
+        "assembly_manifest_artifact_version_id = %s, "
         "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
-        (video, identity.edition_id),
+        (video, assembly_manifest, identity.edition_id),
     )
     connection.execute(
         "UPDATE video_digest_editions SET subtitle_state = 'failed', "
