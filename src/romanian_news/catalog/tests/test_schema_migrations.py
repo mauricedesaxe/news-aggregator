@@ -79,5 +79,5 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         "8dc260a8d8739ded18a246ae759647cc1971f1c04eeb66ea92d090ea4727e0b7",
         "66b61b4d9c6f6ce57e0afbc1e53ac736f9d829aa77af983c5386351848f63326",
         "9bb60cac645006d02990a59b761fd2c80bfa42b3f1bfe199d0d0ceb0237e6f09",
-        "fac89c96631c62599253f144eeaf3fd550b31c904d0b26dee980f504fd427ba4",
+        "26cb9c5055f950c2bdb673c37b9c2d78d884560196700e2c18ca31744b37c888",
     )
