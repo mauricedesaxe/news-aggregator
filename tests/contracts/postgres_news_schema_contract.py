@@ -409,6 +409,42 @@ def test_planning_migration_grandfathers_existing_editions_without_authorizing_p
         video_digest_catalog.read_planning_attempts(EditionId(legacy_edition))
 
 
+def test_media_migration_rejects_legacy_outputs_without_evidence(
+    postgres_news_schema: str,
+) -> None:
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    migrations = news_schema.NEWS_CATALOG_MIGRATIONS
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        for migration in migrations[:6]:
+            connection.execute(cast(LiteralString, migration.path.read_text()), prepare=False)
+            connection.execute(
+                "INSERT INTO news_schema_migrations (version, name, sha256) VALUES (%s, %s, %s)",
+                (migration.version, migration.name, migration.sha256),
+            )
+
+        report, policy, assembled = _record_artifact_versions(connection, 920, 3)
+        legacy_edition = _sha256_id(923)
+        _insert_edition(connection, legacy_edition, report, policy)
+        connection.execute("SET session_replication_role = replica")
+        connection.execute(
+            "UPDATE video_digest_editions SET assembled_video_artifact_version_id = %s "
+            "WHERE edition_id = %s",
+            (assembled, legacy_edition),
+        )
+        connection.execute("SET session_replication_role = origin")
+
+        with pytest.raises(
+            psycopg.errors.IntegrityConstraintViolation,
+            match="requires no legacy accepted or assembled outputs",
+        ):
+            connection.execute(cast(LiteralString, migrations[6].path.read_text()), prepare=False)
+        assert connection.execute(
+            "SELECT count(*) FROM information_schema.columns "
+            "WHERE table_schema = current_schema() "
+            "AND column_name = 'validation_evidence_artifact_version_id'"
+        ).fetchone() == (0,)
+
+
 def test_news_schema_rejects_changed_migration_digest(postgres_news_schema: str) -> None:
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None

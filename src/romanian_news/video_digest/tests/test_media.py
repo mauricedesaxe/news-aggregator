@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from romanian_news.catalog.artifacts import CatalogArtifactReference, artifact_file, sha256
+from romanian_news.artifacts import ArtifactReference
+from romanian_news.catalog.artifacts import artifact_file, sha256
 from romanian_news.catalog.video_digest import AcceptedClipReference, GenerationAttemptReference
 from romanian_news.storage import ResearchObjectIntegrityError
 from romanian_news.video_digest import media
@@ -71,6 +72,34 @@ def _synthetic_clip(
     return path.read_bytes()
 
 
+def _probe_payload(*, frame_rate: str = "24/1", pixel_format: str = "yuv420p") -> dict[str, object]:
+    return {
+        "streams": [
+            {
+                "codec_type": "video",
+                "avg_frame_rate": frame_rate,
+                "duration": "1.0",
+                "start_time": "0",
+                "nb_read_frames": "24",
+                "codec_name": "h264",
+                "width": 1344,
+                "height": 768,
+                "pix_fmt": pixel_format,
+            },
+            {
+                "codec_type": "audio",
+                "duration": "1.0",
+                "start_time": "0",
+                "nb_read_frames": "32",
+                "codec_name": "aac",
+                "channels": 2,
+                "sample_rate": "32000",
+            },
+        ],
+        "format": {"duration": "1.0"},
+    }
+
+
 def _story(edition: EditionId, position: int) -> PlannedStory:
     subject = str(position + 1) * 64
     return PlannedStory(
@@ -116,7 +145,7 @@ def _attempt(story: PlannedStory, content: bytes, name: str) -> GenerationAttemp
         stage=GenerationStage.ACCEPTED,
         provider_receipt_id=f"fal-{name}",
         cost=UnknownAttemptCost(reason="test fixture"),
-        request_evidence=CatalogArtifactReference(
+        request_evidence=ArtifactReference(
             artifact_id=f"request-{name}",
             version_id=request_version,
             content_digest=sha256(f"request-content-{name}".encode()),
@@ -125,7 +154,7 @@ def _attempt(story: PlannedStory, content: bytes, name: str) -> GenerationAttemp
         receipt_evidence=None,
         response_evidence=None,
         accepted_clip=reference,
-        validation_evidence=CatalogArtifactReference(
+        validation_evidence=ArtifactReference(
             artifact_id=f"{request_id}:validation",
             version_id=sha256(f"validation-version-{name}".encode()),
             content_digest=sha256(f"validation-content-{name}".encode()),
@@ -189,6 +218,89 @@ def test_technical_validation_rejects_profile_duration_digest_and_size(tmp_path:
         )
 
 
+def test_technical_validation_rejects_indeterminate_frame_rate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "candidate.mp4"
+    content = b"candidate"
+    path.write_bytes(content)
+    monkeypatch.setattr(
+        media,
+        "_run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            (), 0, json.dumps(_probe_payload(frame_rate="0/0")), ""
+        ),
+    )
+
+    with pytest.raises(media.MediaValidationError) as captured:
+        media.validate_media_file(
+            path,
+            expected_digest=sha256(content),
+            expected_size=len(content),
+            requested_duration_ms=1000,
+        )
+
+    assert captured.value.code == "unusable_probe"
+
+
+def test_technical_validation_rejects_unsupported_pixel_format(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "candidate.mp4"
+    content = b"candidate"
+    path.write_bytes(content)
+    monkeypatch.setattr(
+        media,
+        "_run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            (), 0, json.dumps(_probe_payload(pixel_format="yuv444p")), ""
+        ),
+    )
+
+    with pytest.raises(media.MediaValidationError) as captured:
+        media.validate_media_file(
+            path,
+            expected_digest=sha256(content),
+            expected_size=len(content),
+            requested_duration_ms=1000,
+        )
+
+    assert captured.value.code == "unusable_probe"
+
+
+@pytest.mark.parametrize(
+    ("failing_program", "expected_code"),
+    (("ffprobe", "probe_failed"), ("ffmpeg", "full_decode_failed")),
+)
+def test_technical_validation_identifies_failed_media_stage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failing_program: str,
+    expected_code: str,
+) -> None:
+    path = tmp_path / "candidate.mp4"
+    content = b"candidate"
+    path.write_bytes(content)
+
+    def run(arguments, *, capture_output):
+        del capture_output
+        if arguments[0] == failing_program:
+            raise subprocess.CalledProcessError(1, arguments)
+        return subprocess.CompletedProcess((), 0, json.dumps(_probe_payload()), "")
+
+    monkeypatch.setattr(media, "_run", run)
+
+    with pytest.raises(media.MediaValidationError) as captured:
+        media.validate_media_file(
+            path,
+            expected_digest=sha256(content),
+            expected_size=len(content),
+            requested_duration_ms=1000,
+        )
+
+    assert captured.value.code == expected_code
+
+
 def test_candidate_bytes_publish_before_atomic_acceptance(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -198,7 +310,7 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
     story = _story(edition, 0)
     attempt = _attempt(story, content, "red")
     assert attempt.response_evidence is None
-    response = CatalogArtifactReference(
+    response = ArtifactReference(
         artifact_id=f"{attempt.request.request_id}:response",
         version_id=sha256(b"response-version"),
         content_digest=sha256(b"response"),
@@ -308,7 +420,9 @@ def test_commands_encode_fixed_media_policy(tmp_path: Path) -> None:
 
     assert "concat=n=2:v=1:a=1" in joined
     assert "fade=t=out:st=0.75:d=0.25" in joined
-    assert "-preset medium -crf 18 -pix_fmt yuv420p" in joined
+    assert "-preset medium -crf 18" in joined
+    assert "-pix_fmt yuv420p" in joined
+    assert "-threads 1" in joined
     assert "-b:a 192k -ac 2 -ar 32000" in joined
     assert "-map_metadata -1 -movflags +faststart" in joined
     assert "-nostdin" in command
@@ -437,6 +551,40 @@ def test_subtitle_failure_tries_three_strategies_and_keeps_clean_video(
     assert [attempt["strategy"] for attempt in evidence["attempts"]] == [
         strategy.value for strategy in media.SubtitleStrategy
     ]
+
+
+def test_subtitle_text_bounds_record_failure_and_keep_clean_video(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lease, screenplay, assembled = _subtitle_inputs()
+    screenplay = screenplay.model_copy(
+        update={
+            "stories": (
+                screenplay.stories[0].model_copy(update={"narration": "x" * 61}),
+                screenplay.stories[1],
+            )
+        }
+    )
+    provider = _SuccessfulTimingProvider()
+    published: dict[str, bytes] = {}
+    monkeypatch.setattr(
+        media,
+        "publish_immutable_r2_objects",
+        lambda values: published.update(values),
+    )
+    monkeypatch.setattr(
+        media,
+        "checkpoint_subtitles",
+        lambda _lease, outcome, **_kwargs: outcome,
+    )
+
+    outcome = media.produce_subtitles(lease, screenplay, assembled, provider)
+
+    assert isinstance(outcome, FailedSubtitles)
+    assert provider.strategies == []
+    assert assembled.video_file.content == b"clean-video"
+    evidence = json.loads(next(iter(published.values())))
+    assert [attempt["code"] for attempt in evidence["attempts"]] == ["ValueError"] * 3
 
 
 def _sample_rgb(path: Path, timestamp: str) -> str:

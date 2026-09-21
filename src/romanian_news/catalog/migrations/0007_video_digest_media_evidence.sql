@@ -1,3 +1,17 @@
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM video_digest_generation_requests WHERE stage = 'accepted'
+    ) OR EXISTS (
+        SELECT 1 FROM video_digest_editions
+        WHERE assembled_video_artifact_version_id IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'video digest media evidence migration requires no legacy accepted or assembled outputs'
+            USING ERRCODE = '23000';
+    END IF;
+END;
+$$;
+
 ALTER TABLE video_digest_generation_requests
     ADD COLUMN validation_evidence_artifact_version_id TEXT REFERENCES artifact_versions(id)
         CHECK (

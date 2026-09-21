@@ -390,11 +390,20 @@ class _GenerationPipeline:
             media_type="video/mp4",
         )
 
+    def validation_file(self, position: int) -> ArtifactFile:
+        request_id = self.request_id(position)
+        return self._file(
+            f"{request_id}:validation",
+            "video_digest_candidate_validation",
+            title=f"Candidate validation {position}",
+        )
+
     def accept(self, position: int, *, usd: str = "1.10") -> GenerationRequestState:
         return video_digest_catalog.checkpoint_generation_acceptance(
             self.lease,
             self.request_id(position),
             clip_file=self.clip_file(position),
+            validation_file=self.validation_file(position),
             cost=MeasuredAttemptCost(usd=Decimal(usd)),
             recorded_at=self.recorded_at,
         )
@@ -445,9 +454,19 @@ class _GenerationPipeline:
             media_type="video/mp4",
         )
 
+    def assembly_manifest_file(self) -> ArtifactFile:
+        return self._file(
+            f"{self.edition.edition_id}:assembly-manifest",
+            "video_digest_assembly_manifest",
+            title="Video digest assembly manifest",
+        )
+
     def assemble(self) -> AssembledVideo:
         return video_digest_catalog.checkpoint_assembled_video(
-            self.lease, video_file=self.assemble_file(), recorded_at=self.recorded_at
+            self.lease,
+            video_file=self.assemble_file(),
+            manifest_file=self.assembly_manifest_file(),
+            recorded_at=self.recorded_at,
         )
 
     def subtitles_file(self) -> ArtifactFile:

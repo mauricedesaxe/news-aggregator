@@ -72,7 +72,7 @@ class MediaProbe(NewsModel):
     width: Literal[1344]
     height: Literal[768]
     frame_rate: Literal["24/1"]
-    pixel_format: str
+    pixel_format: Literal["yuv420p"]
     audio_codec: Literal["aac"]
     channels: Literal[2]
     sample_rate_hz: Literal[32000]
@@ -126,6 +126,7 @@ class AssemblyManifest(NewsModel):
     video_codec: Literal["libx264"] = "libx264"
     video_preset: Literal["medium"] = "medium"
     video_crf: Literal[18] = 18
+    video_threads: Literal[1] = 1
     pixel_format: Literal["yuv420p"] = "yuv420p"
     audio_codec: Literal["aac"] = "aac"
     audio_bitrate: Literal["192k"] = "192k"
@@ -265,6 +266,8 @@ def assembly_command(
             "medium",
             "-crf",
             "18",
+            "-threads",
+            "1",
             "-pix_fmt",
             "yuv420p",
             "-r",
@@ -362,11 +365,14 @@ def validate_media_file(
         raise MediaValidationError(
             "stored_digest_mismatch", "Stored candidate digest does not match"
         )
-    probe_result = _run(ffprobe_command(path), capture_output=True)
+    try:
+        probe_result = _run(ffprobe_command(path), capture_output=True)
+    except subprocess.CalledProcessError as error:
+        raise MediaValidationError("probe_failed", "Candidate probe failed") from error
     try:
         payload = cast(dict[str, object], json.loads(probe_result.stdout))
         probe = _parse_probe(payload)
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+    except (KeyError, TypeError, ValueError, ZeroDivisionError, json.JSONDecodeError) as error:
         raise MediaValidationError("unusable_probe", "Candidate probe is unusable") from error
     if any(
         abs(duration_ms - requested_duration_ms) > 100
@@ -379,7 +385,10 @@ def validate_media_file(
         raise MediaValidationError(
             "duration_mismatch", "Candidate duration differs from the requested duration"
         )
-    _run(full_decode_command(path), capture_output=True)
+    try:
+        _run(full_decode_command(path), capture_output=True)
+    except subprocess.CalledProcessError as error:
+        raise MediaValidationError("full_decode_failed", "Candidate decode failed") from error
     return probe
 
 
@@ -570,55 +579,62 @@ def produce_subtitles(
 ) -> SubtitleOutcome:
     if lease.edition_id != screenplay.edition_id:
         raise ValueError("Subtitle screenplay does not match the claimed edition")
-    cue_texts = tuple(_subtitle_cue_texts(story.narration) for story in screenplay.stories)
-    requests = tuple(
-        SubtitleTimingRequest(
-            story_position=position,
-            cue_count=len(texts),
-            approved_text=screenplay.stories[position].narration,
-        )
-        for position, texts in enumerate(cue_texts)
-    )
     failures: list[SubtitleAttemptFailure] = []
-    with tempfile.TemporaryDirectory() as directory:
-        media_path = Path(directory) / "edition.mp4"
-        media_path.write_bytes(assembled.video_file.content)
-        for strategy in SubtitleStrategy:
-            try:
-                timings = provider.timings(strategy, requests, media_path)
-                webvtt = _webvtt(
-                    screenplay,
-                    cue_texts,
-                    timings,
-                    assembled.duration_ms,
-                )
-            except (OSError, RuntimeError, TypeError, ValueError) as error:
-                failures.append(
-                    SubtitleAttemptFailure(
-                        strategy=strategy,
-                        code=type(error).__name__,
+    try:
+        cue_texts = tuple(_subtitle_cue_texts(story.narration) for story in screenplay.stories)
+        requests = tuple(
+            SubtitleTimingRequest(
+                story_position=position,
+                cue_count=len(texts),
+                approved_text=screenplay.stories[position].narration,
+            )
+            for position, texts in enumerate(cue_texts)
+        )
+    except ValueError as error:
+        failures.extend(
+            SubtitleAttemptFailure(strategy=strategy, code=type(error).__name__)
+            for strategy in SubtitleStrategy
+        )
+    else:
+        with tempfile.TemporaryDirectory() as directory:
+            media_path = Path(directory) / "edition.mp4"
+            media_path.write_bytes(assembled.video_file.content)
+            for strategy in SubtitleStrategy:
+                try:
+                    timings = provider.timings(strategy, requests, media_path)
+                    webvtt = _webvtt(
+                        screenplay,
+                        cue_texts,
+                        timings,
+                        assembled.duration_ms,
                     )
+                except (OSError, RuntimeError, TypeError, ValueError) as error:
+                    failures.append(
+                        SubtitleAttemptFailure(
+                            strategy=strategy,
+                            code=type(error).__name__,
+                        )
+                    )
+                    continue
+                subtitle_file = artifact_file(
+                    artifact_id=f"{lease.edition_id}:subtitles",
+                    artifact_kind="video_digest_subtitles",
+                    title="Video digest subtitles",
+                    content=webvtt,
+                    r2_key=(
+                        f"news/video-digest/{lease.edition_id}/subtitles/"
+                        f"subtitles-{sha256(webvtt)}.vtt"
+                    ),
+                    media_type="text/vtt",
                 )
-                continue
-            subtitle_file = artifact_file(
-                artifact_id=f"{lease.edition_id}:subtitles",
-                artifact_kind="video_digest_subtitles",
-                title="Video digest subtitles",
-                content=webvtt,
-                r2_key=(
-                    f"news/video-digest/{lease.edition_id}/subtitles/"
-                    f"subtitles-{sha256(webvtt)}.vtt"
-                ),
-                media_type="text/vtt",
-            )
-            publish_immutable_r2_objects(((subtitle_file.r2_key, subtitle_file.content),))
-            outcome = AvailableSubtitles(artifact_version_id=subtitle_file.version_id)
-            return checkpoint_subtitles(
-                lease,
-                outcome,
-                artifact_file=subtitle_file,
-                recorded_at=_now(),
-            )
+                publish_immutable_r2_objects(((subtitle_file.r2_key, subtitle_file.content),))
+                outcome = AvailableSubtitles(artifact_version_id=subtitle_file.version_id)
+                return checkpoint_subtitles(
+                    lease,
+                    outcome,
+                    artifact_file=subtitle_file,
+                    recorded_at=_now(),
+                )
 
     evidence = SubtitleFailureEvidence(edition_id=lease.edition_id, attempts=tuple(failures))
     content = canonical_json(evidence.model_dump(mode="json"))

@@ -458,17 +458,37 @@ def _walk_publication_pipeline(
             r2_key=f"video-digest/{seed}/accepted-clip-{position}.mp4",
             media_type="video/mp4",
         )
+        validation = artifact_file(
+            artifact_id=f"{request.request_id}:validation",
+            artifact_kind="video_digest_candidate_validation",
+            title=f"Candidate validation {seed}.{position}",
+            content=f"candidate validation {seed} {position}".encode(),
+            r2_key=f"video-digest/{seed}/candidate-validation-{position}.json",
+            media_type="application/json",
+        )
         video_digest_catalog.checkpoint_generation_acceptance(
             lease,
             request.request_id,
             clip_file=clip,
+            validation_file=validation,
             cost=MeasuredAttemptCost(usd=Decimal("1.10")),
             recorded_at=recorded_at,
         )
 
     video_digest_catalog.checkpoint_assembly_ready(lease, recorded_at=recorded_at)
+    assembly_manifest = artifact_file(
+        artifact_id=f"{identity.edition_id}:assembly-manifest",
+        artifact_kind="video_digest_assembly_manifest",
+        title=f"Assembly manifest {seed}",
+        content=f"assembly manifest {seed}".encode(),
+        r2_key=f"video-digest/{seed}/assembly-manifest.json",
+        media_type="application/json",
+    )
     video_digest_catalog.checkpoint_assembled_video(
-        lease, video_file=assembled_file, recorded_at=recorded_at
+        lease,
+        video_file=assembled_file,
+        manifest_file=assembly_manifest,
+        recorded_at=recorded_at,
     )
     if subtitle_file is not None:
         video_digest_catalog.checkpoint_subtitles(
