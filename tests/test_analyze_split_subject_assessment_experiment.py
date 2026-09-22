@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from romanian_news.analysis.artifacts import ArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.evaluation import EvaluationCaseResult, SubjectAssessmentEvaluationResult
 from romanian_news.split_subject_assessment_experiment import (
     V11_MANIFEST_VERSION_ID,

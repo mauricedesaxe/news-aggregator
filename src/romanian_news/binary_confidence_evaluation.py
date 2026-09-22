@@ -6,13 +6,13 @@ from typing import Annotated, Literal, cast
 from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_benchmark import (
     analyze_binary_benchmark,
     exact_binomial_interval,
 )
 from romanian_news.analysis.binary_evaluation import BinaryRequest, binary_state_digest
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_benchmark import (
     BinaryBenchmarkCase,
     BinaryBenchmarkEvaluationResult,
@@ -147,40 +147,41 @@ def analyze_binary_confidence_benchmark(
         raise ValueError("Binary confidence analysis requires the exact four registered cases")
 
     report = cast(dict[str, object], analyze_binary_benchmark(CONFIDENCE_BENCHMARK, result))
-    trial_metrics: list[dict[str, object]] = []
-    for value in cast(list[object], report["trials"]):
-        trial = cast(Mapping[str, object], value)
-        target_id = str(trial["target_id"])
-        trial_ref = str(trial["trial_ref"])
-        rows = tuple(
-            row
-            for row in result.results
-            if row.target_id == target_id and row.trial_ref == trial_ref
-        )
-        controls = tuple(row for row in rows if case_by_id[row.case_id].control)
-        completed_controls = tuple(row for row in controls if row.status == "completed")
-        control_correct = sum(row.passed for row in completed_controls)
-        trial_metrics.append(
-            {
-                **trial,
-                "error_ids": [
-                    row.case_id for row in rows if row.status == "completed" and not row.passed
-                ],
-                "unavailable_ids": [row.case_id for row in rows if row.status == "failed"],
-                "control_preservation": (
-                    control_correct / len(completed_controls) if completed_controls else None
-                ),
-                "control_preservation_95_exact_interval": (
-                    exact_binomial_interval(control_correct, len(completed_controls))
-                    if completed_controls
-                    else None
-                ),
-            }
-        )
-    report["trials"] = trial_metrics
+    report["trials"] = [
+        _confidence_trial_metrics(cast(Mapping[str, object], value), result, case_by_id)
+        for value in cast(list[object], report["trials"])
+    ]
     report["analysis_mode"] = "descriptive_only"
     report["winner"] = None
     return report
+
+
+def _confidence_trial_metrics(
+    trial: Mapping[str, object],
+    result: BinaryBenchmarkEvaluationResult,
+    case_by_id: Mapping[str, BinaryBenchmarkCase],
+) -> dict[str, object]:
+    target_id = str(trial["target_id"])
+    trial_ref = str(trial["trial_ref"])
+    rows = tuple(
+        row for row in result.results if row.target_id == target_id and row.trial_ref == trial_ref
+    )
+    controls = tuple(row for row in rows if case_by_id[row.case_id].control)
+    completed_controls = tuple(row for row in controls if row.status == "completed")
+    control_correct = sum(row.passed for row in completed_controls)
+    return {
+        **trial,
+        "error_ids": [row.case_id for row in rows if row.status == "completed" and not row.passed],
+        "unavailable_ids": [row.case_id for row in rows if row.status == "failed"],
+        "control_preservation": (
+            control_correct / len(completed_controls) if completed_controls else None
+        ),
+        "control_preservation_95_exact_interval": (
+            exact_binomial_interval(control_correct, len(completed_controls))
+            if completed_controls
+            else None
+        ),
+    }
 
 
 def _load_confidence_case(

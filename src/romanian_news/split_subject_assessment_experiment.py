@@ -15,7 +15,6 @@ from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
 from romanian_news import NewsModel, Sha256
 from romanian_news import subject_assessments as production
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_evaluation import BinaryAttemptError
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.groups.models import GroupSummary
@@ -27,6 +26,7 @@ from romanian_news.analysis.jev_relevance import (
 from romanian_news.analysis.relevance import RelevanceDecision
 from romanian_news.analysis.relevance_v3 import ContextDecision, ImpactDecision
 from romanian_news.analysis.tracing import ProviderChatRequest
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_tier_evaluation import BinaryTierState, compose_binary_tier
 from romanian_news.catalog.evaluations import (
     NewsEvaluationReportLineage,

@@ -54,7 +54,13 @@ test = [
 required-version = ">=0.12.5"
 
 [tool.hatch.build]
-exclude = ["tests/**", "src/romanian_news/**/tests/**"]
+exclude = [
+    ".audit/**",
+    ".opencode/**",
+    "artifacts/**",
+    "tests/**",
+    "src/romanian_news/**/tests/**",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/romanian_news"]

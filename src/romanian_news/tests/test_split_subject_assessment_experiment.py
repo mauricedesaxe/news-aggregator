@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parents[3]))
 import pytest
 from openai.types.chat import ChatCompletion
 
-from romanian_news.analysis.artifacts import ArtifactReference
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_tier_evaluation import BinaryTierState, BinaryTierSubjectContext
 from romanian_news.catalog.evaluations import NewsEvaluationReportLineage
 from romanian_news.evaluation import (

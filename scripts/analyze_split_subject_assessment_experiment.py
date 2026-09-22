@@ -15,6 +15,9 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal, TypedDict, cast
 
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).parents[1]))
+
 from romanian_news.binary_benchmark import atomic_write
 from romanian_news.evaluation import SubjectAssessmentEvaluationResult
 from romanian_news.split_subject_assessment_experiment import (
@@ -23,10 +26,6 @@ from romanian_news.split_subject_assessment_experiment import (
     CompletedArm,
     ExperimentAttempt,
 )
-
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).parents[1]))
-
 from scripts.run_split_subject_assessment_experiment import (
     ARM_ORDER,
     SPEND_CEILING_USD,

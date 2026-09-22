@@ -5,12 +5,12 @@ from datetime import date
 from pydantic import model_validator
 
 from romanian_news import NewsModel
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_evaluation import (
     BinaryRequest,
     binary_state_digest,
 )
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.derived_binary_protocol import GROUPING_BINARY_QUESTION
 
 GROUPING_ARTICLE_BODY_CHARACTERS = 12_000

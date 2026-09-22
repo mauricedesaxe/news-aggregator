@@ -5,8 +5,8 @@ from decimal import Decimal
 
 import pytest
 
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_evaluation import BinaryProbabilityObservation, BinaryRequest
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_benchmark import (
     TYPESAFE_JEV_TARGET,
     BinaryEvaluator,

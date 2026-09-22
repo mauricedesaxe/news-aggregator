@@ -7,8 +7,8 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from romanian_news import NewsModel
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_evaluation import BinaryRequest, binary_state_digest
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_benchmark import (
     BinaryBenchmarkCase,
     BinaryJudgmentCase,

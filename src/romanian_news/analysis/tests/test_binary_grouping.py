@@ -5,13 +5,12 @@ from romanian_news.evaluation import GroupingEvaluationCase
 from romanian_news.tests.evaluation_factories import synthetic_dataset
 
 
-def test_grouping_request_is_symmetric_and_contains_only_anchor_articles() -> None:
+def _binary_grouping_case() -> BinaryGroupingCase:
     case = next(
         item for item in synthetic_dataset().cases if isinstance(item, GroupingEvaluationCase)
     )
-
     articles = {item.article.version_id: item for item in case.articles}
-    binary_case = BinaryGroupingCase(
+    return BinaryGroupingCase(
         case_id=case.case_id,
         control=case.control,
         day=case.day,
@@ -22,6 +21,9 @@ def test_grouping_request_is_symmetric_and_contains_only_anchor_articles() -> No
         expected_same_group=case.expected_same_group,
     )
 
+
+def test_grouping_request_is_symmetric_and_contains_only_anchor_articles() -> None:
+    binary_case = _binary_grouping_case()
     request = build_grouping_binary_request(binary_case)
     reversed_request = build_grouping_binary_request(
         binary_case.model_copy(

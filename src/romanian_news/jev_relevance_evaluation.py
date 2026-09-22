@@ -6,7 +6,6 @@ from typing import Annotated
 from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_evaluation import (
     RELEVANCE_BINARY_QUESTION,
     build_relevance_binary_request,
@@ -18,6 +17,7 @@ from romanian_news.analysis.jev_relevance import (
 )
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.evaluations import read_news_evaluation_artifact_references
 from romanian_news.evaluation import NewsEvaluationManifest, NewsEvaluationPin
 from romanian_news.evaluation_projection import FreshEvaluationPlan
