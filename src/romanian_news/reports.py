@@ -712,6 +712,27 @@ def _bucharest_time(value: datetime) -> datetime:
     return value.astimezone(BUCHAREST)
 
 
+def _summary_request_id(group) -> Sha256:
+    from romanian_news.analysis.groups.summary import summary_request_id
+
+    return summary_request_id(group)
+
+
+def _sentiment_request_id(group) -> Sha256:
+    from romanian_news.analysis.groups.sentiment import sentiment_request_id
+
+    return sentiment_request_id(group)
+
+
+def _read_cluster_set(day: date) -> tuple[ArtifactReference, DailyClusterSet]:
+    from romanian_news.catalog.artifacts import current_artifact_reference
+
+    reference = current_artifact_reference(f"news:clusters:{day.isoformat()}", "news_clusters")
+    if reference is None:
+        raise ReportInputsUnavailable(f"No current cluster set exists for {day.isoformat()}")
+    return reference, _load_cluster_set(reference)
+
+
 def _read_daily_report_reference(day: date) -> ArtifactReference:
     from romanian_news.catalog.artifacts import current_artifact_reference
 
@@ -788,6 +809,16 @@ def _load_group_sentiment(
 def _read_daily_report(day: date) -> tuple[ArtifactReference, DailyReportDocument]:
     reference = _read_daily_report_reference(day)
     return reference, _load_daily_report(reference)
+
+
+def _read_group_summary(request_id: Sha256) -> tuple[ArtifactReference, GroupSummary]:
+    reference = _read_analysis_artifact_reference(f"news:summary:{request_id}", "news_summary")
+    return reference, _load_group_summary(reference)
+
+
+def _read_group_sentiment(request_id: Sha256) -> tuple[ArtifactReference, GroupSentiment]:
+    reference = _read_analysis_artifact_reference(f"news:sentiment:{request_id}", "news_sentiment")
+    return reference, _load_group_sentiment(reference)
 
 
 def _read_analysis_artifact_reference(artifact_id: str, kind: str) -> ArtifactReference:
