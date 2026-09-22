@@ -20,6 +20,40 @@ def test_immutable_r2_objects_publish_concurrently(monkeypatch) -> None:
     assert publication.reused_objects == 0
 
 
+def test_immutable_r2_objects_reuse_identical_existing_content(monkeypatch) -> None:
+    import hashlib
+
+    content = b"already stored"
+    uploads: list[str] = []
+
+    class ReusingClient:
+        def __init__(self) -> None:
+            self.store: dict[str, bytes] = {}
+
+        def head_object(self, **kwargs: object) -> dict[str, object]:
+            if kwargs["Key"] == "stored":
+                return {"Metadata": {"sha256": hashlib.sha256(content).hexdigest()}}
+            raise ClientError({"Error": {"Code": "404"}}, "HeadObject")
+
+        def put_object(self, **kwargs: object) -> dict[str, object]:
+            uploads.append(kwargs["Key"])
+            self.store[kwargs["Key"]] = kwargs["Body"]
+            return {}
+
+        def get_object(self, **kwargs: object) -> dict[str, object]:
+            return {"Body": io.BytesIO(self.store[kwargs["Key"]])}
+
+    monkeypatch.setattr(research_storage, "_r2_client", ReusingClient())
+
+    publication = research_storage.publish_immutable_r2_objects(
+        (("stored", content), ("fresh", b"new bytes"))
+    )
+
+    assert publication.uploaded_objects == 1
+    assert publication.reused_objects == 1
+    assert uploads == ["fresh"]
+
+
 def test_immutable_r2_objects_preserve_integrity_failures(monkeypatch) -> None:
     class ConflictingClient:
         def head_object(self, **_kwargs) -> dict[str, object]:
