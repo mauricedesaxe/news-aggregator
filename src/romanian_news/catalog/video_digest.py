@@ -358,9 +358,7 @@ def _catalog_reference(row: Mapping[str, Any], prefix: str) -> ArtifactReference
     )
 
 
-def _optional_catalog_reference(
-    row: Mapping[str, Any], prefix: str
-) -> ArtifactReference | None:
+def _optional_catalog_reference(row: Mapping[str, Any], prefix: str) -> ArtifactReference | None:
     return None if row[f"{prefix}_version_id"] is None else _catalog_reference(row, prefix)
 
 

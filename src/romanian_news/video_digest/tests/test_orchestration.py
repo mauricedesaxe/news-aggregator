@@ -5,6 +5,7 @@ from typing import cast
 
 import pytest
 
+from romanian_news.video_digest.errors import VideoDigestCheckpointConflictError
 from romanian_news.video_digest.models import (
     BusySlot,
     ClaimedSlot,
@@ -473,6 +474,37 @@ def test_action_bound_remains_nonterminal_with_bounded_retry_timing() -> None:
         retry_after_seconds=300,
     )
     assert alert == NoAlert()
+
+
+def test_active_state_without_a_next_action_raises_a_checkpoint_conflict() -> None:
+    attempts = tuple(
+        AssemblyAttemptReference(
+            attempt_index=index,
+            disposition="failed",
+            evidence=VIDEO.model_copy(
+                update={
+                    "artifact_id": f"assembly-failure-{index}",
+                    "version_id": str(index + 5) * 64,
+                }
+            ),
+        )
+        for index in range(3)
+    )
+    catalog = _Catalog(AssemblyResume(slot=SLOT, lease=LEASE, attempts=attempts))
+    request = VideoDigestRunRequest(
+        slot=SLOT, owner_token="owner", source=SourceReady(edition=EDITION)
+    )
+
+    with pytest.raises(
+        VideoDigestCheckpointConflictError,
+        match="Active video digest slot has no durable next action",
+    ):
+        run_video_digest(
+            request,
+            cast(CatalogPort, catalog),
+            _ports(catalog),
+            now=lambda: NOW + timedelta(minutes=1),
+        )
 
 
 def test_publication_port_receives_the_exact_typed_handoff() -> None:

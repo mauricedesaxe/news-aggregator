@@ -134,6 +134,29 @@ def test_action_waiting_requests_a_dagster_retry(monkeypatch: pytest.MonkeyPatch
     assert raised.value.seconds_to_wait == 60
 
 
+@pytest.mark.parametrize("tags", [{}, {"news/video_digest_slot_id": "not-a-slot-id"}])
+def test_missing_or_malformed_slot_tag_fails_without_retry(tags: dict[str, str]) -> None:
+    class Run:
+        def __init__(self, run_tags: dict[str, str]) -> None:
+            self.tags = run_tags
+
+    class Context:
+        run = Run(tags)
+        run_id = "run-1"
+
+    compute_fn = video_digest.orchestrate_video_digest.compute_fn
+    decorated_fn = getattr(compute_fn, "decorated_fn", None)
+    assert callable(decorated_fn)
+
+    with pytest.raises(dg.Failure) as raised:
+        decorated_fn(Context())
+
+    assert raised.value.allow_retries is False
+    assert raised.value.description == (
+        "Video digest run requires a valid news/video_digest_slot_id tag"
+    )
+
+
 def test_terminal_failure_fails_the_dagster_step_without_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
