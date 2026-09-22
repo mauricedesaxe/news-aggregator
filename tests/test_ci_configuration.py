@@ -1,6 +1,8 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
+DAGSTER_CLOUD_ACTION_SHA = "a5c409dd1635efc77ca2a3925288864f1b35f73e"
 
 
 def test_ci_covers_the_standalone_project() -> None:
@@ -34,3 +36,11 @@ def test_ci_pull_requests_receive_no_production_secrets() -> None:
     assert "secrets." not in workflow
     assert "DAGSTER_CLOUD_API_TOKEN" not in workflow
     assert "CLOUDFLARE_API_TOKEN" not in workflow
+
+
+def test_dagster_cloud_actions_pin_the_release_commit() -> None:
+    workflow = (ROOT / ".github/workflows/dagster-plus-deploy.yml").read_text()
+    revisions = re.findall(r"dagster-io/dagster-cloud-action/[^@]+@([0-9a-f]{40})", workflow)
+
+    assert revisions
+    assert set(revisions) == {DAGSTER_CLOUD_ACTION_SHA}

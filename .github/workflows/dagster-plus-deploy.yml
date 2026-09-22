@@ -58,7 +58,7 @@ jobs:
     steps:
       - name: Check deployment event
         id: prerun
-        uses: dagster-io/dagster-cloud-action/actions/utils/prerun@e55c9cff97f4f6061da76841327167d257a6248c
+        uses: dagster-io/dagster-cloud-action/actions/utils/prerun@a5c409dd1635efc77ca2a3925288864f1b35f73e
         env:
           DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
           DAGSTER_CLOUD_DEPLOYMENT: ${{ secrets.DAGSTER_CLOUD_DEPLOYMENT }}
@@ -74,7 +74,7 @@ jobs:
 
       - name: Validate deployment configuration
         if: steps.prerun.outputs.result != 'skip'
-        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@e55c9cff97f4f6061da76841327167d257a6248c
+        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@a5c409dd1635efc77ca2a3925288864f1b35f73e
         env:
           DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
           DAGSTER_CLOUD_ENV: ${{ secrets.DAGSTER_CLOUD_ENV }}
@@ -85,7 +85,7 @@ jobs:
 
       - name: Initialize build session
         if: steps.prerun.outputs.result != 'skip'
-        uses: dagster-io/dagster-cloud-action/actions/utils/ci-init@e55c9cff97f4f6061da76841327167d257a6248c
+        uses: dagster-io/dagster-cloud-action/actions/utils/ci-init@a5c409dd1635efc77ca2a3925288864f1b35f73e
         env:
           DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
           DAGSTER_CLOUD_ENV: ${{ secrets.DAGSTER_CLOUD_ENV }}
@@ -110,7 +110,7 @@ jobs:
 
       - name: Build Python executable
         if: steps.prerun.outputs.result == 'pex-deploy'
-        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@e55c9cff97f4f6061da76841327167d257a6248c
+        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@a5c409dd1635efc77ca2a3925288864f1b35f73e
         env:
           DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
           DAGSTER_CLOUD_ENV: ${{ secrets.DAGSTER_CLOUD_ENV }}
@@ -122,7 +122,7 @@ jobs:
 
       - name: Deploy code location
         if: steps.prerun.outputs.result != 'skip'
-        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@e55c9cff97f4f6061da76841327167d257a6248c
+        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@a5c409dd1635efc77ca2a3925288864f1b35f73e
         env:
           DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
           DAGSTER_CLOUD_ENV: ${{ secrets.DAGSTER_CLOUD_ENV }}
@@ -133,7 +133,7 @@ jobs:
 
       - name: Write deployment summary
         if: steps.prerun.outputs.result != 'skip'
-        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@e55c9cff97f4f6061da76841327167d257a6248c
+        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@a5c409dd1635efc77ca2a3925288864f1b35f73e
         env:
           DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
           DAGSTER_CLOUD_ENV: ${{ secrets.DAGSTER_CLOUD_ENV }}
