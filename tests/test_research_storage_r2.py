@@ -1,5 +1,6 @@
 import io
 import threading
+from typing import Any
 
 import pytest
 from botocore.exceptions import ClientError
@@ -30,18 +31,18 @@ def test_immutable_r2_objects_reuse_identical_existing_content(monkeypatch) -> N
         def __init__(self) -> None:
             self.store: dict[str, bytes] = {}
 
-        def head_object(self, **kwargs: object) -> dict[str, object]:
+        def head_object(self, **kwargs: Any) -> dict[str, object]:
             if kwargs["Key"] == "stored":
                 return {"Metadata": {"sha256": hashlib.sha256(content).hexdigest()}}
             raise ClientError({"Error": {"Code": "404"}}, "HeadObject")
 
-        def put_object(self, **kwargs: object) -> dict[str, object]:
-            uploads.append(kwargs["Key"])
-            self.store[kwargs["Key"]] = kwargs["Body"]
+        def put_object(self, **kwargs: Any) -> dict[str, object]:
+            uploads.append(str(kwargs["Key"]))
+            self.store[str(kwargs["Key"])] = kwargs["Body"]
             return {}
 
-        def get_object(self, **kwargs: object) -> dict[str, object]:
-            return {"Body": io.BytesIO(self.store[kwargs["Key"]])}
+        def get_object(self, **kwargs: Any) -> dict[str, object]:
+            return {"Body": io.BytesIO(self.store[str(kwargs["Key"])])}
 
     client = ReusingClient()
     monkeypatch.setattr(research_storage, "_r2_client", lambda: client)

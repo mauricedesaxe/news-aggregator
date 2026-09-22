@@ -84,8 +84,8 @@ jobs:
           python -m pip install uv==0.12.5
           uv sync --frozen --group test
 
-      - name: Run schema contract
-        run: uv run --no-sync pytest tests/contracts/postgres_*.py
+      - name: Run PostgreSQL-backed tests
+        run: uv run --no-sync pytest tests/contracts/postgres_*.py tests/worker/postgres_operations_contract.py tests/reader/postgres_reader_app_e2e.py
 
   reader-image:
     name: Build and start reader image
