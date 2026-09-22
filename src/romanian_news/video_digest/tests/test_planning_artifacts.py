@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
@@ -79,7 +79,7 @@ def _recorded(
     model: str,
     content: str,
     *,
-    status: str = "accepted",
+    status: Literal["accepted", "rejected"] = "accepted",
     error: str | None = None,
 ) -> RecordedProviderResponse:
     payload: dict[str, Any] = {

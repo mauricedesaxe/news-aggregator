@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from typing import Any, LiteralString, cast
 from uuid import uuid4
 
@@ -58,19 +59,27 @@ class PostgresCatalog:
 def postgres_catalog_fixture(schema_prefix: str) -> Any:
     @pytest.fixture
     def postgres_catalog(monkeypatch: pytest.MonkeyPatch) -> Iterator[PostgresCatalog]:
-        if TEST_POSTGRES_DSN is None:
-            raise RuntimeError("NEWS_TEST_POSTGRES_DSN is required")
-        schema = f"{schema_prefix}_{uuid4().hex}"
-        with psycopg.connect(TEST_POSTGRES_DSN, autocommit=True) as connection:
-            connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
-        fixture_dsn = make_conninfo(TEST_POSTGRES_DSN, options=f"-csearch_path={schema}")
-        monkeypatch.setattr(news_schema, "NEWS_POSTGRES_DSN", fixture_dsn)
-        monkeypatch.setattr(catalog_transport, "NEWS_POSTGRES_DSN", fixture_dsn)
-        try:
+        with isolated_postgres_schema(monkeypatch, schema_prefix) as (_, fixture_dsn):
             ensure_news_catalog_schema()
             yield PostgresCatalog(fixture_dsn)
-        finally:
-            with psycopg.connect(TEST_POSTGRES_DSN, autocommit=True) as connection:
-                connection.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
 
     return postgres_catalog
+
+
+@contextmanager
+def isolated_postgres_schema(
+    monkeypatch: pytest.MonkeyPatch, schema_prefix: str
+) -> Iterator[tuple[str, str]]:
+    if TEST_POSTGRES_DSN is None:
+        raise RuntimeError("NEWS_TEST_POSTGRES_DSN is required")
+    schema = f"{schema_prefix}_{uuid4().hex}"
+    with psycopg.connect(TEST_POSTGRES_DSN, autocommit=True) as connection:
+        connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+    fixture_dsn = make_conninfo(TEST_POSTGRES_DSN, options=f"-csearch_path={schema}")
+    monkeypatch.setattr(news_schema, "NEWS_POSTGRES_DSN", fixture_dsn)
+    monkeypatch.setattr(catalog_transport, "NEWS_POSTGRES_DSN", fixture_dsn)
+    try:
+        yield schema, fixture_dsn
+    finally:
+        with psycopg.connect(TEST_POSTGRES_DSN, autocommit=True) as connection:
+            connection.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
