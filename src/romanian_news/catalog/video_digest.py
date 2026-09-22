@@ -124,6 +124,20 @@ _ACTIVE_STAGES = frozenset(
 _Result = TypeVar("_Result")
 
 
+class PublishedPlanArtifact(NewsModel):
+    edition_id: Sha256
+    daily_report_version_id: Sha256
+    policy_bundle_version_id: Sha256
+    artifact_id: str
+    artifact_kind: str
+    title: str
+    version_id: Sha256
+    version_digest: Sha256
+    file_digest: Sha256
+    r2_key: str
+    media_type: str
+
+
 class _StartedPublicationAttempt(NewsModel):
     publication_id: Sha256
     attempt_index: Annotated[int, Field(ge=0, le=4)]
@@ -3037,6 +3051,34 @@ def read_published_edition(
         **summary.model_dump(),
         stories=tuple(PublishedStory.model_validate(row) for row in story_rows),
     )
+
+
+def read_published_plan_artifact(edition_id: EditionId) -> PublishedPlanArtifact | None:
+    rows = catalog_query(
+        """
+        SELECT edition.edition_id, edition.daily_report_version_id,
+               edition.policy_bundle_version_id, artifact.id AS artifact_id,
+               artifact.kind AS artifact_kind, artifact.title,
+               version.id AS version_id, version.content_digest AS version_digest,
+               file.content_digest AS file_digest, file.r2_key, file.media_type
+        FROM video_digest_editions AS edition
+        JOIN video_digest_slots AS slot ON slot.edition_id = edition.edition_id
+        JOIN video_digest_publication_intents AS publication
+          ON publication.edition_id = edition.edition_id
+        JOIN artifact_versions AS version
+          ON version.id = edition.plan_artifact_version_id
+        JOIN artifacts AS artifact ON artifact.id = version.artifact_id
+        JOIN artifact_files AS file ON file.artifact_version_id = version.id
+        WHERE edition.edition_id = %s
+          AND slot.stage = 'published' AND publication.stage = 'published'
+        """,
+        [edition_id],
+    )
+    if not rows:
+        return None
+    if len(rows) != 1:
+        raise ResearchCatalogError("Published video digest has an ambiguous plan artifact")
+    return PublishedPlanArtifact.model_validate(rows[0], strict=True)
 
 
 def _lock_edition_outputs(
