@@ -66,6 +66,19 @@ from romanian_news.research_triggers import (
     SubjectResearchFlag,
 )
 from romanian_news.storage import ResearchObjectUnavailable
+from romanian_news.video_digest.models import EditionId, SlotName, StoryId
+from romanian_news.video_digest.reader import (
+    ReaderEditionOption,
+    ReaderSubtitleAvailable,
+    ReaderSubtitleFailed,
+    ReaderVideoDigest,
+    ReaderVideoEdition,
+    ReaderVideoStory,
+)
+from romanian_news.video_digest_feedback import (
+    VideoDigestFeedbackCommand,
+    VideoDigestFeedbackEvent,
+)
 
 REPORT_VERSION = "a" * 64
 OLDER_REPORT_VERSION = "b" * 64
@@ -76,6 +89,9 @@ GROUP_ID = "c" * 64
 ARTICLE_VERSION = "d" * 64
 THEME_ID = "f" * 64
 FEEDBACK_ID = "00000000-0000-4000-8000-000000000001"
+VIDEO_EDITION = "2" * 64
+OLDER_VIDEO_EDITION = "3" * 64
+VIDEO_STORY = "4" * 64
 TEST_SESSION_SECRET = "s" * 32
 
 
@@ -319,6 +335,7 @@ def test_environment_settings_use_cookie_secure_configuration(monkeypatch) -> No
     )
     monkeypatch.setattr("romanian_news.reader.app.COOKIE_SECURE", False)
     monkeypatch.setattr("romanian_news.reader.app.TRUST_PROXY_HEADERS", False)
+    monkeypatch.setattr("romanian_news.reader.app.NEWS_PUBLIC_MEDIA_BASE_URL", "")
     assert ReaderSettings.from_environment().cookie_secure is False
     assert ReaderSettings.from_environment().trust_proxy_headers is False
 
@@ -2303,3 +2320,278 @@ def test_current_day_get_uses_the_loaded_report_body_once() -> None:
     assert "Subject 01" in response.text
     assert archive_reads == []
     assert 'aria-live="polite"' in response.text
+
+
+def test_anonymous_video_selection_redirect_preserves_the_full_query() -> None:
+    app, _commands = _video_app(_reader_video_digest())
+
+    with TestClient(app) as client:
+        response = client.get(
+            f"/reports/{REPORT_VERSION}?edition={VIDEO_EDITION}",
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == (
+        f"/login?next=%2Freports%2F{REPORT_VERSION}%3Fedition%3D{VIDEO_EDITION}"
+    )
+
+
+def test_report_renders_native_video_captions_transcript_fallback_and_selector() -> None:
+    app, _commands = _video_app(_reader_video_digest())
+
+    with TestClient(app) as client:
+        _login(app, client)
+        response = client.get(f"/reports/{REPORT_VERSION}?edition={VIDEO_EDITION}")
+
+    assert response.status_code == 200
+    assert (
+        '<video src="https://media.example.com/video/immutable.mp4" controls '
+        'preload="metadata" crossorigin="anonymous">'
+    ) in response.text
+    assert (
+        '<track src="https://media.example.com/video/immutable.vtt" kind="captions" '
+        'srclang="ro" label="Romanian" default>'
+    ) in response.text
+    assert response.text.count("Open video directly") == 1
+    assert 'aria-label="Video transcript"' in response.text
+    assert "The transcript remains visible without JavaScript." in response.text
+    assert f'href="/reports/{REPORT_VERSION}?edition={VIDEO_EDITION}"' in response.text
+    assert f'href="/reports/{REPORT_VERSION}?edition={OLDER_VIDEO_EDITION}"' in response.text
+    assert f'href="/reports/{OLDER_REPORT_VERSION}"' in response.text
+    assert 'href="/today"' in response.text
+    assert "news/video-digest/private-plan.json" not in response.text
+
+
+def test_today_video_selector_retains_the_current_report_url() -> None:
+    app, _commands = _video_app(_reader_video_digest())
+
+    with TestClient(app) as client:
+        _login(app, client)
+        response = client.get(f"/today?edition={VIDEO_EDITION}")
+
+    assert f'href="/today?edition={VIDEO_EDITION}"' in response.text
+    assert f'href="/today?edition={OLDER_VIDEO_EDITION}"' in response.text
+
+
+def test_failed_subtitles_render_status_without_track_or_crossorigin() -> None:
+    digest = _reader_video_digest(subtitle_failed=True)
+    app, _commands = _video_app(digest)
+
+    with TestClient(app) as client:
+        _login(app, client)
+        response = client.get(f"/reports/{REPORT_VERSION}")
+
+    assert "Captions are unavailable for this edition." in response.text
+    assert "<track" not in response.text
+    assert "crossorigin" not in response.text
+
+
+def test_known_video_integrity_failure_degrades_to_the_written_report() -> None:
+    app, _commands = _video_app(
+        _reader_video_digest(),
+        video_error=ResearchObjectUnavailable("private plan unavailable"),
+    )
+
+    with TestClient(app) as client:
+        _login(app, client)
+        response = client.get(f"/reports/{REPORT_VERSION}")
+
+    assert response.status_code == 200
+    assert "Subject 01" in response.text
+    assert "Video digest" not in response.text
+
+
+def test_video_media_origin_adds_one_exact_csp_directive() -> None:
+    app, _commands = _video_app(_reader_video_digest())
+
+    with TestClient(app) as client:
+        response = client.get("/healthz")
+
+    directives = response.headers["content-security-policy"].split("; ")
+    assert directives.count("media-src 'self' https://media.example.com") == 1
+    assert all(not directive.startswith("media-src ") for directive in directives[:-1])
+
+
+def test_written_only_reader_omits_media_src_from_csp(harness: Harness) -> None:
+    with TestClient(harness.app) as client:
+        response = client.get("/healthz")
+
+    assert "media-src" not in response.headers["content-security-policy"]
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://media.example.com",
+        "https://user@media.example.com",
+        "https://media.example.com/video",
+        "https://media.example.com?x=1",
+        "https://media.example.com#fragment",
+        "https://media.example.com; media-src *",
+    ],
+)
+def test_reader_rejects_non_origin_or_csp_injecting_media_configuration(origin: str) -> None:
+    with pytest.raises(ValueError):
+        ReaderSettings(
+            app_password="correct horse",
+            session_secret=TEST_SESSION_SECRET,
+            public_media_origin=origin,
+        )
+
+
+def test_video_feedback_form_fields_csrf_and_submit_follow_progressive_pattern() -> None:
+    app, commands = _video_app(_reader_video_digest())
+    with TestClient(app) as client:
+        csrf = _login(app, client)
+        page = client.get(f"/reports/{REPORT_VERSION}?edition={VIDEO_EDITION}")
+        edition_control = page.text.split('id="video-feedback-edition"', 1)[1].split("</div>", 1)[0]
+        rejected = client.post(
+            "/video-feedback",
+            data={
+                "feedback_id": FEEDBACK_ID,
+                "edition_id": VIDEO_EDITION,
+                "rating": "positive",
+                "note": "",
+                "csrf_token": "wrong",
+            },
+        )
+        submitted = client.post(
+            f"/video-feedback?return_to=%2Freports%2F{REPORT_VERSION}%3Fedition%3D{VIDEO_EDITION}",
+            data={
+                "feedback_id": FEEDBACK_ID,
+                "edition_id": VIDEO_EDITION,
+                "story_id": VIDEO_STORY,
+                "rating": "",
+                "note": "  Clear narration.  ",
+                "csrf_token": csrf,
+            },
+            follow_redirects=False,
+        )
+
+    assert set(re.findall(r'name="([^"]+)"', edition_control)) == {
+        "feedback_id",
+        "edition_id",
+        "csrf_token",
+        "note",
+        "rating",
+    }
+    assert 'hx-post="/video-feedback?return_to=' in page.text
+    assert rejected.status_code == 403
+    assert submitted.status_code == 303
+    assert submitted.headers["location"] == (f"/reports/{REPORT_VERSION}?edition={VIDEO_EDITION}")
+    assert len(commands) == 1
+    assert commands[0].edition_id == VIDEO_EDITION
+    assert commands[0].story_id == VIDEO_STORY
+    assert commands[0].rating is None
+    assert commands[0].note == "Clear narration."
+
+
+def test_htmx_video_feedback_swaps_only_its_story_control() -> None:
+    app, _commands = _video_app(_reader_video_digest())
+    with TestClient(app) as client:
+        csrf = _login(app, client)
+        response = client.post(
+            "/video-feedback?return_to=%2Ftoday",
+            data={
+                "feedback_id": FEEDBACK_ID,
+                "edition_id": VIDEO_EDITION,
+                "story_id": VIDEO_STORY,
+                "rating": "negative",
+                "note": "Too fast.",
+                "csrf_token": csrf,
+            },
+            headers={"HX-Request": "true"},
+        )
+
+    assert response.status_code == 200
+    assert response.text.startswith(f'<div id="video-feedback-{VIDEO_STORY}"')
+    assert "Feedback saved: Negative" in response.text
+    assert "<html" not in response.text
+
+
+def _reader_video_digest(*, subtitle_failed: bool = False) -> ReaderVideoDigest:
+    published_at = datetime(2026, 8, 31, 18, tzinfo=UTC)
+    subtitle = (
+        ReaderSubtitleFailed()
+        if subtitle_failed
+        else ReaderSubtitleAvailable.model_validate(
+            {"url": "https://media.example.com/video/immutable.vtt"}
+        )
+    )
+    selected = ReaderVideoEdition.model_validate(
+        {
+            "edition_id": EditionId(VIDEO_EDITION),
+            "slot_name": SlotName.EVENING,
+            "published_at": published_at,
+            "video_url": "https://media.example.com/video/immutable.mp4",
+            "subtitle": subtitle,
+            "stories": (
+                ReaderVideoStory(
+                    story_id=StoryId(VIDEO_STORY),
+                    position=0,
+                    title="Budget update",
+                    narration="The transcript remains visible without JavaScript.",
+                    requested_duration_ms=15_000,
+                ),
+            ),
+        }
+    )
+    return ReaderVideoDigest(
+        editions=(
+            ReaderEditionOption(
+                edition_id=selected.edition_id,
+                slot_name=selected.slot_name,
+                published_at=selected.published_at,
+            ),
+            ReaderEditionOption(
+                edition_id=EditionId(OLDER_VIDEO_EDITION),
+                slot_name=SlotName.MIDDAY,
+                published_at=published_at - timedelta(hours=6),
+            ),
+        ),
+        selected=selected,
+    )
+
+
+def _video_app(
+    digest: ReaderVideoDigest,
+    *,
+    video_error: Exception | None = None,
+) -> tuple[FastHTML, list[VideoDigestFeedbackCommand]]:
+    commands: list[VideoDigestFeedbackCommand] = []
+
+    def read_video(*_args: object) -> ReaderVideoDigest:
+        if video_error is not None:
+            raise video_error
+        return digest
+
+    def submit(command: VideoDigestFeedbackCommand) -> VideoDigestFeedbackEvent:
+        commands.append(command)
+        return VideoDigestFeedbackEvent(
+            **command.model_dump(),
+            created_at=datetime(2026, 8, 31, 18, 30, tzinfo=UTC),
+        )
+
+    domain = ReaderDomain(
+        list_reports=lambda _limit: _report_summaries(),
+        resolve_current_report_version=lambda version: version,
+        read_report=lambda _version: _daily_report(),
+        read_current_report=_live_report,
+        read_feedback=lambda _version: (),
+        submit_feedback=lambda command: _event(command),
+        read_research_flags=lambda _version: None,
+        read_video_digest=read_video,
+        submit_video_feedback=submit,
+    )
+    return (
+        create_app(
+            ReaderSettings(
+                app_password="correct horse",
+                session_secret=TEST_SESSION_SECRET,
+                public_media_origin="https://media.example.com",
+            ),
+            domain,
+        ),
+        commands,
+    )

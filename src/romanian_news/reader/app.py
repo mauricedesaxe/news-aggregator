@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import re
 import secrets
 import time
 from collections import deque
@@ -13,7 +14,7 @@ from itertools import count
 from pathlib import Path
 from threading import Lock
 from typing import Annotated, Any, Literal, TypeVar, cast
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from uuid import UUID, uuid4
 
 from fasthtml.common import (
@@ -42,6 +43,7 @@ from fasthtml.common import (
     Main,
     Meta,
     Nav,
+    Ol,
     P,
     RedirectResponse,
     Script,
@@ -54,7 +56,9 @@ from fasthtml.common import (
     Textarea,
     Time,
     Title,
+    Track,
     Ul,
+    Video,
     fast_app,
 )
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -66,7 +70,13 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from romanian_news import BUCHAREST, Sha256
 from romanian_news.catalog.research_triggers import read_daily_research_trigger_set
 from romanian_news.catalog_transport import ResearchCatalogError, catalog_query
-from romanian_news.config import APP_PASSWORD, COOKIE_SECURE, SESSION_SECRET, TRUST_PROXY_HEADERS
+from romanian_news.config import (
+    APP_PASSWORD,
+    COOKIE_SECURE,
+    NEWS_PUBLIC_MEDIA_BASE_URL,
+    SESSION_SECRET,
+    TRUST_PROXY_HEADERS,
+)
 from romanian_news.current_report import (
     CurrentDailyReport,
     CurrentDailyReportHead,
@@ -113,6 +123,19 @@ from romanian_news.storage import (
     check_r2_access,
 )
 from romanian_news.telemetry import HttpTracingMiddleware, configure_telemetry
+from romanian_news.video_digest.errors import VideoDigestCatalogError
+from romanian_news.video_digest.models import EditionId, StoryId
+from romanian_news.video_digest.reader import (
+    ReaderVideoDigest,
+    ReaderVideoEdition,
+    edition_label,
+    read_reader_video_digest,
+)
+from romanian_news.video_digest_feedback import (
+    VideoDigestFeedbackCommand,
+    VideoDigestFeedbackEvent,
+    submit_video_digest_feedback,
+)
 
 SESSION_COOKIE = "romanian_news_session"
 SESSION_MAX_AGE = 14 * 24 * 60 * 60
@@ -129,6 +152,32 @@ class ReaderSettings(BaseModel):
     session_secret: Annotated[str, Field(min_length=32)]
     cookie_secure: bool = False
     trust_proxy_headers: bool = False
+    public_media_origin: str | None = None
+
+    @field_validator("public_media_origin", mode="before")
+    @classmethod
+    def validate_public_media_origin(cls, value: object) -> object:
+        if value is None or value == "":
+            return None
+        if not isinstance(value, str) or value != value.strip():
+            raise ValueError("public_media_origin must be an exact HTTPS origin")
+        parsed = urlsplit(value)
+        try:
+            _ = parsed.port
+        except ValueError:
+            raise ValueError("public_media_origin must be an exact HTTPS origin") from None
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname is None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+            or re.search(r"[\s;'\"\\]", parsed.netloc)
+        ):
+            raise ValueError("public_media_origin must be an exact HTTPS origin")
+        return f"https://{parsed.netloc}"
 
     @classmethod
     def from_environment(cls) -> ReaderSettings:
@@ -138,6 +187,7 @@ class ReaderSettings(BaseModel):
                 "session_secret": SESSION_SECRET,
                 "cookie_secure": COOKIE_SECURE,
                 "trust_proxy_headers": TRUST_PROXY_HEADERS,
+                "public_media_origin": NEWS_PUBLIC_MEDIA_BASE_URL,
             }
         )
 
@@ -155,6 +205,16 @@ class ReaderDomain:
     request_repair: Callable[[date], RepairRun] = request_daily_report_repair
     read_repair: Callable[[str], RepairRun] = read_daily_report_repair
     check_readiness: Callable[[], None] = lambda: _check_storage_readiness()
+    read_video_digest: Callable[[date, Sha256, EditionId | None, str], ReaderVideoDigest | None] = (
+        lambda _day, _report, _edition, _origin: None
+    )
+    submit_video_feedback: Callable[[VideoDigestFeedbackCommand], VideoDigestFeedbackEvent] = (
+        lambda _command: _written_only_video_feedback()
+    )
+
+
+def _written_only_video_feedback() -> VideoDigestFeedbackEvent:
+    raise ValueError("Video feedback is unavailable in written-only mode")
 
 
 PRODUCTION_DOMAIN = ReaderDomain(
@@ -168,6 +228,8 @@ PRODUCTION_DOMAIN = ReaderDomain(
     read_feedback=read_latest_news_feedback,
     submit_feedback=submit_news_feedback,
     read_research_flags=read_daily_research_trigger_set,
+    read_video_digest=read_reader_video_digest,
+    submit_video_feedback=submit_video_digest_feedback,
 )
 
 
@@ -176,17 +238,20 @@ def _check_storage_readiness() -> None:
     check_r2_access()
 
 
-_SECURITY_HEADERS = (
-    (
-        b"content-security-policy",
-        b"default-src 'self'; script-src 'self' 'inline-speculation-rules'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
-    ),
-    (b"cache-control", b"no-store"),
-    (b"referrer-policy", b"no-referrer"),
-    (b"strict-transport-security", b"max-age=63072000; includeSubDomains"),
-    (b"x-content-type-options", b"nosniff"),
-    (b"x-frame-options", b"DENY"),
-)
+_CONTENT_SECURITY_POLICY = "default-src 'self'; script-src 'self' 'inline-speculation-rules'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+
+
+def _security_headers(public_media_origin: str | None) -> tuple[tuple[bytes, bytes], ...]:
+    media = f"; media-src 'self' {public_media_origin}" if public_media_origin else ""
+    return (
+        (b"content-security-policy", f"{_CONTENT_SECURITY_POLICY}{media}".encode()),
+        (b"cache-control", b"no-store"),
+        (b"referrer-policy", b"no-referrer"),
+        (b"strict-transport-security", b"max-age=63072000; includeSubDomains"),
+        (b"x-content-type-options", b"nosniff"),
+        (b"x-frame-options", b"DENY"),
+    )
+
 
 _HTMX_CONFIG = '{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":false}]}'
 
@@ -343,6 +408,22 @@ h3 { font-size: 1.2rem; line-height: 1.25; }
 }
 .report-feedback { max-width: 420px; width: 100%; }
 .report-tools .feedback-control { margin-top: 0; padding-block: 0; }
+.video-digest { background: var(--card); border: 3px solid var(--line); box-shadow: 8px 8px 0 var(--acid); margin: 1.5rem 8px 2.5rem 0; padding: clamp(1rem, 3vw, 1.75rem); }
+.video-digest-head { align-items: end; display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; justify-content: space-between; }
+.video-digest-head h2 { font-size: clamp(1.7rem, 4vw, 2.7rem); margin: 0; }
+.edition-selector { display: flex; flex-wrap: wrap; gap: .4rem; }
+.edition-selector a { border: 1px solid var(--line); font-family: var(--font-mono); font-size: .68rem; padding: .45rem .65rem; text-decoration: none; text-transform: uppercase; }
+.edition-selector a[aria-current="true"] { background: var(--ink); color: var(--paper); }
+.video-digest video { background: #000; display: block; margin-top: 1rem; max-height: 70vh; width: 100%; }
+.video-links { align-items: baseline; display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin: .7rem 0 0; }
+.subtitle-status { color: var(--muted); font-family: var(--font-mono); font-size: .72rem; }
+.transcript { border-top: 2px solid var(--line); margin-top: 1.5rem; padding-top: 1.25rem; }
+.transcript h3 { font-size: 1.45rem; }
+.transcript ol { margin: 0; padding-left: 1.5rem; }
+.transcript li { padding: .85rem 0 .85rem .35rem; }
+.transcript li + li { border-top: 1px solid var(--line-soft); }
+.transcript article > p { max-width: 72ch; }
+.transcript .feedback-control { max-width: 520px; }
 .event-section { border-top: 1px solid var(--line); margin-top: 1.75rem; padding-top: .5rem; }
 .event-disclosure > summary { cursor: pointer; }
 .event-disclosure > summary, .articles > summary, .worth-knowing > summary {
@@ -504,6 +585,9 @@ h3 { font-size: 1.2rem; line-height: 1.25; }
   .facts, .article-card { grid-template-columns: 1fr; }
   .report-tools { display: block; }
   .report-feedback { margin-top: .75rem; max-width: none; }
+  .video-digest { margin-right: 0; }
+  .video-digest-head { align-items: start; display: block; }
+  .edition-selector { margin-top: .75rem; }
   .rating-actions { grid-template-columns: 1fr; }
   .article-card { gap: .4rem; }
   .story-section { padding-left: .35rem; padding-right: .35rem; }
@@ -528,8 +612,9 @@ h3 { font-size: 1.2rem; line-height: 1.25; }
 
 
 class SecurityHeadersMiddleware:
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, headers: tuple[tuple[bytes, bytes], ...]) -> None:
         self.app = app
+        self.headers = headers
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -540,9 +625,7 @@ class SecurityHeadersMiddleware:
             if message["type"] == "http.response.start":
                 headers = message.setdefault("headers", [])
                 present = {name.lower() for name, _ in headers}
-                headers.extend(
-                    (name, value) for name, value in _SECURITY_HEADERS if name not in present
-                )
+                headers.extend((name, value) for name, value in self.headers if name not in present)
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
@@ -655,17 +738,17 @@ def create_app(
 
     @_route(app, "get", "/")
     def home(request: Request) -> tuple[Any, ...] | FtResponse:
-        return _load_home(request, domain)
+        return _load_home(request, domain, settings.public_media_origin)
 
     @_route(app, "get", "/today")
     def today(request: Request) -> tuple[Any, ...] | FtResponse:
-        return _load_today(request, domain)
+        return _load_today(request, domain, settings.public_media_origin)
 
     @_route(app, "get", "/reports/{report_version_id}")
     def report_page(
         request: Request, report_version_id: str
     ) -> tuple[Any, ...] | Response | FtResponse:
-        return _load_report(request, report_version_id, domain)
+        return _load_report(request, report_version_id, domain, settings.public_media_origin)
 
     @_route(app, "post", "/report-status/check")
     async def report_status_check(request: Request) -> FtResponse:
@@ -679,11 +762,17 @@ def create_app(
     async def feedback_submit(request: Request) -> Response | FtResponse:
         return await _submit_feedback(request, domain)
 
+    @_route(app, "post", "/video-feedback")
+    async def video_feedback_submit(request: Request) -> Response | FtResponse:
+        return await _submit_video_feedback(request, domain)
+
     @_route(app, "post", "/logout")
     async def logout(request: Request) -> Response | FtResponse:
         return await _submit_logout(request)
 
-    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(
+        SecurityHeadersMiddleware, headers=_security_headers(settings.public_media_origin)
+    )
     app.add_middleware(HttpTracingMiddleware, routes=app.router.routes)
     return app
 
@@ -743,15 +832,21 @@ def _login_client_id(request: Request, trust_proxy_headers: bool) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _load_home(request: Request, domain: ReaderDomain) -> tuple[Any, ...] | FtResponse:
-    return _load_current_day(request, domain)
+def _load_home(
+    request: Request, domain: ReaderDomain, public_media_origin: str | None
+) -> tuple[Any, ...] | FtResponse:
+    return _load_current_day(request, domain, public_media_origin)
 
 
-def _load_today(request: Request, domain: ReaderDomain) -> tuple[Any, ...] | FtResponse:
-    return _load_current_day(request, domain)
+def _load_today(
+    request: Request, domain: ReaderDomain, public_media_origin: str | None
+) -> tuple[Any, ...] | FtResponse:
+    return _load_current_day(request, domain, public_media_origin)
 
 
-def _load_current_day(request: Request, domain: ReaderDomain) -> tuple[Any, ...] | FtResponse:
+def _load_current_day(
+    request: Request, domain: ReaderDomain, public_media_origin: str | None
+) -> tuple[Any, ...] | FtResponse:
     try:
         reports = domain.list_reports(30)
     except (ResearchCatalogError, ValidationError, ValueError):
@@ -772,7 +867,14 @@ def _load_current_day(request: Request, domain: ReaderDomain) -> tuple[Any, ...]
         _live_summary(current),
         *(report for report in reports if report.report_version_id != current.head.version_id),
     )
-    return _report_page(request, current.head.version_id, summaries, domain, live=current)
+    return _report_page(
+        request,
+        current.head.version_id,
+        summaries,
+        domain,
+        live=current,
+        public_media_origin=public_media_origin,
+    )
 
 
 def _live_summary(live: CurrentDailyReport) -> DailyReportSummary:
@@ -787,6 +889,7 @@ def _load_report(
     request: Request,
     report_version_id: str,
     domain: ReaderDomain,
+    public_media_origin: str | None,
 ) -> tuple[Any, ...] | Response | FtResponse:
     try:
         current_version_id = domain.resolve_current_report_version(report_version_id)
@@ -801,7 +904,13 @@ def _load_report(
     except (ResearchCatalogError, ValueError):
         return _unavailable_page(request)
     try:
-        return _report_page(request, report_version_id, reports, domain)
+        return _report_page(
+            request,
+            report_version_id,
+            reports,
+            domain,
+            public_media_origin=public_media_origin,
+        )
     except DailyReportVersionNotFound:
         return FtResponse(_not_found_page(request), status_code=404)
     except (ResearchCatalogError, ResearchObjectUnavailable, ResearchObjectIntegrityError):
@@ -1100,6 +1209,91 @@ async def _submit_feedback(request: Request, domain: ReaderDomain) -> Response |
     return RedirectResponse(f"/reports/{event.target.report_version_id}", status_code=303)
 
 
+async def _submit_video_feedback(request: Request, domain: ReaderDomain) -> Response | FtResponse:
+    form = await request.form()
+    if not _valid_csrf(request, str(form.get("csrf_token", ""))):
+        return _video_feedback_error_response(
+            request,
+            form,
+            "The request expired. Reload the page.",
+            403,
+        )
+    try:
+        command = VideoDigestFeedbackCommand.model_validate(
+            {
+                "feedback_id": UUID(str(form.get("feedback_id", ""))),
+                "edition_id": str(form.get("edition_id", "")),
+                "story_id": str(form.get("story_id", "")).strip() or None,
+                "rating": str(form.get("rating", "")).strip() or None,
+                "note": str(form.get("note", "")),
+                "actor": "owner",
+            }
+        )
+        event = await run_in_threadpool(domain.submit_video_feedback, command)
+    except (
+        ResearchCatalogError,
+        ResearchObjectUnavailable,
+        ResearchObjectIntegrityError,
+        VideoDigestCatalogError,
+    ):
+        return _video_feedback_error_response(
+            request,
+            form,
+            "The service is unavailable. Feedback was not saved.",
+            503,
+        )
+    except (ValidationError, ValueError, TypeError):
+        return _video_feedback_error_response(
+            request,
+            form,
+            "Feedback could not be saved.",
+            400,
+        )
+    return_to = _safe_next(str(request.query_params.get("return_to", "/")))
+    if _is_htmx(request):
+        return FtResponse(
+            _video_feedback_control(
+                event.edition_id,
+                event.story_id,
+                str(request.session["csrf_token"]),
+                return_to,
+                event=event,
+                open_details=True,
+            )
+        )
+    return RedirectResponse(return_to, status_code=303)
+
+
+def _video_feedback_error_response(
+    request: Request,
+    form: Any,
+    message: str,
+    status_code: int,
+) -> FtResponse:
+    edition_id = str(form.get("edition_id", ""))
+    story_value = str(form.get("story_id", "")).strip()
+    story_id = StoryId(story_value) if story_value else None
+    return_to = _safe_next(str(request.query_params.get("return_to", "/")))
+    if (
+        _is_htmx(request)
+        and re.fullmatch(r"[0-9a-f]{64}", edition_id)
+        and (story_id is None or re.fullmatch(r"[0-9a-f]{64}", story_id))
+    ):
+        return FtResponse(
+            _video_feedback_control(
+                EditionId(edition_id),
+                story_id,
+                str(request.session["csrf_token"]),
+                return_to,
+                error=message,
+                note=str(form.get("note", "")),
+                open_details=True,
+            ),
+            status_code=status_code,
+        )
+    return FtResponse(P(message), status_code=status_code)
+
+
 def _feedback_error_response(
     request: Request,
     form: Any,
@@ -1146,6 +1340,7 @@ def _report_page(
     domain: ReaderDomain,
     *,
     live: CurrentDailyReport | None = None,
+    public_media_origin: str | None = None,
 ) -> tuple[Any, ...]:
     report = live.report if live is not None else domain.read_report(report_version_id)
     latest_feedback = {
@@ -1162,6 +1357,13 @@ def _report_page(
     )
     report_target = ReportFeedbackTarget(report_version_id=report_version_id)
     research_flags = _research_flags(domain, report_version_id)
+    video_digest = _reader_video_digest(
+        request,
+        domain,
+        report.day,
+        report_version_id,
+        public_media_origin,
+    )
     next_live = live is None and report.day < _bucharest_today()
     if isinstance(report, DailyReport):
         meta, sections_body = _tiered_report_body(
@@ -1202,6 +1404,9 @@ def _report_page(
         _initial_status_strip(report.day, report_version_id, csrf_token)
         if live is not None
         else None,
+        _video_digest(video_digest, request.url.path, csrf_token)
+        if video_digest is not None
+        else None,
         report_tools,
         *sections_body,
         cls="reader",
@@ -1210,6 +1415,200 @@ def _report_page(
         Title(f"{_format_date(report.day)} | Press review"),
         _site_header(csrf_token),
         Main(reader),
+    )
+
+
+def _reader_video_digest(
+    request: Request,
+    domain: ReaderDomain,
+    day: date,
+    report_version_id: Sha256,
+    public_media_origin: str | None,
+) -> ReaderVideoDigest | None:
+    if public_media_origin is None:
+        return None
+    selected = request.query_params.get("edition")
+    try:
+        return domain.read_video_digest(
+            day,
+            report_version_id,
+            EditionId(selected) if selected else None,
+            public_media_origin,
+        )
+    except (
+        ResearchCatalogError,
+        ResearchObjectUnavailable,
+        ResearchObjectIntegrityError,
+        VideoDigestCatalogError,
+        ValidationError,
+        ValueError,
+        TypeError,
+    ):
+        return None
+
+
+def _video_digest(value: ReaderVideoDigest, report_path: str, csrf_token: str) -> FT:
+    selected = value.selected
+    selector = Nav(
+        *(
+            A(
+                edition_label(option.slot_name, option.published_at),
+                href=f"{report_path}?edition={option.edition_id}",
+                aria_current=(
+                    "true"
+                    if selected is not None and option.edition_id == selected.edition_id
+                    else None
+                ),
+            )
+            for option in value.editions
+        ),
+        aria_label="Video edition",
+        cls="edition-selector",
+    )
+    if selected is None:
+        return Section(
+            Div(H2("Video digest"), selector, cls="video-digest-head"),
+            P("The selected video edition is unavailable. The written report is below."),
+            cls="video-digest",
+        )
+    return_to = f"{report_path}?edition={selected.edition_id}"
+    track = (
+        Track(
+            src=str(selected.subtitle.url),
+            kind="captions",
+            srclang="ro",
+            label="Romanian",
+            default=True,
+        )
+        if selected.subtitle.kind == "available"
+        else None
+    )
+    return Section(
+        Div(H2("Video digest"), selector, cls="video-digest-head"),
+        Video(
+            track,
+            P(
+                "Your browser cannot play this video. ",
+                A("Open the video directly", href=str(selected.video_url)),
+            ),
+            src=str(selected.video_url),
+            controls=True,
+            preload="metadata",
+            crossorigin="anonymous" if track is not None else None,
+        ),
+        P(
+            A(
+                "Open video directly",
+                href=str(selected.video_url),
+                target="_blank",
+                rel="noreferrer",
+            ),
+            Span("Captions are unavailable for this edition.", cls="subtitle-status")
+            if selected.subtitle.kind == "failed"
+            else Span("Romanian captions available.", cls="subtitle-status"),
+            cls="video-links",
+        ),
+        _video_feedback_control(
+            selected.edition_id,
+            None,
+            csrf_token,
+            return_to,
+        ),
+        _video_transcript(selected, csrf_token, return_to),
+        cls="video-digest",
+    )
+
+
+def _video_transcript(
+    edition: ReaderVideoEdition,
+    csrf_token: str,
+    return_to: str,
+) -> FT:
+    return Section(
+        H3("Transcript"),
+        Ol(
+            *(
+                Li(
+                    Article(
+                        H3(story.title),
+                        P(story.narration),
+                        _video_feedback_control(
+                            edition.edition_id,
+                            StoryId(story.story_id),
+                            csrf_token,
+                            return_to,
+                        ),
+                    )
+                )
+                for story in edition.stories
+            )
+        ),
+        aria_label="Video transcript",
+        cls="transcript",
+    )
+
+
+def _video_feedback_control(
+    edition_id: EditionId,
+    story_id: StoryId | None,
+    csrf_token: str,
+    return_to: str,
+    event: VideoDigestFeedbackEvent | None = None,
+    *,
+    error: str | None = None,
+    note: str | None = None,
+    open_details: bool = False,
+) -> FT:
+    suffix = story_id or "edition"
+    control_id = f"video-feedback-{suffix}"
+    action = f"/video-feedback?return_to={quote(return_to, safe='')}"
+    rating = (
+        {"positive": "Positive", "negative": "Negative", None: "Note"}[event.rating]
+        if event is not None
+        else None
+    )
+    return Div(
+        Div(
+            Strong(f"Feedback saved: {rating}"),
+            Small(event.note) if event and event.note else None,
+            cls="feedback-state",
+        )
+        if rating is not None
+        else None,
+        Details(
+            Summary("Feedback on this video" if story_id is None else "Feedback on this story"),
+            P(error, cls="error") if error else None,
+            Form(
+                Hidden(str(uuid4()), name="feedback_id"),
+                Hidden(edition_id, name="edition_id"),
+                Hidden(story_id, name="story_id") if story_id is not None else None,
+                Hidden(csrf_token, name="csrf_token"),
+                Label("Optional note", fr=f"{control_id}-note", cls="note-label"),
+                Textarea(
+                    event.note if event and event.note else (note or ""),
+                    id=f"{control_id}-note",
+                    name="note",
+                    maxlength="2000",
+                    placeholder="What was useful, or what should change?",
+                ),
+                Div(
+                    Button("Positive", type="submit", name="rating", value="positive"),
+                    Button("Negative", type="submit", name="rating", value="negative"),
+                    Button("Save note", type="submit", name="rating", value=""),
+                    cls="rating-actions",
+                ),
+                method="post",
+                action=action,
+                hx_post=action,
+                hx_target=f"#{control_id}",
+                hx_swap="outerHTML",
+                hx_disabled_elt=f"#{control_id} button",
+                cls="feedback-form",
+            ),
+            open=True if open_details else None,
+        ),
+        id=control_id,
+        cls="feedback-control",
     )
 
 
