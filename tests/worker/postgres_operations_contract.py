@@ -4,7 +4,9 @@ import hashlib
 import json
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
+import dagster as dg
 import dlt
 import psycopg.errors
 import pytest
@@ -806,3 +808,38 @@ def test_subject_assessment_materializer_reuses_completed_run_before_inference(
     result = operations.materialize_subject_assessments(DAY, "git:test")
 
     assert result.values == (reference,)
+
+
+def test_morning_report_check_requires_yesterdays_catalog_edition_before_pinging(
+    postgres_catalog: PostgresCatalog,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from romanian_news.worker import morning_report
+    from tests.reader.postgres_reader_app_e2e import _daily_report, _seed_catalog
+
+    monkeypatch.setattr(
+        morning_report,
+        "_now",
+        lambda: datetime(2026, 9, 14, 9, 35, tzinfo=ZoneInfo("Europe/Bucharest")),
+    )
+    monkeypatch.setattr(
+        morning_report,
+        "build_and_publish_current_daily_report",
+        lambda day, ref: SimpleNamespace(
+            head=SimpleNamespace(version_id="9" * 64, input_time=datetime(2026, 9, 14, 4, 2))
+        ),
+    )
+    pings: list[str] = []
+    monkeypatch.setattr(morning_report, "ping_heartbeat", lambda kind: pings.append(kind))
+
+    with pytest.raises(ValueError, match="news:daily:2026-09-13"):
+        morning_report.morning_report_check_op(dg.build_op_context())
+
+    assert pings == []
+
+    _seed_catalog(postgres_catalog, _daily_report(date(2026, 9, 13)))
+
+    result = morning_report.morning_report_check_op(dg.build_op_context())
+
+    assert result == "2026-09-14"
+    assert pings == ["morning_report"]

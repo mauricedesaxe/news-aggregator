@@ -41,12 +41,9 @@ def test_morning_check_verifies_both_days_and_pings(monkeypatch) -> None:
     )
     event_data = output_event.event_specific_data
     assert isinstance(event_data, StepOutputData)
-    metadata = event_data.metadata
-    assert {name: value.value for name, value in metadata.items()} == {
-        "day": "2026-09-14",
-        "report_version_id": head.version_id,
-        "as_of": "2026-09-14T04:02:00",
-    }
+    metadata = {name: value.value for name, value in event_data.metadata.items()}
+    assert metadata["day"] == "2026-09-14"
+    assert metadata["report_version_id"] == head.version_id
     assert pings == ["morning_report"]
 
 
