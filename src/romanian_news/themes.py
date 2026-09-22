@@ -18,6 +18,8 @@ from romanian_news.analysis.groups.models import GroupSummary
 from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup, parse_daily_cluster_set
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 from romanian_news.storage import read_verified_r2_object
 
 THEME_PROMPT = (
@@ -67,7 +69,6 @@ THEME_OPERATION = "news.construct_daily_themes"
 THEME_ASSIGNMENT_OPERATION = f"{THEME_OPERATION}.assignment"
 THEME_PROSE_OPERATION = f"{THEME_OPERATION}.merged_prose"
 THEME_MODEL = "google/gemini-3.8-flash"
-_SHA256_ADAPTER = TypeAdapter(Sha256)
 _ParsedStage = TypeVar("_ParsedStage")
 
 
@@ -1693,11 +1694,3 @@ def _summary_request_id(group: NewsGroup) -> Sha256:
     from romanian_news.analysis.groups.summary import summary_request_id
 
     return summary_request_id(group)
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

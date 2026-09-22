@@ -10,8 +10,6 @@ from romanian_news.catalog.artifacts import (
     ArtifactFile,
     artifact_file,
     artifact_statements,
-    canonical_json,
-    sha256,
 )
 from romanian_news.catalog_transport import (
     advance_artifact_current_version_statement,
@@ -27,6 +25,7 @@ from romanian_news.feeds.models import (
     feed_entry_event,
     legacy_feed_entry_event_id,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import publish_immutable_r2_objects
 
 _CATALOG_EVENT_ROWS_PER_STATEMENT = 10

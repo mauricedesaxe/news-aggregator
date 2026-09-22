@@ -1,19 +1,20 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import threading
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from pydantic import Field, TypeAdapter
+from pydantic import Field
 
 from romanian_news import BUCHAREST, NewsModel, Sha256
 from romanian_news.analysis.groups.models import GroupSentiment, GroupSummary
 from romanian_news.articles.models import ExtractedArticle
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import DailyClusterSet
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 from romanian_news.storage import read_verified_r2_object
 from romanian_news.subject_assessments import (
     DailySubjectAssessmentSet,
@@ -34,7 +35,6 @@ if TYPE_CHECKING:
     from romanian_news.groups import NewsGroup
 
 WEEKLY_REPORT_POLICY = "seven-current-daily-reports-v1"
-_SHA256_ADAPTER = TypeAdapter(Sha256)
 
 
 class ReportArticle(NewsModel):
@@ -852,11 +852,3 @@ def _read_report_articles(
     if set(result) != set(version_ids):
         raise ValueError("Daily report references unknown article versions")
     return result
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

@@ -13,7 +13,7 @@ from pydantic import HttpUrl, TypeAdapter, ValidationError
 from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.attempts import ModelAttempt, model_attempt_from_payload
 from romanian_news.analysis.tracing import trace_provider_call
-from romanian_news.catalog.artifacts import ArtifactFile, canonical_json, sha256
+from romanian_news.catalog.artifacts import ArtifactFile
 from romanian_news.catalog.youtube import (
     next_receipt_attempt_index,
     publish_accepted_clip,
@@ -25,6 +25,7 @@ from romanian_news.catalog.youtube import (
     reject_receipt,
 )
 from romanian_news.config import GEMINI_API_KEY
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.youtube.errors import (
     YouTubeBudgetError,
     YouTubeConfigurationError,

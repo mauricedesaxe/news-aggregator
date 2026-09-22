@@ -15,15 +15,14 @@ from romanian_news.catalog.artifacts import (
     ArtifactFile,
     artifact_file,
     artifact_statements,
-    canonical_json,
     existing_run_ids,
     run_output_statement,
-    sha256,
 )
 from romanian_news.catalog_transport import (
     advance_artifact_current_version_from_run_statement,
     catalog_batch,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import publish_immutable_r2_objects
 
 

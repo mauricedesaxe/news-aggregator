@@ -9,7 +9,6 @@ from romanian_news import NewsModel, Sha256
 from romanian_news.catalog.artifacts import (
     artifact_file,
     artifact_statements,
-    canonical_json,
     run_exists,
     run_output_statement,
 )
@@ -18,6 +17,7 @@ from romanian_news.catalog_transport import (
     catalog_batch,
 )
 from romanian_news.groups import DailyClusterOutput
+from romanian_news.identity import canonical_json
 from romanian_news.storage import publish_immutable_r2_objects
 
 

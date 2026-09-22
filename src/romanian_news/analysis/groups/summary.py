@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 
@@ -17,6 +16,8 @@ from romanian_news.analysis.groups.models import (
 )
 from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
 from romanian_news.groups import NewsGroup
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 
 SUMMARY_TITLE_POLICY = "strip-leading-news-labels-v1"
 SUMMARY_COMPARISON_POLICY = "distinct-outlets-only-v1"
@@ -215,11 +216,3 @@ def summary_request_id(group: NewsGroup) -> Sha256:
             }
         )
     )
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

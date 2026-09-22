@@ -10,7 +10,7 @@ from romanian_news import Sha256
 from romanian_news.analysis.attempts import ModelAttempt, model_attempt_from_payload
 from romanian_news.analysis.tracing import ModelTraceReference
 from romanian_news.catalog import youtube as catalog_module
-from romanian_news.catalog.artifacts import artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import artifact_file
 from romanian_news.catalog.youtube import (
     publish_accepted_clip,
     publish_accepted_merge,
@@ -18,6 +18,7 @@ from romanian_news.catalog.youtube import (
     publish_youtube_candidate,
     reject_receipt,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.youtube import discovery as discovery_module
 from romanian_news.youtube import workflow as workflow_module
 from romanian_news.youtube.analysis import (

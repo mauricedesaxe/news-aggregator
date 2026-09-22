@@ -11,7 +11,6 @@ from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import (
     artifact_file,
     artifact_statements,
-    canonical_json,
     current_artifact_file,
     run_output_statement,
     run_status,
@@ -21,6 +20,7 @@ from romanian_news.catalog_transport import (
     catalog_batch,
     catalog_query,
 )
+from romanian_news.identity import canonical_json
 from romanian_news.research_triggers import (
     DailyResearchTriggerOutput,
     DailyResearchTriggerSet,

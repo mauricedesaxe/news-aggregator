@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import date
 from typing import Annotated
@@ -13,6 +12,8 @@ from romanian_news.analysis.embeddings import embedding_request_id
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
 from romanian_news.articles.models import ExtractedArticle
 from romanian_news.artifacts import ArtifactReference
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 from romanian_news.storage import read_verified_r2_object
 
 CLUSTER_ALGORITHM = "average-link-cosine-v1"
@@ -303,11 +304,3 @@ def _cluster_config_digest(threshold: float) -> Sha256:
             }
         )
     )
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

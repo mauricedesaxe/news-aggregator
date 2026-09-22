@@ -11,7 +11,6 @@ from romanian_news.catalog.artifacts import (
     CurrentArtifactFile,
     artifact_file,
     artifact_statements,
-    canonical_json,
     current_artifact_file,
     run_output_statement,
     run_status,
@@ -20,6 +19,7 @@ from romanian_news.catalog_transport import (
     advance_artifact_current_version_from_run_statement,
     catalog_batch,
 )
+from romanian_news.identity import canonical_json
 from romanian_news.reports import DailyReportOutput, WeeklyReportOutput, report_run_id
 from romanian_news.storage import publish_immutable_r2_objects
 
