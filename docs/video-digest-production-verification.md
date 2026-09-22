@@ -12,22 +12,27 @@ Verification on 2026-09-22 established these production facts:
 | --- | --- | --- |
 | Authenticated reader | Pass | `/` returns a `303` to `/login`; `/livez` and `/readyz` return `200` at `https://news.alexlazar.dev` |
 | Reader deployment | Pass | Railway deployed repository commit `abdb3e6` successfully |
-| Public media origin | Blocked | Reader configuration does not define `NEWS_PUBLIC_MEDIA_BASE_URL` or `NEWS_PUBLIC_MEDIA_R2_BUCKET` |
-| Dagster deployment | Blocked | GitHub deployment jobs fail before executing steps; the video runtime factory is not configured |
+| Public media origin | Pass | `romanian-news-public-media` is served at `https://news-media.alexlazar.dev` with active TLS 1.2 or newer |
+| R2 custom-domain probe | Pass | The permanent smoke object returns exact bytes, `Content-Length`, `Accept-Ranges`, and a valid `206` byte range |
+| Dagster deployment | Repair pending | The workflow pinned an annotated tag object instead of its commit; PR #42 repairs all six action references |
+| Execution ownership | Decided | Dagster owns all background work; the unrelated Railway worker remains untouched |
 | Schedule ownership | Safe, inactive | `scheduled_video_digest` is registered `STOPPED` and excluded from production activation |
 | Subtitle timing | Blocked | No production subtitle timing adapter is installed |
-| Incident delivery | Blocked | Alert selection is implemented, but no video incident transport or dedicated escalation policy is installed |
-| Video heartbeat | Blocked | Better Stack has daily report, research trigger, and morning readability heartbeats, but no video heartbeat |
-| R2 custom-domain probe | Blocked | No public-media origin or bucket is configured in production |
+| Incident delivery | Deferred | The owner deferred a dedicated video incident transport and escalation policy |
+| Video heartbeat | Deferred | The owner deferred a video-specific Better Stack heartbeat |
 
-The Railway service named `romanian-news-worker` is not evidence of a deployed worker. Its observed
-deployments target `mauricedesaxe/chartly`, not this repository. Do not change or repurpose that
-service without first confirming its owner and intended workload.
+The Railway service named `romanian-news-worker` is unrelated. Its observed deployments target
+`mauricedesaxe/chartly`, not this repository. Video work executes only in Dagster.
+
+The production reader has `NEWS_PUBLIC_MEDIA_R2_BUCKET=romanian-news-public-media` and
+`NEWS_PUBLIC_MEDIA_BASE_URL=https://news-media.alexlazar.dev`. The probe object is
+`verification/production-smoke-v1.txt`; its body SHA-256 is
+`9767a285d5f6e4d8ce4c2ea2f1afdcc3b6073c92d93e235035bfcfcf61a46716`.
 
 ## Activation prerequisites
 
-1. Install production planning, generation, assembly, subtitle timing, publication, heartbeat, and
-   incident-delivery adapters through `runtime_factory`.
+1. Install production planning, generation, assembly, subtitle timing, and publication adapters
+   through `runtime_factory`.
 2. Configure `NEWS_POSTGRES_DSN`, private R2 credentials, `NEWS_PUBLIC_MEDIA_R2_BUCKET`, and the bare
    HTTPS `NEWS_PUBLIC_MEDIA_BASE_URL` in both the worker and reader as required.
 3. Apply all catalog migrations to production PostgreSQL and run the upgrade contracts against a
@@ -35,12 +40,11 @@ service without first confirming its owner and intended workload.
 4. Deploy the Dagster location from the same commit as the reader and confirm definitions load.
 5. Probe one immutable public video and subtitle through the custom domain. Require exact bytes,
    `Content-Length`, `Accept-Ranges: bytes`, and a successful byte-range response.
-6. Deliver a test heartbeat and a synthetic terminal incident to the real escalation target.
-7. Run one deterministic slot manually. Stop the worker after each durable stage, restart it with a
+6. Run one deterministic slot manually. Stop the worker after each durable stage, restart it with a
    new process, and confirm each paid or public side effect occurred once.
-8. Confirm reader playback, transcript order, clean-video fallback after subtitle exhaustion, and
+7. Confirm reader playback, transcript order, clean-video fallback after subtitle exhaustion, and
    feedback persistence for that edition.
-9. Start `scheduled_video_digest` only after all preceding checks pass.
+8. Start `scheduled_video_digest` only after all preceding checks pass.
 
 ## Verification commands
 
