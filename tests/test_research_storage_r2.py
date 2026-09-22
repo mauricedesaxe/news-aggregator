@@ -43,7 +43,8 @@ def test_immutable_r2_objects_reuse_identical_existing_content(monkeypatch) -> N
         def get_object(self, **kwargs: object) -> dict[str, object]:
             return {"Body": io.BytesIO(self.store[kwargs["Key"]])}
 
-    monkeypatch.setattr(research_storage, "_r2_client", ReusingClient())
+    client = ReusingClient()
+    monkeypatch.setattr(research_storage, "_r2_client", lambda: client)
 
     publication = research_storage.publish_immutable_r2_objects(
         (("stored", content), ("fresh", b"new bytes"))
