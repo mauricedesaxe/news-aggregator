@@ -525,6 +525,7 @@ def test_generation_reuses_stored_receipt_without_submission(
     harness.attempts[0] = harness.attempts[0].model_copy(
         update={"stage": GenerationStage.SUBMITTED, "response_evidence": None}
     )
+    harness.policy_publications = 0
 
     resumed = generation.generate_next_candidate(
         _lease(prepared), prepared, _references(), provider=provider
@@ -533,6 +534,7 @@ def test_generation_reuses_stored_receipt_without_submission(
     assert isinstance(resumed, generation.CandidateReady)
     assert provider.submitted_positions == [0]
     assert provider.status_calls == ["fal-0-1", "fal-0-1"]
+    assert harness.policy_publications == 0
 
 
 @pytest.mark.parametrize(
@@ -803,7 +805,6 @@ def test_deadline_passing_while_fal_is_active_fails_the_slot(
     harness.attempts[0] = harness.attempts[0].model_copy(
         update={"stage": GenerationStage.SUBMITTED, "response_evidence": None}
     )
-    harness.policy_publications = 0
     harness.deadline = datetime(2020, 1, 1, tzinfo=UTC)
 
     outcome = generation.generate_next_candidate(
@@ -814,7 +815,6 @@ def test_deadline_passing_while_fal_is_active_fails_the_slot(
     assert "deadline passed while Fal was active" in outcome.reason
     assert harness.attempts[0].stage is GenerationStage.FAILED
     assert harness.failed_slot is True
-    assert harness.policy_publications == 0
 
 
 def test_in_progress_status_reports_progress_without_new_spend(
