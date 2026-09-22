@@ -1,0 +1,88 @@
+# Video digest production verification
+
+This runbook is the release gate for the video digest. Do not start
+`scheduled_video_digest` until every production check below passes. PostgreSQL is the workflow
+source of truth; Dagster retries must resume its recorded state rather than replay completed work.
+
+## Current status
+
+Verification on 2026-09-22 established these production facts:
+
+| Boundary | Result | Evidence |
+| --- | --- | --- |
+| Authenticated reader | Pass | `/` returns a `303` to `/login`; `/livez` and `/readyz` return `200` at `https://news.alexlazar.dev` |
+| Reader deployment | Pass | Railway deployed repository commit `abdb3e6` successfully |
+| Public media origin | Blocked | Reader configuration does not define `NEWS_PUBLIC_MEDIA_BASE_URL` or `NEWS_PUBLIC_MEDIA_R2_BUCKET` |
+| Dagster deployment | Blocked | GitHub deployment jobs fail before executing steps; the video runtime factory is not configured |
+| Schedule ownership | Safe, inactive | `scheduled_video_digest` is registered `STOPPED` and excluded from production activation |
+| Subtitle timing | Blocked | No production subtitle timing adapter is installed |
+| Incident delivery | Blocked | Alert selection is implemented, but no video incident transport is installed |
+| Video heartbeat | Blocked | Existing heartbeats cover reports and research, not the video schedule |
+| R2 custom-domain probe | Blocked | No public-media origin or bucket is configured in production |
+
+The Railway service named `romanian-news-worker` is not evidence of a deployed worker. Its observed
+deployments target `mauricedesaxe/chartly`, not this repository. Do not change or repurpose that
+service without first confirming its owner and intended workload.
+
+## Activation prerequisites
+
+1. Install production planning, generation, assembly, subtitle timing, publication, heartbeat, and
+   incident-delivery adapters through `runtime_factory`.
+2. Configure `NEWS_POSTGRES_DSN`, private R2 credentials, `NEWS_PUBLIC_MEDIA_R2_BUCKET`, and the bare
+   HTTPS `NEWS_PUBLIC_MEDIA_BASE_URL` in both the worker and reader as required.
+3. Apply all catalog migrations to production PostgreSQL and run the upgrade contracts against a
+   disposable PostgreSQL 15 database restored from the pre-video schema.
+4. Deploy the Dagster location from the same commit as the reader and confirm definitions load.
+5. Probe one immutable public video and subtitle through the custom domain. Require exact bytes,
+   `Content-Length`, `Accept-Ranges: bytes`, and a successful byte-range response.
+6. Deliver a test heartbeat and a synthetic terminal incident to the real escalation target.
+7. Run one deterministic slot manually. Stop the worker after each durable stage, restart it with a
+   new process, and confirm each paid or public side effect occurred once.
+8. Confirm reader playback, transcript order, clean-video fallback after subtitle exhaustion, and
+   feedback persistence for that edition.
+9. Start `scheduled_video_digest` only after all preceding checks pass.
+
+## Verification commands
+
+Run from a clean checkout at the deployed commit:
+
+```bash
+uv sync --frozen --group test
+uv run pytest -q --ignore=tests/test_packaging.py
+NEWS_TEST_POSTGRES_DSN=postgresql://postgres:postgres@127.0.0.1:5432/postgres \
+  uv run pytest -q tests/contracts/postgres_*.py \
+  tests/worker/postgres_operations_contract.py tests/reader/postgres_reader_app_e2e.py
+uv run pytest -q tests/test_packaging.py
+uv run ruff check .
+uv run ruff format --check .
+uv run basedpyright --level error
+uv run vulture
+uv run xenon --max-absolute C --max-modules B --max-average A src/romanian_news
+uv run dg check defs
+bd lint
+bd preflight
+```
+
+Inspect production variable names without printing their values. The required public-media names must
+be present in both relevant services before probing R2. Never place credentials in command history,
+logs, screenshots, or issue comments.
+
+## Measured limits
+
+- Schedule: `08:00`, `13:00`, and `20:00` Europe/Bucharest.
+- Absolute slot deadline: 90 minutes.
+- Lease duration: 10 minutes; recovery increments the lease fence.
+- Dagster retry budget: 95 retries, with a minimum 60-second delay.
+- Assembly: at most three durable attempts.
+- Subtitles: three ordered strategies; exhaustion publishes the clean video.
+- Publication: at most five durable attempts.
+- Generated candidates: private, seven-day retention class.
+- Accepted clips and published media: permanent retention classes.
+
+## Rollback
+
+Stop `scheduled_video_digest` first. Do not delete catalog rows or immutable R2 objects. Roll the
+Dagster location and reader back to the last known-good shared commit, then inspect the affected
+slot in PostgreSQL. A later deployment must resume from that durable state with a fresh owner token.
+If public verification failed, leave the edition unpublished and preserve the publication attempt
+evidence for diagnosis.
