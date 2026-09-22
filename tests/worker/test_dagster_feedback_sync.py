@@ -26,13 +26,20 @@ def test_feedback_sync_applies_schema_and_exposes_result_counts(monkeypatch) -> 
 
     assert execution.success
     assert execution.output_for_node("news_feedback_sync_op") == result
+    metadata = _op_metadata(execution)
+    assert set(metadata) == set(result.model_dump())
+    assert metadata["failed"] == result.failed
+    assert metadata["unresolved"] == result.unresolved
+    assert metadata["completed"] == result.completed
+
+
+def _op_metadata(execution) -> dict[str, object]:
     output_event = next(
         event for event in execution.all_node_events if event.event_type_value == "STEP_OUTPUT"
     )
     event_data = output_event.event_specific_data
     assert isinstance(event_data, StepOutputData)
-    metadata = event_data.metadata
-    assert {name: value.value for name, value in metadata.items()} == result.model_dump()
+    return {name: value.value for name, value in event_data.metadata.items()}
 
 
 def test_feedback_sync_fails_when_any_attempt_failed(monkeypatch) -> None:

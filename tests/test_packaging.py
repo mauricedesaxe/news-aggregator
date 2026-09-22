@@ -23,13 +23,14 @@ def test_wheel_contains_runtime_assets_without_tests(tmp_path: Path) -> None:
     assert "romanian_news/worker/definitions.py" in names
     assert "romanian_news/reader/app.py" in names
     assert "romanian_news/reader/static/htmx.min.js" in names
-    assert "romanian_news/catalog/migrations/0001_initial.sql" in names
-    assert "romanian_news/catalog/migrations/0002_video_digest.sql" in names
-    assert "romanian_news/catalog/migrations/0003_video_digest_generation_fences.sql" in names
-    assert "romanian_news/catalog/migrations/0004_video_digest_publication_evidence.sql" in names
-    assert "romanian_news/catalog/migrations/0005_video_digest_planning.sql" in names
-    assert "romanian_news/catalog/migrations/0006_video_digest_generation_admission.sql" in names
-    assert "romanian_news/catalog/migrations/0007_video_digest_media_evidence.sql" in names
+    packaged_migrations = {
+        name.removeprefix("romanian_news/catalog/migrations/")
+        for name in names
+        if name.startswith("romanian_news/catalog/migrations/")
+    }
+    assert packaged_migrations == {
+        path.name for path in (ROOT / "src/romanian_news/catalog/migrations").iterdir()
+    }
     assert not any("/tests/" in name for name in names)
     assert not any("debt" in name or "budget" in name for name in names)
 
