@@ -482,7 +482,7 @@ def accept_candidate(
         clip_file.r2_key,
         clip_file.content,
         retention="permanent",
-        source_lineage=candidate.request_id,
+        source_lineage=clip_file.version_id,
     )
     publish_immutable_r2_objects(((validation_file.r2_key, validation_file.content),))
     checkpoint_generation_acceptance(
