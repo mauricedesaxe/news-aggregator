@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import time
 from datetime import date
 from typing import Annotated, Literal
 
 from openai.types.chat import ChatCompletionMessageParam
-from pydantic import Field, TypeAdapter, ValidationError, model_validator
+from pydantic import Field, ValidationError, model_validator
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.attempts import ModelCall, record_model_attempt
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
 from romanian_news.artifacts import ArtifactReference
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 from romanian_news.reports import ArchivedDailyReport, parse_daily_report
 from romanian_news.storage import read_verified_r2_object
 
@@ -41,7 +42,6 @@ TRIGGER_PROMPT = (
     "Use only the supplied subject content."
 )
 TRIGGER_MAX_TOKENS = 4000
-_SHA256_ADAPTER = TypeAdapter(Sha256)
 
 EvidenceType = Literal[
     "entity_context",
@@ -529,11 +529,3 @@ def _output(trigger_set: DailyResearchTriggerSet) -> DailyResearchTriggerOutput:
         content_digest=_sha256(content),
         content=content,
     )
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return _SHA256_ADAPTER.validate_python(hashlib.sha256(content).hexdigest())

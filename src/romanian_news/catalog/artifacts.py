@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import datetime
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog_transport import catalog_query
+from romanian_news.identity import canonical_json as canonical_json
+from romanian_news.identity import sha256 as sha256
 
 
 class ArtifactFile(NewsModel):
@@ -276,11 +276,3 @@ def version_digests(version_ids: tuple[Sha256, ...]) -> dict[Sha256, Sha256]:
     if set(result) != set(version_ids):
         raise ValueError("Article inputs reference unknown feed snapshots")
     return result
-
-
-def canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

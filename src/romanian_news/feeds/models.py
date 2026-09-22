@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
@@ -10,6 +8,7 @@ from urllib.parse import urlsplit
 from pydantic import Field, HttpUrl, model_validator
 
 from romanian_news import BUCHAREST, FeedId, NewsModel, OutletId, Sha256
+from romanian_news.identity import canonical_json, sha256
 
 
 class FeedSpec(NewsModel):
@@ -258,23 +257,11 @@ def legacy_feed_entry_event_id(entry: FeedEntry, feed_content_digest: Sha256) ->
 
 
 def _feed_entry_payload_id(payload: dict[str, object]) -> Sha256:
-    content = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode()
-    return hashlib.sha256(content).hexdigest()
+    return sha256(canonical_json(payload))
 
 
 def registry_version_id(feeds: tuple[FeedSpec, ...]) -> Sha256:
-    content = json.dumps(
-        [feed.model_dump(mode="json") for feed in feeds],
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode()
-    return hashlib.sha256(content).hexdigest()
+    return sha256(canonical_json([feed.model_dump(mode="json") for feed in feeds]))
 
 
 def feed_schedule_slot(observed_at: datetime) -> datetime:

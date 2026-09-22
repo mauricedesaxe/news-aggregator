@@ -7,7 +7,7 @@ from datetime import date
 from typing import Annotated, Literal
 
 from openai.types.chat import ChatCompletionMessageParam
-from pydantic import Field, TypeAdapter, ValidationError, model_validator
+from pydantic import Field, ValidationError, model_validator
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.attempts import ModelCall, record_model_attempt
@@ -18,6 +18,8 @@ from romanian_news.analysis.relevance_v3 import ImpactDecision
 from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import DailyClusterSet
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 from romanian_news.storage import read_verified_r2_object
 from romanian_news.themes import (
     AliasedReaderSubjectThemeSet,
@@ -50,7 +52,6 @@ ASSESSMENT_PROMPT = (
 )
 ASSESSMENT_MAX_TOKENS = 16000
 _TIER_ORDER = {"main": 0, "worth_knowing": 1, "excluded": 2}
-_SHA256_ADAPTER = TypeAdapter(Sha256)
 
 Tier = Literal["main", "worth_knowing", "excluded"]
 
@@ -870,11 +871,3 @@ def _output(value: DailySubjectAssessmentSet) -> DailySubjectAssessmentOutput:
         content_digest=_sha256(content),
         content=content,
     )
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

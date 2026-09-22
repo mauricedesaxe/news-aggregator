@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import time
@@ -30,6 +29,8 @@ from romanian_news.analysis.tracing import (
 from romanian_news.articles.models import ExtractedArticle
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 
 ARTICLE_SENTIMENT_PROMPT = (
     "Assess the sentiment and practical direction of this Romanian news article. Sentiment "
@@ -333,11 +334,3 @@ def validate_sentiment_evidence(
 def _normalize_quote(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold().translate(_ROMANIAN_COMMA_VARIANTS)
     return " ".join(re.findall(r"\w+", normalized))
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

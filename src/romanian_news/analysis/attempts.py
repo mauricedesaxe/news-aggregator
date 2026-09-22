@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Literal, Protocol
@@ -10,6 +8,8 @@ from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.tracing import ModelTraceReference
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 
 
 class ModelCall(NewsModel):
@@ -185,11 +185,3 @@ def _response_time(value: object) -> datetime | None:
 
 def _fallback_response_id(request_id: Sha256, attempt_index: int) -> str:
     return request_id if attempt_index == 0 else f"{request_id}:{attempt_index}"
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -29,6 +28,8 @@ from romanian_news.feeds.models import (
 )
 from romanian_news.feeds.parsing import parse_feed
 from romanian_news.http import create_news_session, get_with_validated_redirects
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 from romanian_news.storage import r2_s3_config
 
 _USER_AGENT = "Romanian news aggregator/1.0 (+https://github.com/mauricedesaxe/news-aggregator)"
@@ -310,11 +311,3 @@ def _dlt_feed_entry_payload(
     payload = entry.model_dump(mode="json")
     payload["feed_content_digest"] = feed_content_digest
     return payload
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

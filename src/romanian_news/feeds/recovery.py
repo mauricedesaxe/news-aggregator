@@ -15,7 +15,7 @@ from pydantic import AliasChoices, Field
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.catalog import feeds as feed_catalog
-from romanian_news.catalog.artifacts import artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import artifact_file
 from romanian_news.catalog.feeds import catalog_feed_entry_events
 from romanian_news.config import NEWS_R2_BUCKET
 from romanian_news.feeds.acquisition import (
@@ -28,6 +28,7 @@ from romanian_news.feeds.models import (
     FeedEntryEventOccurrence,
     FeedSnapshotEventOccurrence,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import (
     publish_immutable_r2_objects,
     r2_s3_config,

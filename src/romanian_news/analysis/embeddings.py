@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -18,6 +16,8 @@ from romanian_news.analysis.tracing import ProviderEmbeddingRequest, trace_provi
 from romanian_news.articles.models import ExtractedArticle
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import existing_current_artifact_ids
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 from romanian_news.storage import read_verified_r2_object
 
 EMBEDDING_TEXT_POLICY = "title-body-1000-v1"
@@ -220,11 +220,3 @@ def embedding_request_id(
             }
         )
     )
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

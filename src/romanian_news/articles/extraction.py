@@ -1,4 +1,3 @@
-import hashlib
 import json
 import re
 from datetime import UTC
@@ -9,6 +8,8 @@ from pydantic import HttpUrl
 from romanian_news import BUCHAREST, Sha256
 from romanian_news.articles.models import ExtractedArticle
 from romanian_news.feeds.models import FeedEntry, FeedSpec
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 
 _TRACKING_PARAMETERS = frozenset(
     {
@@ -159,11 +160,3 @@ def _plain_text(value: str) -> str:
 
 def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", value.replace("\u00ad", "").replace("\u00a0", " ")).strip()
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()
