@@ -11,6 +11,7 @@ from pydantic import AwareDatetime, Field
 from romanian_news import NewsModel, Sha256
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import canonical_json, sha256
+from romanian_news.video_digest.errors import VideoDigestCheckpointConflictError
 from romanian_news.video_digest.models import (
     BusySlot,
     ClaimedSlot,
@@ -431,8 +432,9 @@ def run_video_digest(
 
         action = next_action(state)
         if action is None:
-            outcome = RunFailed()
-            return outcome, alert_disposition(request.slot.slot_id, outcome)
+            raise VideoDigestCheckpointConflictError(
+                "Active video digest slot has no durable next action"
+            )
         execution = _execute(action, ports)
         if isinstance(execution, ActionWaiting):
             outcome = RunDeferred(

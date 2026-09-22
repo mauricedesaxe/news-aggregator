@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from datetime import datetime
 from typing import Protocol
@@ -62,7 +63,13 @@ def scheduled_video_digest_slot(scheduled_at: datetime) -> ScheduledSlot:
     )
 )
 def orchestrate_video_digest(context: OpExecutionContext) -> None:
-    slot_id = SlotId(context.run.tags["news/video_digest_slot_id"])
+    slot_value = context.run.tags.get("news/video_digest_slot_id")
+    if slot_value is None or re.fullmatch(r"[0-9a-f]{64}", slot_value) is None:
+        raise dg.Failure(
+            "Video digest run requires a valid news/video_digest_slot_id tag",
+            allow_retries=False,
+        )
+    slot_id = SlotId(slot_value)
     if runtime_factory is None:
         raise dg.Failure(
             "Video digest production adapters are not configured",
