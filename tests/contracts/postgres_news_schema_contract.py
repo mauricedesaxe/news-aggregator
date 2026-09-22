@@ -340,7 +340,7 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         ).fetchall()
 
     assert "debt_transcript_projection_items" not in tables
-    assert len(tables) == 51
+    assert len(tables) == 53
     assert migrations == [
         (1, "initial", news_schema.NEWS_CATALOG_MIGRATIONS[0].sha256),
         (2, "video_digest", news_schema.NEWS_CATALOG_MIGRATIONS[1].sha256),
@@ -359,6 +359,7 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         (7, "video_digest_media_evidence", news_schema.NEWS_CATALOG_MIGRATIONS[6].sha256),
         (8, "video_digest_orchestration", news_schema.NEWS_CATALOG_MIGRATIONS[7].sha256),
         (9, "video_digest_publication", news_schema.NEWS_CATALOG_MIGRATIONS[8].sha256),
+        (10, "video_digest_feedback", news_schema.NEWS_CATALOG_MIGRATIONS[9].sha256),
     ]
 
 
