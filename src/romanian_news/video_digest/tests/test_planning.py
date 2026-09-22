@@ -14,6 +14,7 @@ from romanian_news.reports import (
     ReportEvent,
     ReportSubjectCitation,
 )
+from romanian_news.video_digest import preflight
 from romanian_news.video_digest.planning import (
     GenerationAuthorization,
     PlanningAttempt,
@@ -178,10 +179,6 @@ def _attempt(
 def test_policy_is_frozen_strict_and_content_addressed() -> None:
     policy = _policy()
 
-    assert policy.target_spoken_words == 30
-    assert policy.spoken_word_tolerance == 5
-    assert policy.story_duration_ms == 15_000
-    assert policy.maximum_planning_attempt_index == 2
     assert policy_bundle_digest(policy) == policy_bundle_digest(_policy())
     assert policy_bundle_digest(policy) != policy_bundle_digest(
         _policy(planning_prompt_digest="0" * 64)
@@ -190,6 +187,15 @@ def test_policy_is_frozen_strict_and_content_addressed() -> None:
         policy.__setattr__("story_duration_ms", 14_000)
     with pytest.raises(ValidationError):
         VideoDigestPolicyBundle.model_validate(policy.model_dump() | {"story_duration_ms": "15000"})
+
+
+def test_production_policy_pins_the_planning_contract() -> None:
+    policy = preflight.PRODUCTION_POLICY.definition.policy
+
+    assert policy.target_spoken_words == 30
+    assert policy.spoken_word_tolerance == 5
+    assert policy.story_duration_ms == 15_000
+    assert policy.maximum_planning_attempt_index == 2
 
 
 def test_artifact_content_models_do_not_contain_their_own_artifact_version() -> None:
@@ -348,6 +354,19 @@ def test_rejected_attempt_records_structured_failures_but_cannot_be_verified() -
     assert rejected.failures[0].code == "story_rejected"
     with pytest.raises(ValueError, match="accepted planning attempt"):
         accept_planning_attempt(_report(), policy, rejected)
+
+
+def test_accepted_attempt_cannot_be_rebased_onto_a_different_policy() -> None:
+    policy = _policy()
+    plan = create_screenplay_plan(_report(), REPORT_VERSION, POLICY_VERSION, policy, _stories())
+    attempt = _attempt(plan, policy)
+
+    with pytest.raises(ValueError, match="does not match the supplied report and policy"):
+        accept_planning_attempt(
+            _report(),
+            _policy(planning_prompt_digest="0" * 64),
+            attempt,
+        )
 
 
 def test_authorization_binds_plan_to_ordered_accepted_evidence() -> None:

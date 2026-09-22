@@ -24,7 +24,7 @@ from romanian_news.reports import (
     ReportEvent,
     ReportSubjectCitation,
 )
-from romanian_news.video_digest import preflight
+from romanian_news.video_digest import planning, preflight
 from romanian_news.video_digest.models import (
     DigestPlan,
     SlotId,
@@ -183,6 +183,8 @@ class _Harness:
         self.events: list[str] = []
         self.story_inputs: list[dict[str, Any]] = []
         self.planning_inputs: list[dict[str, Any]] = []
+        self.story_files: dict[StoryId, Any] = {}
+        self.manifest_file: Any = None
 
         monkeypatch.setattr(
             preflight, "read_planning_attempts", lambda _edition_id: tuple(self.attempts)
@@ -193,13 +195,6 @@ class _Harness:
         monkeypatch.setattr(preflight, "checkpoint_story_verification", self.checkpoint_story)
         monkeypatch.setattr(preflight, "checkpoint_edition_verification", self.checkpoint_manifest)
         monkeypatch.setattr(preflight, "record_model_attempt", self.record_model_attempt)
-        authorize = preflight.authorize_generation
-
-        def record_authorization(verified):
-            self.events.append("authorize")
-            return authorize(verified)
-
-        monkeypatch.setattr(preflight, "authorize_generation", record_authorization)
 
     def publish(self, objects: Iterable[tuple[str, bytes]]) -> None:
         for key, content in objects:
@@ -250,6 +245,7 @@ class _Harness:
     ) -> None:
         del recorded_at
         assert self.objects[evidence_file.r2_key] == evidence_file.content
+        self.story_files[story_id] = evidence_file
         self.events.append(f"story:{story_id}")
 
     def checkpoint_manifest(
@@ -261,6 +257,7 @@ class _Harness:
     ) -> None:
         del recorded_at
         assert self.objects[manifest_file.r2_key] == manifest_file.content
+        self.manifest_file = manifest_file
         self.events.append("manifest")
 
     def record_model_attempt(self, response: ChatCompletion, **values: Any):
@@ -326,9 +323,23 @@ def test_preflight_preserves_report_order_isolates_verifiers_and_replays_without
         for item in harness.story_inputs
     )
     assert harness.events[0] == "attempt:0:accepted"
-    assert harness.events[-2:] == ["authorize", "manifest"]
-    assert all(event.startswith("story:") for event in harness.events[1:-2])
+    assert harness.events[-1] == "manifest"
+    assert all(event.startswith("story:") for event in harness.events[1:-1])
     assert provider_calls == 3
+
+    authorization = planning.GenerationAuthorization.model_validate_json(
+        harness.manifest_file.content, strict=True
+    )
+    assert authorization == prepared.authorization
+    ordered_story_files = [harness.story_files[story.story_id] for story in prepared.plan.stories]
+    assert authorization.ordered_verification_evidence_digests == tuple(
+        planning.verification_evidence_digest(
+            planning.StoryVerificationEvidence.model_validate_json(
+                harness.objects[file.r2_key], strict=True
+            )
+        )
+        for file in ordered_story_files
+    )
 
     def fail_provider(request: ProviderChatRequest) -> ChatCompletion:
         del request
@@ -372,8 +383,11 @@ def test_preflight_bounds_whole_plan_rewrites_and_returns_structured_exhaustion(
         if _system_prompt(item) == preflight.PLANNING_PROMPT
     ]
     assert [len(item["prior_failures"]) for item in planning_requests] == [0, 1, 2]
+    assert [failure.code for failure in raised.value.failure.attempts[0].failures] == [
+        "story_0:unsupported_claim",
+        "story_1:unsupported_claim",
+    ]
     assert "manifest" not in harness.events
-    assert "authorize" not in harness.events
     assert not any(event.startswith("story:") for event in harness.events)
 
 
@@ -415,20 +429,129 @@ def test_provider_model_mismatch_is_recorded_as_a_rejected_attempt(
     )
 
 
-def test_policy_publication_writes_r2_before_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[str] = []
-    monkeypatch.setattr(
-        preflight,
-        "publish_immutable_r2_objects",
-        lambda _objects: calls.append("r2"),
-    )
-    monkeypatch.setattr(
-        preflight,
-        "record_policy_bundle",
-        lambda file, *, recorded_at: calls.append("catalog") or file.version_id,
-    )
+def test_policy_publication_records_durable_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    published: dict[str, bytes] = {}
+
+    def publish(objects: Iterable[tuple[str, bytes]]) -> None:
+        for key, content in objects:
+            published[key] = content
+
+    def record(file: Any, *, recorded_at: datetime) -> str:
+        del recorded_at
+        assert published[file.r2_key] == file.content
+        return file.version_id
+
+    monkeypatch.setattr(preflight, "publish_immutable_r2_objects", publish)
+    monkeypatch.setattr(preflight, "record_policy_bundle", record)
 
     version_id = preflight.publish_policy()
 
     assert version_id == preflight.PRODUCTION_POLICY.artifact.version_id
-    assert calls == ["r2", "catalog"]
+
+
+def _rejecting_provider(requests: list[ProviderChatRequest]) -> Any:
+    def provider(request: ProviderChatRequest) -> ChatCompletion:
+        requests.append(request)
+        if _system_prompt(request) == preflight.PLANNING_PROMPT:
+            return _response(f"plan-{len(requests)}", _plan_content(), request["model"])
+        return _response(
+            f"verify-{len(requests)}",
+            json.dumps(
+                {
+                    "status": "rejected",
+                    "failures": [{"code": "unsupported_claim", "message": "No evidence"}],
+                }
+            ),
+            request["model"],
+        )
+
+    return provider
+
+
+def test_prepare_paid_generation_rejects_a_lease_for_a_different_edition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _Harness(monkeypatch)
+    report = _report()
+    wrong_edition = SlotLease(
+        slot_id=SlotId("5" * 64),
+        edition_id=edition_id("b" * 64, "c" * 64),
+        owner_token="owner",
+        expires_at=datetime.now(UTC) + timedelta(minutes=10),
+        claim_count=1,
+    )
+
+    with pytest.raises(ValueError, match="Planning inputs do not match the claimed edition"):
+        preflight.prepare_paid_generation(wrong_edition, report)
+
+
+def test_recorded_accepted_plan_mismatch_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    harness = _Harness(monkeypatch)
+
+    def provider(request: ProviderChatRequest) -> ChatCompletion:
+        if _system_prompt(request) == preflight.PLANNING_PROMPT:
+            return _response("plan-1", _plan_content(), request["model"])
+        return _response("verify-1", '{"status":"accepted","failures":[]}', request["model"])
+
+    preflight.prepare_paid_generation(_lease(), _report(), provider=provider)
+    harness.attempts[0] = harness.attempts[0].model_copy(
+        update={"accepted_plan_artifact_version_id": "0" * 64}
+    )
+
+    with pytest.raises(ValueError, match="Recorded accepted plan does not match"):
+        preflight.prepare_paid_generation(_lease(), _report(), provider=provider)
+
+
+def test_pre_recorded_rejections_exhaust_without_provider_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _Harness(monkeypatch)
+    first_requests: list[ProviderChatRequest] = []
+    with pytest.raises(preflight.PlanningExhaustedError):
+        preflight.prepare_paid_generation(
+            _lease(), _report(), provider=_rejecting_provider(first_requests)
+        )
+
+    def fail_provider(request: ProviderChatRequest) -> ChatCompletion:
+        del request
+        pytest.fail("an exhausted edition must not call the provider")
+
+    with pytest.raises(preflight.PlanningExhaustedError) as raised:
+        preflight.prepare_paid_generation(_lease(), _report(), provider=fail_provider)
+
+    assert len(raised.value.failure.attempts) == 3
+    assert len(first_requests) == 9
+
+
+def test_resume_feeds_recorded_rejections_to_the_next_planning_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _Harness(monkeypatch)
+    exhausting_requests: list[ProviderChatRequest] = []
+    with pytest.raises(preflight.PlanningExhaustedError):
+        preflight.prepare_paid_generation(
+            _lease(), _report(), provider=_rejecting_provider(exhausting_requests)
+        )
+    harness.attempts[:] = harness.attempts[:1]
+    harness.events.clear()
+    harness.planning_inputs.clear()
+
+    def provider(request: ProviderChatRequest) -> ChatCompletion:
+        if _system_prompt(request) == preflight.PLANNING_PROMPT:
+            harness.planning_inputs.append(_request_context(request))
+            return _response("plan-resumed", _plan_content(), request["model"])
+        return _response("verify-resumed", '{"status":"accepted","failures":[]}', request["model"])
+
+    prepared = preflight.prepare_paid_generation(_lease(), _report(), provider=provider)
+
+    assert harness.events[0] == "attempt:1:accepted"
+    prior_failures = harness.planning_inputs[0]["prior_failures"]
+    assert [item["attempt_index"] for item in prior_failures] == [0]
+    assert [failure["code"] for item in prior_failures for failure in item["failures"]] == [
+        "story_0:unsupported_claim",
+        "story_1:unsupported_claim",
+    ]
+    assert tuple(story.report_subject_id for story in prepared.plan.stories) == (
+        SUBJECT_ONE,
+        SUBJECT_TWO,
+    )
