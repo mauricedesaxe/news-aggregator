@@ -14,7 +14,7 @@ Verification on 2026-09-22 established these production facts:
 | Reader deployment | Pass | Railway deployed repository commit `abdb3e6` successfully |
 | Public media origin | Pass | `romanian-news-public-media` is served at `https://news-media.alexlazar.dev` with active TLS 1.2 or newer |
 | R2 custom-domain probe | Pass | The permanent smoke object returns exact bytes, `Content-Length`, `Accept-Ranges`, and a valid `206` byte range |
-| Dagster deployment | Repair pending | The workflow pinned an annotated tag object instead of its commit; PR #42 repairs all six action references |
+| Dagster deployment | Blocked | PR #42 repairs an invalid annotated tag-object pin, but GitHub still fails every workflow job before assigning a hosted runner |
 | Execution ownership | Decided | Dagster owns all background work; the unrelated Railway worker remains untouched |
 | Schedule ownership | Safe, inactive | `scheduled_video_digest` is registered `STOPPED` and excluded from production activation |
 | Subtitle timing | Blocked | No production subtitle timing adapter is installed |
@@ -28,6 +28,12 @@ The production reader has `NEWS_PUBLIC_MEDIA_R2_BUCKET=romanian-news-public-medi
 `NEWS_PUBLIC_MEDIA_BASE_URL=https://news-media.alexlazar.dev`. The probe object is
 `verification/production-smoke-v1.txt`; its body SHA-256 is
 `9767a285d5f6e4d8ce4c2ea2f1afdcc3b6073c92d93e235035bfcfcf61a46716`.
+
+GitHub Actions run `35725377121` proves the remaining deployment failure is outside the workflow.
+The definition job received no runner ID or runner name and executed zero steps. The same failure
+affects every job in the independent CI workflow. Repository Actions are enabled, all actions are
+allowed, and the production environment has no reviewer or branch-policy gate. Check the account's
+hosted-runner billing, spending limit, and Actions entitlement before changing workflow YAML again.
 
 ## Activation prerequisites
 
