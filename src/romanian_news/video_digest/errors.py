@@ -8,3 +8,11 @@ class VideoDigestLeaseLostError(VideoDigestCatalogError):
 
 class VideoDigestCheckpointConflictError(VideoDigestCatalogError):
     """Stored video digest state conflicts with an idempotent request."""
+
+
+class VideoDigestFeedbackConflictError(VideoDigestCatalogError):
+    """A feedback ID already names a different payload or lineage."""
+
+
+class VideoDigestFeedbackTargetUnavailableError(ValueError):
+    """The requested published edition or story is unavailable."""
