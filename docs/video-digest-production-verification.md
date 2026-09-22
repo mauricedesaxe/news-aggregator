@@ -16,8 +16,8 @@ Verification on 2026-09-22 established these production facts:
 | Dagster deployment | Blocked | GitHub deployment jobs fail before executing steps; the video runtime factory is not configured |
 | Schedule ownership | Safe, inactive | `scheduled_video_digest` is registered `STOPPED` and excluded from production activation |
 | Subtitle timing | Blocked | No production subtitle timing adapter is installed |
-| Incident delivery | Blocked | Alert selection is implemented, but no video incident transport is installed |
-| Video heartbeat | Blocked | Existing heartbeats cover reports and research, not the video schedule |
+| Incident delivery | Blocked | Alert selection is implemented, but no video incident transport or dedicated escalation policy is installed |
+| Video heartbeat | Blocked | Better Stack has daily report, research trigger, and morning readability heartbeats, but no video heartbeat |
 | R2 custom-domain probe | Blocked | No public-media origin or bucket is configured in production |
 
 The Railway service named `romanian-news-worker` is not evidence of a deployed worker. Its observed
