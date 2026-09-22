@@ -167,6 +167,19 @@ def existing_current_artifact_ids(artifact_ids: tuple[str, ...]) -> set[str]:
     return found
 
 
+def current_artifact_uses_run(artifact_id: str, run_id: Sha256) -> bool:
+    """Return whether an artifact head was produced by the exact run."""
+    rows = catalog_query(
+        """
+        SELECT 1
+        FROM artifacts artifact
+        WHERE artifact.id = %s AND artifact.current_run_id = %s
+        """,
+        [artifact_id, run_id],
+    )
+    return bool(rows)
+
+
 def run_exists(run_id: Sha256) -> bool:
     return run_status(run_id) is not None
 
