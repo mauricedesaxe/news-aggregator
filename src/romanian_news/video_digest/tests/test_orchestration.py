@@ -389,6 +389,44 @@ def test_runner_resumes_each_durable_stage_without_repeating_side_effects(
     assert catalog.events[:4] == ["read", "reacquire", "read", "renew"]
 
 
+def test_runner_converges_across_process_restarts_without_replaying_actions() -> None:
+    catalog = _Catalog(ScheduledResume(slot=SLOT))
+    ports = _ports(
+        catalog,
+        {
+            "planning": GenerationResume(slot=SLOT, lease=LEASE),
+            "generation": AssemblyResume(slot=SLOT, lease=LEASE, attempts=()),
+            "assembly": SubtitleResume(slot=SLOT, lease=LEASE, video=VIDEO, attempts=()),
+            "subtitles": PublicationResume(slot=SLOT, lease=LEASE, handoff=HANDOFF),
+            "publication": PublishedResume(slot=SLOT),
+        },
+    )
+    request = VideoDigestRunRequest(
+        slot=SLOT, owner_token="owner", source=SourceReady(edition=EDITION)
+    )
+
+    outcomes = [
+        run_video_digest(
+            request,
+            cast(CatalogPort, catalog),
+            ports,
+            now=lambda: NOW + timedelta(minutes=1),
+            max_actions=action_budget,
+        )[0]
+        for action_budget in (2, 1, 1, 1, 1, 1)
+    ]
+
+    assert (
+        outcomes[:5]
+        == [RunDeferred(reason="runner action bound reached", retry_after_seconds=300)] * 5
+    )
+    assert outcomes[5] == RunPublished()
+    assert [
+        len(cast(_Port, getattr(ports, name)).calls)
+        for name in ("planning", "generation", "assembly", "subtitles", "publication")
+    ] == [1, 1, 1, 1, 1]
+
+
 def test_deadline_reacquires_before_terminalizing_without_renewal() -> None:
     catalog = _Catalog(PlanningResume(slot=SLOT, lease=LEASE))
     request = VideoDigestRunRequest(
