@@ -376,7 +376,9 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
     def publish_clip(key: str, content: bytes, *, retention: str, source_lineage: str) -> None:
         events.append("private")
         assert retention == "permanent"
-        assert source_lineage == candidate.request_id
+        assert source_lineage == sha256(
+            f"{story.story_id}:accepted-clip\0{sha256(content)}".encode()
+        )
         published[key] = content
 
     def checkpoint(*_args, validation_file, **_kwargs) -> None:
@@ -460,6 +462,62 @@ def _processing_attempt(
         cost=UnknownAttemptCost(reason="test fixture"),
     )
     return attempt, candidate
+
+
+def test_byte_identical_candidates_share_stable_accepted_object_lineage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    edition = EditionId("e" * 64)
+    story = _story(edition, 0)
+    content = b"identical candidate bytes"
+    attempts = tuple(_processing_attempt(story, content, name) for name in ("first", "second"))
+    active: list[GenerationAttemptReference] = []
+    stored: dict[str, tuple[bytes, str]] = {}
+    accepted_requests: list[str] = []
+    probe = media.MediaProbe(
+        duration_ms=1000,
+        video_duration_ms=1000,
+        audio_duration_ms=1000,
+        video_start_ms=0,
+        audio_start_ms=0,
+        video_frames=24,
+        audio_frames=32,
+        video_codec="h264",
+        width=1344,
+        height=768,
+        frame_rate="24/1",
+        pixel_format="yuv420p",
+        audio_codec="aac",
+        channels=2,
+        sample_rate_hz=32000,
+    )
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: tuple(active))
+    monkeypatch.setattr(media, "read_verified_r2_object", lambda *_args: content)
+    monkeypatch.setattr(media, "validate_media_file", lambda *_args, **_kwargs: probe)
+    monkeypatch.setattr(media, "publish_immutable_r2_objects", lambda _objects: None)
+
+    def publish_clip(key: str, value: bytes, *, retention: str, source_lineage: str) -> None:
+        assert retention == "permanent"
+        existing = stored.setdefault(key, (value, source_lineage))
+        if existing != (value, source_lineage):
+            raise ResearchObjectIntegrityError("object classification differs")
+
+    def checkpoint(_lease, request_id, *, validation_file, **_kwargs) -> None:
+        assert json.loads(validation_file.content)["request_id"] == request_id
+        accepted_requests.append(request_id)
+
+    monkeypatch.setattr(media, "publish_private_video_object", publish_clip)
+    monkeypatch.setattr(media, "checkpoint_generation_acceptance", checkpoint)
+
+    outcomes = []
+    for attempt, candidate in attempts:
+        active[:] = [attempt]
+        outcomes.append(media.accept_candidate(_lease(edition), candidate, story))
+
+    assert all(isinstance(outcome, media.AcceptedCandidate) for outcome in outcomes)
+    assert accepted_requests == [candidate.request_id for _, candidate in attempts]
+    assert accepted_requests[0] != accepted_requests[1]
+    assert len(stored) == 1
 
 
 def test_acceptance_replay_rejects_a_candidate_that_differs_from_stored_media(
