@@ -31,9 +31,12 @@ from romanian_news.video_digest.models import (
     GenerationRequestIdentity,
     MeasuredAttemptCost,
     PlannedStory,
+    PublicationAttemptReady,
+    PublicationCheckpointSuperseded,
     PublicationIntent,
     PublicationState,
     PublicationStatus,
+    PublishedPublication,
     PublishedSubtitleAvailable,
     ScheduledSlot,
     SlotLease,
@@ -80,6 +83,7 @@ class PublicationRun:
     verification_file: ArtifactFile
     publication_failure_file: ArtifactFile
     slot_failure_file: ArtifactFile
+    attempt_index: int = 0
 
 
 def _sha256_id(value: int) -> str:
@@ -188,7 +192,7 @@ def _publication_intent(
             expected_key=expected_subtitle_key,
             content_digest=subtitle_file.content_digest,
             byte_size=len(subtitle_file.content),
-            media_type=subtitle_file.media_type,
+            media_type="text/vtt",
         )
         if subtitle_file is not None
         else None
@@ -199,7 +203,7 @@ def _publication_intent(
             expected_video_key=expected_video_key,
             video_digest=assembled_file.content_digest,
             video_byte_size=len(assembled_file.content),
-            video_media_type=assembled_file.media_type,
+            video_media_type="video/mp4",
             subtitle=subtitle,
             source_video_version_id=video_source,
             source_subtitle_version_id=subtitle_source,
@@ -208,7 +212,7 @@ def _publication_intent(
         expected_video_key=expected_video_key,
         video_digest=assembled_file.content_digest,
         video_byte_size=len(assembled_file.content),
-        video_media_type=assembled_file.media_type,
+        video_media_type="video/mp4",
         subtitle=subtitle,
         source_video_version_id=video_source,
         source_subtitle_version_id=subtitle_source,
@@ -324,8 +328,13 @@ def _walk_publication_pipeline(
         identity,
         assembled_file,
         subtitle_file,
-        expected_video_key=f"video-digest/{seed}/public.mp4",
-        expected_subtitle_key=f"video-digest/{seed}/public.vtt",
+        expected_video_key=(
+            f"video-digests/{identity.edition_id}/{assembled_file.content_digest}.mp4"
+        ),
+        expected_subtitle_key=(
+            f"video-digests/{identity.edition_id}/"
+            f"{subtitle_file.content_digest if subtitle_file is not None else 'unused'}.vtt"
+        ),
     )
     run = PublicationRun(
         recorded_at=recorded_at,
@@ -516,16 +525,25 @@ def _walk_publication_pipeline(
         return run
 
     video_digest_catalog.record_publication_intent(lease, intent, recorded_at=recorded_at)
+    attempt = video_digest_catalog.begin_publication_attempt(
+        lease, intent.publication_id, recorded_at=recorded_at
+    )
+    assert isinstance(attempt, PublicationAttemptReady)
     if stop_at == "intent":
         return run
     video_digest_catalog.checkpoint_publication_progress(
-        lease, intent.publication_id, UploadingPublication(), recorded_at=recorded_at
+        lease,
+        intent.publication_id,
+        run.attempt_index,
+        UploadingPublication(),
+        recorded_at=recorded_at,
     )
     if stop_at == "uploading":
         return run
     video_digest_catalog.checkpoint_publication_progress(
         lease,
         intent.publication_id,
+        run.attempt_index,
         UploadedPublication(evidence_artifact_version_id=run.upload_file.version_id),
         evidence_file=run.upload_file,
         recorded_at=recorded_at,
@@ -535,13 +553,16 @@ def _walk_publication_pipeline(
     video_digest_catalog.checkpoint_publication_progress(
         lease,
         intent.publication_id,
+        run.attempt_index,
         _verified_publication(run),
         evidence_file=run.verification_file,
         recorded_at=recorded_at,
     )
     if stop_at == "verified":
         return run
-    video_digest_catalog.complete_publication(lease, intent.publication_id, recorded_at=recorded_at)
+    video_digest_catalog.complete_publication(
+        lease, intent.publication_id, run.attempt_index, recorded_at=recorded_at
+    )
     return run
 
 
@@ -596,8 +617,10 @@ def test_publication_intent_conflicts_when_a_different_intent_replays(
         run.identity,
         run.assembled_file,
         run.subtitle_file,
-        expected_video_key="video-digest/20/other.mp4",
-        expected_subtitle_key="video-digest/20/other.vtt",
+        expected_video_key=(
+            f"video-digests/{run.identity.edition_id}/other-{run.assembled_file.content_digest}.mp4"
+        ),
+        expected_subtitle_key=(f"video-digests/{run.identity.edition_id}/other.vtt"),
     )
     assert divergent.publication_id != run.intent.publication_id
 
@@ -625,8 +648,8 @@ def test_publication_intent_rejects_a_source_video_from_another_edition_output(
         run.identity,
         run.assembled_file,
         run.subtitle_file,
-        expected_video_key="video-digest/30/public.mp4",
-        expected_subtitle_key="video-digest/30/public.vtt",
+        expected_video_key=run.intent.expected_video_key,
+        expected_subtitle_key="unused.vtt",
         source_video_version_id=foreign_version,
     )
 
@@ -649,8 +672,8 @@ def test_publication_intent_rejects_a_subtitle_shape_that_disagrees_with_the_edi
         run.identity,
         run.assembled_file,
         None,
-        expected_video_key="video-digest/40/public.mp4",
-        expected_subtitle_key="video-digest/40/public.vtt",
+        expected_video_key=run.intent.expected_video_key,
+        expected_subtitle_key="unused.vtt",
     )
 
     with pytest.raises(VideoDigestCheckpointConflictError, match="sources conflict"):
@@ -675,7 +698,11 @@ def test_publication_progress_persists_each_stage_with_its_evidence(
     )
 
     uploading = video_digest_catalog.checkpoint_publication_progress(
-        run.lease, run.intent.publication_id, UploadingPublication(), recorded_at=run.recorded_at
+        run.lease,
+        run.intent.publication_id,
+        run.attempt_index,
+        UploadingPublication(),
+        recorded_at=run.recorded_at,
     )
     assert uploading == PublicationStatus(
         publication_id=run.intent.publication_id,
@@ -687,10 +714,12 @@ def test_publication_progress_persists_each_stage_with_its_evidence(
     uploaded = video_digest_catalog.checkpoint_publication_progress(
         run.lease,
         run.intent.publication_id,
+        run.attempt_index,
         UploadedPublication(evidence_artifact_version_id=run.upload_file.version_id),
         evidence_file=run.upload_file,
         recorded_at=run.recorded_at,
     )
+    assert isinstance(uploaded, PublicationStatus)
     assert uploaded.stage is PublicationState.UPLOADED
     assert _fetch_row(evidence_row, (run.identity.edition_id,)) == (
         "uploaded",
@@ -701,10 +730,12 @@ def test_publication_progress_persists_each_stage_with_its_evidence(
     verified = video_digest_catalog.checkpoint_publication_progress(
         run.lease,
         run.intent.publication_id,
+        run.attempt_index,
         _verified_publication(run),
         evidence_file=run.verification_file,
         recorded_at=run.recorded_at,
     )
+    assert isinstance(verified, PublicationStatus)
     assert verified.stage is PublicationState.VERIFIED
     assert _fetch_row(evidence_row, (run.identity.edition_id,)) == (
         "verified",
@@ -731,24 +762,38 @@ def test_publication_progress_replays_completed_stages_idempotently(
     )
 
     replayed_uploading = video_digest_catalog.checkpoint_publication_progress(
-        run.lease, run.intent.publication_id, UploadingPublication(), recorded_at=run.recorded_at
+        run.lease,
+        run.intent.publication_id,
+        run.attempt_index,
+        UploadingPublication(),
+        recorded_at=run.recorded_at,
     )
-    assert replayed_uploading.stage is PublicationState.VERIFIED
+    assert replayed_uploading == PublicationCheckpointSuperseded(
+        status=PublicationStatus(
+            publication_id=run.intent.publication_id,
+            edition_id=run.identity.edition_id,
+            stage=PublicationState.VERIFIED,
+        )
+    )
     replayed_uploaded = video_digest_catalog.checkpoint_publication_progress(
         run.lease,
         run.intent.publication_id,
+        run.attempt_index,
         UploadedPublication(evidence_artifact_version_id=run.upload_file.version_id),
         evidence_file=run.upload_file,
         recorded_at=run.recorded_at,
     )
-    assert replayed_uploaded.stage is PublicationState.VERIFIED
+    assert isinstance(replayed_uploaded, PublicationCheckpointSuperseded)
+    assert replayed_uploaded.status.stage is PublicationState.VERIFIED
     replayed_verified = video_digest_catalog.checkpoint_publication_progress(
         run.lease,
         run.intent.publication_id,
+        run.attempt_index,
         _verified_publication(run),
         evidence_file=run.verification_file,
         recorded_at=run.recorded_at,
     )
+    assert isinstance(replayed_verified, PublicationStatus)
     assert replayed_verified.stage is PublicationState.VERIFIED
     assert _fetch_row(evidence_row, (run.identity.edition_id,)) == stored
 
@@ -761,6 +806,7 @@ def test_publication_progress_rejects_a_skipped_stage(postgres_news_schema: str)
         video_digest_catalog.checkpoint_publication_progress(
             run.lease,
             run.intent.publication_id,
+            run.attempt_index,
             _verified_publication(run),
             evidence_file=run.verification_file,
             recorded_at=run.recorded_at,
@@ -794,6 +840,7 @@ def test_publication_progress_rejects_divergent_replay_evidence(
         video_digest_catalog.checkpoint_publication_progress(
             run.lease,
             run.intent.publication_id,
+            run.attempt_index,
             divergent_progress,
             evidence_file=divergent_evidence,
             recorded_at=run.recorded_at,
@@ -815,6 +862,7 @@ def test_publication_progress_replays_verified_after_completion(
     status = video_digest_catalog.checkpoint_publication_progress(
         run.lease,
         run.intent.publication_id,
+        run.attempt_index,
         _verified_publication(run),
         evidence_file=run.verification_file,
         recorded_at=run.recorded_at,
@@ -835,7 +883,10 @@ def test_publication_completion_terminalizes_intent_and_slot_atomically(
     with _rejected_slot_stage("published"):
         with pytest.raises(VideoDigestCheckpointConflictError):
             video_digest_catalog.complete_publication(
-                run.lease, run.intent.publication_id, recorded_at=run.recorded_at
+                run.lease,
+                run.intent.publication_id,
+                run.attempt_index,
+                recorded_at=run.recorded_at,
             )
     assert _fetch_row(
         "SELECT stage FROM video_digest_publication_intents WHERE edition_id = %s",
@@ -847,8 +898,12 @@ def test_publication_completion_terminalizes_intent_and_slot_atomically(
     ) == ("publishing", run.lease.owner_token)
 
     published = video_digest_catalog.complete_publication(
-        run.lease, run.intent.publication_id, recorded_at=run.recorded_at
+        run.lease,
+        run.intent.publication_id,
+        run.attempt_index,
+        recorded_at=run.recorded_at,
     )
+    assert isinstance(published, PublishedPublication)
     assert published.publication_id == run.intent.publication_id
     assert published.edition_id == run.identity.edition_id
     assert _fetch_row(
@@ -869,11 +924,19 @@ def test_publication_completion_replay_returns_the_original_timestamp(
     run = _walk_publication_pipeline(seed=110, stop_at="verified")
 
     first = video_digest_catalog.complete_publication(
-        run.lease, run.intent.publication_id, recorded_at=run.recorded_at
+        run.lease,
+        run.intent.publication_id,
+        run.attempt_index,
+        recorded_at=run.recorded_at,
     )
     replayed = video_digest_catalog.complete_publication(
-        run.lease, run.intent.publication_id, recorded_at=run.recorded_at + timedelta(hours=1)
+        run.lease,
+        run.intent.publication_id,
+        run.attempt_index,
+        recorded_at=run.recorded_at + timedelta(hours=1),
     )
+    assert isinstance(first, PublishedPublication)
+    assert isinstance(replayed, PublishedPublication)
     assert replayed == first
     assert replayed.published_at == first.published_at
 
@@ -889,6 +952,8 @@ def test_publication_failure_terminalizes_intent_and_slot_atomically(
             video_digest_catalog.fail_publication(
                 run.lease,
                 run.intent.publication_id,
+                run.attempt_index,
+                expected_stage=PublicationState.UPLOADING,
                 state=PublicationState.CONFLICT,
                 evidence_file=run.publication_failure_file,
                 recorded_at=run.recorded_at,
@@ -906,6 +971,8 @@ def test_publication_failure_terminalizes_intent_and_slot_atomically(
     terminal = video_digest_catalog.fail_publication(
         run.lease,
         run.intent.publication_id,
+        run.attempt_index,
+        expected_stage=PublicationState.UPLOADING,
         state=PublicationState.CONFLICT,
         evidence_file=run.publication_failure_file,
         recorded_at=run.recorded_at,
@@ -944,6 +1011,8 @@ def test_publication_failure_replays_matching_terminal_evidence(
     first = video_digest_catalog.fail_publication(
         run.lease,
         run.intent.publication_id,
+        run.attempt_index,
+        expected_stage=PublicationState.UPLOADING,
         state=PublicationState.FAILED,
         evidence_file=run.publication_failure_file,
         recorded_at=run.recorded_at,
@@ -962,6 +1031,8 @@ def test_publication_failure_replays_matching_terminal_evidence(
     replayed = video_digest_catalog.fail_publication(
         run.lease,
         run.intent.publication_id,
+        run.attempt_index,
+        expected_stage=PublicationState.UPLOADING,
         state=PublicationState.FAILED,
         evidence_file=run.publication_failure_file,
         recorded_at=run.recorded_at + timedelta(minutes=5),
@@ -978,19 +1049,24 @@ def test_publication_failure_replay_rejects_a_divergent_terminal_state(
     video_digest_catalog.fail_publication(
         run.lease,
         run.intent.publication_id,
+        run.attempt_index,
+        expected_stage=PublicationState.UPLOADING,
         state=PublicationState.CONFLICT,
         evidence_file=run.publication_failure_file,
         recorded_at=run.recorded_at,
     )
 
-    with pytest.raises(VideoDigestCheckpointConflictError, match="publication failure conflicts"):
-        video_digest_catalog.fail_publication(
-            run.lease,
-            run.intent.publication_id,
-            state=PublicationState.FAILED,
-            evidence_file=run.publication_failure_file,
-            recorded_at=run.recorded_at,
-        )
+    replayed = video_digest_catalog.fail_publication(
+        run.lease,
+        run.intent.publication_id,
+        run.attempt_index,
+        expected_stage=PublicationState.UPLOADING,
+        state=PublicationState.FAILED,
+        evidence_file=run.publication_failure_file,
+        recorded_at=run.recorded_at,
+    )
+    assert isinstance(replayed, PublicationCheckpointSuperseded)
+    assert replayed.status.stage is PublicationState.CONFLICT
 
 
 def test_generic_slot_failure_rejects_an_active_generation(
@@ -1129,13 +1205,14 @@ def test_read_published_edition_serves_public_media_and_hides_internal_keys(
     assert edition.publication_id == run.intent.publication_id
     assert edition.slot_name is SlotName.MORNING
     assert edition.day == run.slot.bucharest_day
-    assert str(edition.video.url) == "https://media.example.com/video-digest/200/public.mp4"
+    assert str(edition.video.url) == f"{PUBLIC_MEDIA_BASE_URL}/{run.intent.expected_video_key}"
     assert edition.video.content_digest == run.assembled_file.content_digest
     assert edition.video.byte_size == len(run.assembled_file.content)
     assert edition.video.media_type == run.assembled_file.media_type
     assert isinstance(edition.subtitle, PublishedSubtitleAvailable)
-    assert (
-        str(edition.subtitle.media.url) == "https://media.example.com/video-digest/200/public.vtt"
+    assert run.intent.subtitle is not None
+    assert str(edition.subtitle.media.url) == (
+        f"{PUBLIC_MEDIA_BASE_URL}/{run.intent.subtitle.expected_key}"
     )
     assert edition.subtitle.media.content_digest == run.subtitle_file.content_digest
     assert edition.subtitle.media.byte_size == len(run.subtitle_file.content)
@@ -1234,12 +1311,15 @@ def test_list_published_editions_orders_most_recent_first_with_public_media_only
     top = summaries[0]
     assert top.publication_id == later.intent.publication_id
     assert top.day == date(2099, 9, 20)
-    assert str(top.video.url) == "https://media.example.com/video-digest/230/public.mp4"
+    assert str(top.video.url) == f"{PUBLIC_MEDIA_BASE_URL}/{later.intent.expected_video_key}"
     assert top.video.content_digest == later.assembled_file.content_digest
     assert top.video.byte_size == len(later.assembled_file.content)
     assert top.video.media_type == later.assembled_file.media_type
     assert isinstance(top.subtitle, PublishedSubtitleAvailable)
-    assert str(top.subtitle.media.url) == "https://media.example.com/video-digest/230/public.vtt"
+    assert later.intent.subtitle is not None
+    assert str(top.subtitle.media.url) == (
+        f"{PUBLIC_MEDIA_BASE_URL}/{later.intent.subtitle.expected_key}"
+    )
     leaked = top.model_dump(mode="json")
     assert set(leaked) == {
         "edition_id",

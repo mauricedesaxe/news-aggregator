@@ -17,6 +17,7 @@ from romanian_news.video_digest.errors import (
     VideoDigestLeaseLostError,
 )
 from romanian_news.video_digest.models import (
+    BusySlot,
     ClaimedSlot,
     ClaimResult,
     EditionIdentity,
@@ -85,6 +86,20 @@ def _claim_lease(
     result = _claim(slot_id, identity, owner_token=owner_token, lease_duration=lease_duration)
     assert isinstance(result, ClaimedSlot)
     return result.lease
+
+
+def _reacquire(
+    slot_id: SlotId,
+    *,
+    owner_token: str,
+    lease_duration: timedelta = timedelta(hours=1),
+) -> ClaimedSlot | BusySlot | TerminalSlot:
+    return video_digest_catalog.reacquire_slot(
+        slot_id,
+        owner_token=owner_token,
+        now=datetime.now(UTC),
+        lease_duration=lease_duration,
+    )
 
 
 def _record_artifact_versions(
@@ -347,6 +362,12 @@ def _publish_edition_and_slot(
         (publication_id, identity.edition_id, _sha256_id(artifact_start + 43), video),
     )
     connection.execute(
+        "INSERT INTO video_digest_publication_attempts "
+        "(publication_id, attempt_index, state, started_at, updated_at) "
+        "VALUES (%s, 0, 'started', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        (publication_id,),
+    )
+    connection.execute(
         "UPDATE video_digest_publication_intents SET stage = 'uploading', "
         "updated_at = CURRENT_TIMESTAMP WHERE publication_id = %s",
         (publication_id,),
@@ -362,6 +383,11 @@ def _publish_edition_and_slot(
         "verification_evidence_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
         "WHERE publication_id = %s",
         (publication_verification, publication_id),
+    )
+    connection.execute(
+        "UPDATE video_digest_publication_attempts SET state = 'succeeded', "
+        "updated_at = CURRENT_TIMESTAMP WHERE publication_id = %s AND attempt_index = 0",
+        (publication_id,),
     )
     connection.execute(
         "UPDATE video_digest_publication_intents SET stage = 'published', "
@@ -542,7 +568,8 @@ def test_claim_slot_reports_a_failed_slot_as_terminal(postgres_news_schema: str)
             "UPDATE video_digest_slots SET stage = 'failed', lease_owner_token = NULL, "
             "lease_expires_at = NULL, terminal_lease_owner_token = %s, "
             "terminal_lease_expires_at = %s, terminal_claim_count = %s, "
-            "failure_evidence_artifact_version_id = %s, updated_at = CURRENT_TIMESTAMP "
+            "failure_evidence_artifact_version_id = %s, "
+            "failure_reason = 'terminal_failure', updated_at = CURRENT_TIMESTAMP "
             "WHERE slot_id = %s",
             (
                 lease.owner_token,
@@ -596,7 +623,9 @@ def test_claim_slot_claims_a_scheduled_slot_from_scratch(postgres_news_schema: s
     assert row == ("claimed", identity.edition_id, "worker-1", result.lease.expires_at, 1, None)
 
 
-def test_claim_slot_replays_an_unexpired_same_owner_lease(postgres_news_schema: str) -> None:
+def test_reacquire_slot_replays_an_unexpired_same_owner_lease(
+    postgres_news_schema: str,
+) -> None:
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
@@ -606,14 +635,14 @@ def test_claim_slot_replays_an_unexpired_same_owner_lease(postgres_news_schema: 
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
     lease = _claim_lease(slot.slot_id, identity, owner_token="worker-1")
 
-    result = _claim(slot.slot_id, identity, owner_token=" worker-1 ")
+    result = _reacquire(slot.slot_id, owner_token=" worker-1 ")
 
     assert isinstance(result, ClaimedSlot)
     assert result.lease == lease
     assert result.lease.expires_at.tzinfo is UTC
 
 
-def test_claim_slot_skips_with_overlapping_run_while_another_owner_holds_the_lease(
+def test_reacquire_slot_is_busy_while_another_owner_holds_the_lease(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
@@ -625,9 +654,9 @@ def test_claim_slot_skips_with_overlapping_run_while_another_owner_holds_the_lea
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
     lease = _claim_lease(slot.slot_id, identity, owner_token="owner-a")
 
-    result = _claim(slot.slot_id, identity, owner_token="owner-b")
+    result = _reacquire(slot.slot_id, owner_token="owner-b")
 
-    assert result == SkippedSlot(reason=SlotSkipReason.OVERLAPPING_RUN)
+    assert result == BusySlot(retry_at=lease.expires_at)
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN) as connection:
         row = _select_slot_fence(connection, slot.slot_id)
     assert row == ("claimed", identity.edition_id, "owner-a", lease.expires_at, 1, None)
@@ -646,7 +675,7 @@ def test_claim_slot_rejects_a_claim_for_another_edition_while_the_lease_is_activ
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
     _claim_lease(slot.slot_id, identity, owner_token="owner-a")
 
-    with pytest.raises(VideoDigestCheckpointConflictError, match="another edition"):
+    with pytest.raises(VideoDigestCheckpointConflictError, match="reacquired"):
         _claim(slot.slot_id, other, owner_token="owner-b")
 
 
@@ -731,7 +760,7 @@ def test_claim_slot_rejects_a_conflicting_stored_edition_identity(
         _claim(slot.slot_id, identity, owner_token="worker-1")
 
 
-def test_claim_slot_rejects_same_owner_expired_lease_without_recovery(
+def test_reacquire_slot_recovers_same_owner_expired_lease(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
@@ -741,21 +770,17 @@ def test_claim_slot_rejects_same_owner_expired_lease_without_recovery(
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
-    _claim_lease(slot.slot_id, identity, owner_token="owner-a")
+    prior = _claim_lease(slot.slot_id, identity, owner_token="owner-a")
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
         _expire_lease(connection, slot.slot_id)
 
-    with pytest.raises(VideoDigestCheckpointConflictError, match="fresh owner token"):
-        _claim(slot.slot_id, identity, owner_token="owner-a")
+    result = _reacquire(slot.slot_id, owner_token="owner-a")
 
-    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN) as connection:
-        row = _select_slot_fence(connection, slot.slot_id)
-    assert row[:3] == ("claimed", identity.edition_id, "owner-a")
-    assert row[3] is not None and row[3] < datetime.now(UTC)
-    assert row[4] == 1
+    assert isinstance(result, ClaimedSlot)
+    assert result.lease.claim_count == prior.claim_count + 1
 
 
-def test_claim_slot_recovers_an_expired_lease_with_an_incremented_fence(
+def test_reacquire_slot_recovers_an_expired_lease_with_an_incremented_fence(
     postgres_news_schema: str,
 ) -> None:
     ensure_news_catalog_schema()
@@ -773,7 +798,7 @@ def test_claim_slot_recovers_an_expired_lease_with_an_incremented_fence(
     duration = timedelta(hours=1)
 
     before = datetime.now(UTC)
-    result = _claim(slot.slot_id, identity, owner_token="owner-b", lease_duration=duration)
+    result = _reacquire(slot.slot_id, owner_token="owner-b", lease_duration=duration)
     after = datetime.now(UTC)
 
     assert isinstance(result, ClaimedSlot)
