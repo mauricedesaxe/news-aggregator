@@ -24,17 +24,18 @@ class _ThrottlingHandler(BaseHTTPRequestHandler):
         type(self).request_count += 1
         if type(self).failures_left > 0:
             type(self).failures_left -= 1
-            if type(self).retry_after is not None:
-                self.send_header("Retry-After", type(self).retry_after)
             self.send_response(429)
+            retry_after = type(self).retry_after
+            if retry_after is not None:
+                self.send_header("Retry-After", retry_after)
             self.end_headers()
             return
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"recovered")
 
-    def log_message(self, *_args: object) -> None:
-        pass
+    def log_message(self, format: str, *args: object) -> None:
+        del format, args
 
 
 def _stop(server: HTTPServer) -> None:
@@ -52,26 +53,21 @@ def _local_session() -> tuple[requests.Session, str, HTTPServer]:
     return session, f"http://127.0.0.1:{server.server_port}/feed.xml", server
 
 
-def _record_retry_pauses(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, float]]:
-    pauses: list[tuple[str, float]] = []
-
+def _disable_retry_delays(monkeypatch: pytest.MonkeyPatch) -> None:
     def sleep_for_retry(self: Any, response: Any) -> bool:
-        retry_after = self.get_retry_after(response)
-        pauses.append(("retry_after", retry_after if retry_after is not None else -1.0))
-        return bool(retry_after)
+        return self.get_retry_after(response) is not None
 
     def sleep_backoff(self: Any) -> None:
-        pauses.append(("backoff", self.get_backoff_time()))
+        pass
 
     monkeypatch.setattr(urllib3.util.retry.Retry, "sleep_for_retry", sleep_for_retry)
     monkeypatch.setattr(urllib3.util.retry.Retry, "_sleep_backoff", sleep_backoff)
-    return pauses
 
 
 def test_news_session_retries_a_throttled_get_and_recovers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _record_retry_pauses(monkeypatch)
+    _disable_retry_delays(monkeypatch)
     _ThrottlingHandler.failures_left = 1
     _ThrottlingHandler.retry_after = "1"
     _ThrottlingHandler.request_count = 0
@@ -91,7 +87,7 @@ def test_news_session_retries_a_throttled_get_and_recovers(
 def test_news_session_stops_retrying_a_sustained_throttle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _record_retry_pauses(monkeypatch)
+    _disable_retry_delays(monkeypatch)
     _ThrottlingHandler.failures_left = 99
     _ThrottlingHandler.retry_after = None
     _ThrottlingHandler.request_count = 0

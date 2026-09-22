@@ -228,9 +228,9 @@ class _ReferenceRecordingProvider(_Provider):
         super().__init__()
         self._provided_urls = provided_urls
 
-    def submit(self, arguments: dict[str, object]) -> generation.FalSubmissionReceipt:
-        self._provided_urls.append(list(arguments["reference_video_urls"]))  # type: ignore[arg-type]
-        self._provided_urls.append(list(arguments["reference_audio_urls"]))  # type: ignore[arg-type]
+    def submit(self, arguments: dict[str, Any]) -> generation.FalSubmissionReceipt:
+        self._provided_urls.append(list(arguments["reference_video_urls"]))
+        self._provided_urls.append(list(arguments["reference_audio_urls"]))
         return super().submit(arguments)
 
 
@@ -803,6 +803,7 @@ def test_deadline_passing_while_fal_is_active_fails_the_slot(
     harness.attempts[0] = harness.attempts[0].model_copy(
         update={"stage": GenerationStage.SUBMITTED, "response_evidence": None}
     )
+    harness.policy_publications = 0
     harness.deadline = datetime(2020, 1, 1, tzinfo=UTC)
 
     outcome = generation.generate_next_candidate(
@@ -813,6 +814,7 @@ def test_deadline_passing_while_fal_is_active_fails_the_slot(
     assert "deadline passed while Fal was active" in outcome.reason
     assert harness.attempts[0].stage is GenerationStage.FAILED
     assert harness.failed_slot is True
+    assert harness.policy_publications == 0
 
 
 def test_in_progress_status_reports_progress_without_new_spend(

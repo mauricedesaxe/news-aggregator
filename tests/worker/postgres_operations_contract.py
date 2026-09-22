@@ -44,6 +44,7 @@ from romanian_news.feeds import acquisition as feed_acquisition
 from romanian_news.feeds.registry import feed_registry
 from romanian_news.storage import publish_immutable_r2_objects
 from romanian_news.worker import operations
+from tests.daily_report_catalog import daily_report, seed_daily_report
 from tests.postgres_catalog import PostgresCatalog
 
 DAY = date(2099, 9, 2)
@@ -815,7 +816,6 @@ def test_morning_report_check_requires_yesterdays_catalog_edition_before_pinging
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from romanian_news.worker import morning_report
-    from tests.reader.postgres_reader_app_e2e import _daily_report, _seed_catalog
 
     monkeypatch.setattr(
         morning_report,
@@ -837,7 +837,7 @@ def test_morning_report_check_requires_yesterdays_catalog_edition_before_pinging
 
     assert pings == []
 
-    _seed_catalog(postgres_catalog, _daily_report(date(2026, 9, 13)))
+    seed_daily_report(postgres_catalog, daily_report(date(2026, 9, 13)))
 
     result = morning_report.morning_report_check_op(dg.build_op_context())
 
