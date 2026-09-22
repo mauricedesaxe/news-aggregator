@@ -1708,7 +1708,8 @@ def checkpoint_generation_failure(
                 SET stage = 'failed', lease_owner_token = NULL, lease_expires_at = NULL,
                     terminal_lease_owner_token = %s, terminal_lease_expires_at = %s,
                     terminal_claim_count = %s,
-                    failure_evidence_artifact_version_id = %s, updated_at = %s
+                    failure_evidence_artifact_version_id = %s,
+                    failure_reason = 'terminal_failure', updated_at = %s
                 WHERE slot_id = %s AND lease_owner_token = %s AND claim_count = %s
                   AND stage = 'generating'
                 RETURNING slot_id

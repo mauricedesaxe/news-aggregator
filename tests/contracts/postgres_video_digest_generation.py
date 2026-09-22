@@ -141,9 +141,8 @@ def _expire_lease(pipeline: _GenerationPipeline) -> None:
 
 
 def _recover_lease(pipeline: _GenerationPipeline) -> ClaimedSlot:
-    recovered = video_digest_catalog.claim_slot(
+    recovered = video_digest_catalog.reacquire_slot(
         pipeline.lease.slot_id,
-        pipeline.edition,
         owner_token=f"recovery-{pipeline.seed}",
         now=datetime.now(UTC),
         lease_duration=timedelta(hours=1),
@@ -1770,22 +1769,23 @@ def test_failed_subtitles_leave_the_edition_publishable(postgres_news_schema: st
     assert pipeline.slot_stage() == ("publishing",)
 
     video = pipeline.assemble_file()
+    expected_video_key = f"video-digests/{pipeline.edition.edition_id}/{video.content_digest}.mp4"
     intent = PublicationIntent(
         publication_id=publication_id(
             edition_id_value=pipeline.edition.edition_id,
-            expected_video_key="video-digests/edition.mp4",
+            expected_video_key=expected_video_key,
             video_digest=video.content_digest,
             video_byte_size=len(video.content),
-            video_media_type=video.media_type,
+            video_media_type="video/mp4",
             subtitle=None,
             source_video_version_id=video.version_id,
             source_subtitle_version_id=None,
         ),
         edition_id=pipeline.edition.edition_id,
-        expected_video_key="video-digests/edition.mp4",
+        expected_video_key=expected_video_key,
         video_digest=video.content_digest,
         video_byte_size=len(video.content),
-        video_media_type=video.media_type,
+        video_media_type="video/mp4",
         source_video_version_id=video.version_id,
     )
     status = video_digest_catalog.record_publication_intent(
