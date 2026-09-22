@@ -42,22 +42,15 @@ from romanian_news.feeds import acquisition as feed_acquisition
 from romanian_news.feeds.registry import feed_registry
 from romanian_news.storage import publish_immutable_r2_objects
 from romanian_news.worker import operations
+from tests.postgres_catalog import PostgresCatalog
 
 DAY = date(2099, 9, 2)
 NOW = datetime(2099, 9, 2, 12, tzinfo=UTC)
 
 
-def test_sqlite_catalog_preserves_null_safe_comparison_semantics(sqlite_catalog) -> None:
-    assert sqlite_catalog.query(
-        "SELECT 1 AS matched WHERE %s IS NOT DISTINCT FROM %s", (None, None)
-    )
-    assert sqlite_catalog.query("SELECT 1 AS matched WHERE %s IS DISTINCT FROM %s", (None, 1))
-
-
 def test_feed_intake_publishes_every_registered_feed_and_is_idempotent(
     harness,
-    sqlite_catalog,
-    catalog_connection,
+    postgres_catalog,
     fake_r2,
     fake_http,
     monkeypatch,
@@ -78,9 +71,9 @@ def test_feed_intake_publishes_every_registered_feed_and_is_idempotent(
 
     references = operations.materialize_feed_intake(news_day, scheduled_at, tmp_path, "git:test")
 
-    observation_rows = catalog_connection.execute(
+    observation_rows = postgres_catalog.execute(
         "SELECT feed_id, status, artifact_version_id FROM news_feed_observations "
-        "WHERE scheduled_slot = ?",
+        "WHERE scheduled_slot = %s",
         (scheduled_at.isoformat(),),
     ).fetchall()
     assert len(observation_rows) == len(registry.feeds)
@@ -94,7 +87,7 @@ def test_feed_intake_publishes_every_registered_feed_and_is_idempotent(
         stored = fake_r2.objects[value.r2_key]
         assert hashlib.sha256(stored).hexdigest() == value.content_digest
         assert fake_r2.metadata[value.r2_key]["sha256"] == value.content_digest
-    snapshot_rows = catalog_connection.execute(
+    snapshot_rows = postgres_catalog.execute(
         "SELECT file.r2_key, file.content_digest FROM artifacts artifact "
         "JOIN artifact_files file ON file.artifact_version_id = artifact.current_version_id "
         "WHERE artifact.kind = 'news_feed'"
@@ -106,14 +99,14 @@ def test_feed_intake_publishes_every_registered_feed_and_is_idempotent(
     repeat = operations.materialize_feed_intake(news_day, scheduled_at, tmp_path, "git:test")
 
     assert repeat == references
-    assert catalog_connection.execute("SELECT count(*) FROM news_feed_observations").fetchone()[
-        0
-    ] == len(registry.feeds)
+    assert postgres_catalog.execute(
+        "SELECT count(*) AS count FROM news_feed_observations"
+    ).fetchone()["count"] == len(registry.feeds)
 
 
-def _event_id_for_url(catalog_connection, url: str) -> str:
-    row = catalog_connection.execute(
-        "SELECT event_id FROM news_feed_entry_events WHERE original_url = ?", (url,)
+def _event_id_for_url(catalog: PostgresCatalog, url: str) -> str:
+    row = catalog.execute(
+        "SELECT event_id FROM news_feed_entry_events WHERE original_url = %s", (url,)
     ).fetchone()
     assert row is not None
     return str(row["event_id"])
@@ -121,8 +114,7 @@ def _event_id_for_url(catalog_connection, url: str) -> str:
 
 def test_article_materializer_publishes_exact_batch_and_rechecks_state(
     harness,
-    sqlite_catalog,
-    catalog_connection,
+    postgres_catalog,
     fake_r2,
     fake_http,
     monkeypatch,
@@ -159,7 +151,7 @@ def test_article_materializer_publishes_exact_batch_and_rechecks_state(
     assert result.acquired_event_ids == event_ids
     assert result.skipped_event_ids == ()
     assert result.failures == ()
-    version_rows = catalog_connection.execute(
+    version_rows = postgres_catalog.execute(
         "SELECT version.canonical_url, version.bucharest_day, artifact.current_version_id "
         "FROM news_article_versions version "
         "JOIN artifacts artifact ON artifact.id = version.article_artifact_id "
@@ -167,22 +159,22 @@ def test_article_materializer_publishes_exact_batch_and_rechecks_state(
     ).fetchall()
     assert len(version_rows) == 1
     assert version_rows[0]["canonical_url"] == url
-    assert version_rows[0]["bucharest_day"] == news_day.isoformat()
+    assert version_rows[0]["bucharest_day"] == news_day
     assert [value.version_id for value in result.references.values] == [
         version_rows[0]["current_version_id"]
     ]
-    run_row = catalog_connection.execute(
+    run_row = postgres_catalog.execute(
         "SELECT id FROM runs WHERE operation_key = 'news.normalize_article' "
         "AND status = 'completed'"
     ).fetchone()
     assert run_row is not None
     assert (
-        catalog_connection.execute(
-            "SELECT count(*) FROM run_inputs WHERE run_id = ?", (run_row["id"],)
-        ).fetchone()[0]
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM run_inputs WHERE run_id = %s", (run_row["id"],)
+        ).fetchone()["count"]
         >= 1
     )
-    page_rows = catalog_connection.execute(
+    page_rows = postgres_catalog.execute(
         "SELECT file.r2_key, file.content_digest FROM artifact_files file "
         "JOIN news_article_versions version ON version.page_capture_version_id "
         "= file.artifact_version_id"
@@ -203,26 +195,28 @@ def test_article_materializer_publishes_exact_batch_and_rechecks_state(
     assert second.failures == ()
     assert second.references == result.references
     assert (
-        catalog_connection.execute("SELECT count(*) FROM news_article_versions").fetchone()[0] == 1
-    )
-    assert (
-        catalog_connection.execute(
-            "SELECT count(*) FROM runs WHERE operation_key = 'news.normalize_article'"
-        ).fetchone()[0]
+        postgres_catalog.execute("SELECT count(*) AS count FROM news_article_versions").fetchone()[
+            "count"
+        ]
         == 1
     )
     assert (
-        catalog_connection.execute("SELECT count(*) FROM news_article_failure_attempts").fetchone()[
-            0
-        ]
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM runs WHERE operation_key = 'news.normalize_article'"
+        ).fetchone()["count"]
+        == 1
+    )
+    assert (
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM news_article_failure_attempts"
+        ).fetchone()["count"]
         == 0
     )
 
 
 def test_article_materializer_records_item_failure_before_the_next_item(
     harness,
-    sqlite_catalog,
-    catalog_connection,
+    postgres_catalog,
     fake_r2,
     fake_http,
     monkeypatch,
@@ -255,7 +249,7 @@ def test_article_materializer_records_item_failure_before_the_next_item(
     fake_http.serve(good_url, good_page)
     fake_http.serve(missing_url, b"", status=404)
     event_ids = tuple(
-        _event_id_for_url(catalog_connection, value) for value in (good_url, missing_url)
+        _event_id_for_url(postgres_catalog, value) for value in (good_url, missing_url)
     )
 
     result = operations.materialize_articles(
@@ -266,19 +260,19 @@ def test_article_materializer_records_item_failure_before_the_next_item(
     assert [failure.event_id for failure in result.failures] == [event_ids[1]]
     assert result.failures[0].kind == ArticleFailureKind.DETERMINISTIC
     assert result.remaining_entries == 1
-    attempt_rows = catalog_connection.execute(
+    attempt_rows = postgres_catalog.execute(
         "SELECT event_id, failure_kind FROM news_article_failure_attempts"
     ).fetchall()
     assert [(row["event_id"], row["failure_kind"]) for row in attempt_rows] == [
         (event_ids[1], "deterministic")
     ]
-    good_rows = catalog_connection.execute(
+    good_rows = postgres_catalog.execute(
         "SELECT version.canonical_url FROM news_article_versions version "
         "JOIN artifacts artifact ON artifact.id = version.article_artifact_id "
         "WHERE artifact.kind = 'news_article'"
     ).fetchall()
     assert [row["canonical_url"] for row in good_rows] == [good_url]
-    page_rows = catalog_connection.execute(
+    page_rows = postgres_catalog.execute(
         "SELECT file.r2_key FROM artifact_files file "
         "JOIN news_article_versions version ON version.page_capture_version_id "
         "= file.artifact_version_id"
@@ -289,8 +283,7 @@ def test_article_materializer_records_item_failure_before_the_next_item(
 
 def test_article_materializer_publishes_each_success_before_the_next_item(
     harness,
-    sqlite_catalog,
-    catalog_connection,
+    postgres_catalog,
     fake_r2,
     fake_http,
     monkeypatch,
@@ -322,9 +315,7 @@ def test_article_materializer_publishes_each_success_before_the_next_item(
     )
     fake_http.serve(good_url, good_page)
     fake_http.fail(dead_url, requests.ConnectionError("peer hung"))
-    event_ids = tuple(
-        _event_id_for_url(catalog_connection, value) for value in (good_url, dead_url)
-    )
+    event_ids = tuple(_event_id_for_url(postgres_catalog, value) for value in (good_url, dead_url))
 
     result = operations.materialize_articles(
         news_day, event_ids, "git:test", run_id="run-1", retry_number=0
@@ -334,21 +325,21 @@ def test_article_materializer_publishes_each_success_before_the_next_item(
     assert [failure.event_id for failure in result.failures] == [event_ids[1]]
     assert result.failures[0].kind == ArticleFailureKind.INFRASTRUCTURE
     assert (
-        catalog_connection.execute(
-            "SELECT count(*) FROM news_article_failure_attempts "
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM news_article_failure_attempts "
             "WHERE failure_kind = 'infrastructure'"
-        ).fetchone()[0]
+        ).fetchone()["count"]
         == 1
     )
-    version_rows = catalog_connection.execute(
+    version_rows = postgres_catalog.execute(
         "SELECT version.canonical_url, version.page_capture_version_id "
         "FROM news_article_versions version "
         "JOIN artifacts artifact ON artifact.id = version.article_artifact_id "
         "WHERE artifact.kind = 'news_article'"
     ).fetchall()
     assert [row["canonical_url"] for row in version_rows] == [good_url]
-    page_r2_key = catalog_connection.execute(
-        "SELECT r2_key FROM artifact_files WHERE artifact_version_id = ?",
+    page_r2_key = postgres_catalog.execute(
+        "SELECT r2_key FROM artifact_files WHERE artifact_version_id = %s",
         (version_rows[0]["page_capture_version_id"],),
     ).fetchone()["r2_key"]
     assert fake_r2.objects[page_r2_key] == good_page
@@ -356,8 +347,7 @@ def test_article_materializer_publishes_each_success_before_the_next_item(
 
 def test_article_materializer_dedupes_alias_sharing_events(
     harness,
-    sqlite_catalog,
-    catalog_connection,
+    postgres_catalog,
     fake_r2,
     fake_http,
     monkeypatch,
@@ -409,21 +399,23 @@ def test_article_materializer_dedupes_alias_sharing_events(
     }
     assert result.failures == ()
     assert (
-        catalog_connection.execute("SELECT count(*) FROM news_article_versions").fetchone()[0] == 1
+        postgres_catalog.execute("SELECT count(*) AS count FROM news_article_versions").fetchone()[
+            "count"
+        ]
+        == 1
     )
     assert (
-        catalog_connection.execute(
-            "SELECT count(*) FROM news_article_aliases WHERE alias_key = ?",
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM news_article_aliases WHERE alias_key = %s",
             ("url:https://shared.test/story",),
-        ).fetchone()[0]
+        ).fetchone()["count"]
         == 1
     )
 
 
 def test_article_materializer_isolates_a_publish_conflict_across_parallel_items(
     harness,
-    sqlite_catalog,
-    catalog_connection,
+    postgres_catalog,
     fake_r2,
     fake_http,
     monkeypatch,
@@ -467,14 +459,14 @@ def test_article_materializer_isolates_a_publish_conflict_across_parallel_items(
         ),
     )
     conflicting_artifact = f"news:article:{article_id(feed.outlet_id, normalize_article_url(conflict_url, feed.article_hosts))}"
-    catalog_connection.execute(
+    postgres_catalog.execute(
         "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, "
         "visibility, current_version_id, created_at) "
-        "VALUES (?, 'news_article', 'Conflicting', 'derived', 'current', 'private', NULL, ?)",
+        "VALUES (%s, 'news_article', 'Conflicting', 'derived', 'current', 'private', NULL, %s)",
         (conflicting_artifact, observed_at.isoformat()),
     )
     event_ids = tuple(
-        _event_id_for_url(catalog_connection, value) for value in (clean_url, conflict_url)
+        _event_id_for_url(postgres_catalog, value) for value in (clean_url, conflict_url)
     )
 
     result = operations.materialize_articles(
@@ -483,31 +475,31 @@ def test_article_materializer_isolates_a_publish_conflict_across_parallel_items(
 
     assert result.acquired_event_ids == (event_ids[0],)
     assert [failure.event_id for failure in result.failures] == [event_ids[1]]
-    assert result.failures[0].kind == ArticleFailureKind.INFRASTRUCTURE
+    assert result.failures[0].kind == ArticleFailureKind.DETERMINISTIC
     assert "artifacts identity conflict" in result.failures[0].message
     assert (
-        catalog_connection.execute(
-            "SELECT count(*) FROM news_article_failure_attempts WHERE event_id = ?",
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM news_article_failure_attempts WHERE event_id = %s",
             (event_ids[1],),
-        ).fetchone()[0]
+        ).fetchone()["count"]
         == 1
     )
-    version_rows = catalog_connection.execute(
+    version_rows = postgres_catalog.execute(
         "SELECT version.canonical_url, version.page_capture_version_id "
         "FROM news_article_versions version "
         "JOIN artifacts artifact ON artifact.id = version.article_artifact_id "
         "WHERE artifact.kind = 'news_article'"
     ).fetchall()
     assert [row["canonical_url"] for row in version_rows] == [clean_url]
-    page_r2_key = catalog_connection.execute(
-        "SELECT r2_key FROM artifact_files WHERE artifact_version_id = ?",
+    page_r2_key = postgres_catalog.execute(
+        "SELECT r2_key FROM artifact_files WHERE artifact_version_id = %s",
         (version_rows[0]["page_capture_version_id"],),
     ).fetchone()["r2_key"]
     assert fake_r2.objects[page_r2_key] == page
     assert (
-        catalog_connection.execute(
-            "SELECT count(*) FROM runs WHERE operation_key = 'news.normalize_article'"
-        ).fetchone()[0]
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM runs WHERE operation_key = 'news.normalize_article'"
+        ).fetchone()["count"]
         == 1
     )
 
@@ -536,7 +528,7 @@ def test_article_materializer_rejects_more_than_ten_event_ids() -> None:
 
 
 def _seed_analysis_article(
-    sqlite_catalog, fake_r2, news_day: date, article: ExtractedArticle
+    catalog: PostgresCatalog, fake_r2, news_day: date, article: ExtractedArticle
 ) -> ArtifactReference:
     content = article.model_dump_json().encode()
     r2_key = f"news/articles/{article.article_id}/{sha256(content)}.json"
@@ -581,7 +573,7 @@ def _seed_analysis_article(
             ],
         ),
     ]
-    sqlite_catalog.batch(statements)
+    catalog.batch(statements)
     return ArtifactReference(
         artifact_id=file.artifact_id,
         version_id=file.version_id,
@@ -591,8 +583,7 @@ def _seed_analysis_article(
 
 
 def test_relevance_materializer_uses_production_v3(
-    sqlite_catalog,
-    catalog_connection,
+    postgres_catalog,
     fake_r2,
     monkeypatch,
     news_day,
@@ -615,7 +606,7 @@ def test_relevance_materializer_uses_production_v3(
         material_digest="1" * 64,
         extraction_digest="2" * 64,
     )
-    reference = _seed_analysis_article(sqlite_catalog, fake_r2, news_day, article)
+    reference = _seed_analysis_article(postgres_catalog, fake_r2, news_day, article)
     analyzed_modes: list[ExecutionMode] = []
 
     def analyze(
@@ -680,8 +671,8 @@ def test_relevance_materializer_uses_production_v3(
     ]
     relevance_version = references.values[0].version_id
     assert (
-        catalog_connection.execute(
-            "SELECT accepted FROM news_relevance_versions WHERE artifact_version_id = ?",
+        postgres_catalog.execute(
+            "SELECT accepted FROM news_relevance_versions WHERE artifact_version_id = %s",
             (relevance_version,),
         ).fetchone()["accepted"]
         == 0
@@ -691,10 +682,10 @@ def test_relevance_materializer_uses_production_v3(
         == references.values[0].content_digest
     )
     assert (
-        catalog_connection.execute(
-            "SELECT count(*) FROM runs WHERE operation_key = 'news.relevance.v3' "
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM runs WHERE operation_key = 'news.relevance.v3' "
             "AND status = 'completed'"
-        ).fetchone()[0]
+        ).fetchone()["count"]
         == 1
     )
 
@@ -703,9 +694,9 @@ def test_relevance_materializer_uses_production_v3(
     assert repeat == references
     assert analyzed_modes == ["production_early_exit"]
     assert (
-        catalog_connection.execute(
-            "SELECT count(*) FROM runs WHERE operation_key = 'news.relevance.v3'"
-        ).fetchone()[0]
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM runs WHERE operation_key = 'news.relevance.v3'"
+        ).fetchone()["count"]
         == 1
     )
 

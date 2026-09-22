@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-import sqlite3
 from collections.abc import Callable
-from contextlib import closing
 from datetime import date
-from pathlib import Path
 
 import psycopg
 from fasthtml.common import FastHTML
@@ -26,6 +23,7 @@ from romanian_news.reports import (
     ReportSubjectCitation,
 )
 from romanian_news.storage import ResearchObjectIntegrityError
+from tests.postgres_catalog import PostgresCatalog
 
 REPORT_VERSION = "a" * 64
 RUN_ID = "7" * 64
@@ -41,54 +39,59 @@ CAPTURED_AT = "2026-09-20T06:00:00+00:00"
 TEST_DAY = date(2026, 9, 20)
 
 
-def test_feedback_round_trip_through_the_real_domain(monkeypatch) -> None:
+def test_feedback_round_trip_through_the_real_domain(monkeypatch, postgres_catalog) -> None:
     monkeypatch.setattr("romanian_news.reader.app._bucharest_today", lambda: TEST_DAY)
-    with closing(_wire_real_domain(monkeypatch)) as connection:
-        app = create_app(_settings(), PRODUCTION_DOMAIN)
-        with TestClient(app) as client:
-            csrf_token = _login(app, client)
-            page = client.get("/")
+    _wire_real_domain(monkeypatch, postgres_catalog)
+    app = create_app(_settings(), PRODUCTION_DOMAIN)
+    with TestClient(app) as client:
+        csrf_token = _login(app, client)
+        page = client.get("/")
 
-            assert page.status_code == 200
-            assert "Subject 01" in page.text
-            assert "Feedback saved" not in page.text
+        assert page.status_code == 200
+        assert "Subject 01" in page.text
+        assert "Feedback saved" not in page.text
 
-            submitted = client.post(
-                "/feedback",
-                data=_feedback_form(csrf_token),
-                follow_redirects=False,
-            )
+        submitted = client.post(
+            "/feedback",
+            data=_feedback_form(csrf_token),
+            follow_redirects=False,
+        )
 
-            assert submitted.status_code == 303
-            assert submitted.headers["location"] == f"/reports/{REPORT_VERSION}"
-            rows = connection.execute(
-                "SELECT feedback_id, report_version_id, target_kind, rating, note, actor"
-                " FROM news_feedback"
-            ).fetchall()
-            assert [dict(row) for row in rows] == [
-                {
-                    "feedback_id": FEEDBACK_ID,
-                    "report_version_id": REPORT_VERSION,
-                    "target_kind": "report",
-                    "rating": "positive",
-                    "note": "Clear and useful.",
-                    "actor": "owner",
-                }
+        assert submitted.status_code == 303
+        assert submitted.headers["location"] == f"/reports/{REPORT_VERSION}"
+        rows = postgres_catalog.execute(
+            "SELECT feedback_id, report_version_id, target_kind, rating, note, actor"
+            " FROM news_feedback"
+        ).fetchall()
+        assert rows == [
+            {
+                "feedback_id": FEEDBACK_ID,
+                "report_version_id": REPORT_VERSION,
+                "target_kind": "report",
+                "rating": "positive",
+                "note": "Clear and useful.",
+                "actor": "owner",
+            }
+        ]
+
+        retried = client.post(
+            "/feedback",
+            data=_feedback_form(csrf_token),
+            follow_redirects=False,
+        )
+
+        assert retried.status_code == 303
+        assert (
+            postgres_catalog.execute("SELECT count(*) AS count FROM news_feedback").fetchone()[
+                "count"
             ]
+            == 1
+        )
 
-            retried = client.post(
-                "/feedback",
-                data=_feedback_form(csrf_token),
-                follow_redirects=False,
-            )
+        reloaded = client.get("/")
 
-            assert retried.status_code == 303
-            assert connection.execute("SELECT count(*) FROM news_feedback").fetchone()[0] == 1
-
-            reloaded = client.get("/")
-
-            assert "Feedback saved: Positive" in reloaded.text
-            assert "Clear and useful." in reloaded.text
+        assert "Feedback saved: Positive" in reloaded.text
+        assert "Clear and useful." in reloaded.text
 
 
 def test_catalog_failure_maps_to_service_unavailable_over_http(monkeypatch) -> None:
@@ -182,19 +185,13 @@ def _daily_report(day: date) -> DailyReport:
     )
 
 
-def _seed_catalog(report: DailyReport) -> tuple[sqlite3.Connection, bytes]:
-    # The reader serves sync routes from worker threads, so the connection must
-    # allow cross-thread use.
-    connection = sqlite3.connect(":memory:", check_same_thread=False)
-    connection.row_factory = sqlite3.Row
-    schema = Path(__file__).parents[1] / "fixtures" / "sqlite_catalog.sql"
-    connection.executescript(schema.read_text())
+def _seed_catalog(catalog: PostgresCatalog, report: DailyReport) -> bytes:
     day = report.day
     payload = report.model_dump_json().encode()
     digest = hashlib.sha256(payload).hexdigest()
     r2_key = f"news/reports/daily/{day.isoformat()}/{digest}.json"
-    connection.execute(
-        "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    catalog.execute(
+        "INSERT INTO runs VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (
             RUN_ID,
             "news.report_daily",
@@ -209,9 +206,9 @@ def _seed_catalog(report: DailyReport) -> tuple[sqlite3.Connection, bytes]:
             CAPTURED_AT,
         ),
     )
-    connection.execute(
+    catalog.execute(
         "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state,"
-        " visibility, current_version_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        " visibility, current_version_id, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
         (
             f"news:daily:{day.isoformat()}",
             "news_daily_report",
@@ -219,13 +216,13 @@ def _seed_catalog(report: DailyReport) -> tuple[sqlite3.Connection, bytes]:
             "derived",
             "current",
             "private",
-            REPORT_VERSION,
+            None,
             CAPTURED_AT,
         ),
     )
-    connection.execute(
+    catalog.execute(
         "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state,"
-        " visibility, current_version_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        " visibility, current_version_id, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
         (
             f"news:themes:{day.isoformat()}",
             "news_daily_themes",
@@ -233,54 +230,39 @@ def _seed_catalog(report: DailyReport) -> tuple[sqlite3.Connection, bytes]:
             "derived",
             "current",
             "private",
-            INPUT_VERSION,
+            None,
             CAPTURED_AT,
         ),
     )
-    connection.execute(
-        "INSERT INTO artifact_versions VALUES (?, ?, ?, ?, ?, ?)",
+    catalog.execute(
+        "INSERT INTO artifact_versions VALUES (%s, %s, %s, %s, %s, %s)",
         (REPORT_VERSION, f"news:daily:{day.isoformat()}", 3, digest, None, CAPTURED_AT),
     )
-    connection.execute(
-        "INSERT INTO artifact_versions VALUES (?, ?, ?, ?, ?, ?)",
+    catalog.execute(
+        "INSERT INTO artifact_versions VALUES (%s, %s, %s, %s, %s, %s)",
         (INPUT_VERSION, f"news:themes:{day.isoformat()}", 1, INPUT_DIGEST, None, CAPTURED_AT),
     )
-    connection.execute(
-        "INSERT INTO artifact_files VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    catalog.execute(
+        "INSERT INTO artifact_files VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
         (FILE_ID, REPORT_VERSION, r2_key, "application/json", digest, len(payload), None, None),
     )
-    connection.execute(
-        "INSERT INTO run_inputs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    catalog.execute(
+        "INSERT INTO run_inputs VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
         (RUN_ID, 0, INPUT_VERSION, "themes", None, INPUT_DIGEST, "whole_file", None),
     )
-    connection.execute(
-        "INSERT INTO run_outputs VALUES (?, ?, ?, ?)",
+    catalog.execute(
+        "INSERT INTO run_outputs VALUES (%s, %s, %s, %s)",
         (RUN_ID, 0, REPORT_VERSION, "output"),
     )
-    connection.execute(
-        "UPDATE artifacts SET current_run_id = ? WHERE id = ?",
-        (RUN_ID, f"news:daily:{day.isoformat()}"),
+    catalog.execute(
+        "UPDATE artifacts SET current_version_id = %s, current_run_id = %s WHERE id = %s",
+        (REPORT_VERSION, RUN_ID, f"news:daily:{day.isoformat()}"),
     )
-    return connection, payload
-
-
-def _patch_catalog(monkeypatch, connection: sqlite3.Connection) -> None:
-    def query(sql, params=None):
-        cursor = connection.execute(sql.replace("%s", "?"), params or [])
-        return [dict(row) for row in cursor.fetchall()]
-
-    def batch(statements):
-        with connection:
-            for sql, params in statements:
-                connection.execute(sql.replace("%s", "?"), params)
-
-    for module in (
-        "romanian_news.catalog.feedback",
-        "romanian_news.catalog.report_inputs",
-        "romanian_news.catalog.research_triggers",
-    ):
-        monkeypatch.setattr(f"{module}.catalog_query", query)
-    monkeypatch.setattr("romanian_news.catalog.feedback.catalog_batch", batch)
+    catalog.execute(
+        "UPDATE artifacts SET current_version_id = %s WHERE id = %s",
+        (INPUT_VERSION, f"news:themes:{day.isoformat()}"),
+    )
+    return payload
 
 
 def _r2_reader(payload: bytes) -> Callable[[str, str], bytes]:
@@ -294,14 +276,12 @@ def _r2_reader(payload: bytes) -> Callable[[str, str], bytes]:
     return read
 
 
-def _wire_real_domain(monkeypatch) -> sqlite3.Connection:
-    connection, payload = _seed_catalog(_daily_report(TEST_DAY))
-    _patch_catalog(monkeypatch, connection)
+def _wire_real_domain(monkeypatch, catalog: PostgresCatalog) -> None:
+    payload = _seed_catalog(catalog, _daily_report(TEST_DAY))
     read = _r2_reader(payload)
     monkeypatch.setattr("romanian_news.feedback.read_verified_r2_object", read)
     # read_current_daily_report imports the storage reader inside its function body.
     monkeypatch.setattr("romanian_news.storage.read_verified_r2_object", read)
-    return connection
 
 
 def _login(app: FastHTML, client: TestClient) -> str:

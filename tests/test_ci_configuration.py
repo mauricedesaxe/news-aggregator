@@ -17,6 +17,8 @@ def test_ci_covers_the_standalone_project() -> None:
         "uv run --no-sync dg check defs",
         "uv build",
         "tests/contracts/postgres_*.py",
+        "tests/worker/postgres_operations_contract.py",
+        "tests/reader/postgres_reader_app_e2e.py",
         "docker build -f deploy/reader/Dockerfile",
         "http://127.0.0.1:8080/livez",
     ):
