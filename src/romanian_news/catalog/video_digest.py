@@ -193,7 +193,7 @@ def read_generation_deadline(slot_id: SlotId) -> datetime:
     )
     if len(rows) != 1:
         raise ResearchCatalogError("PostgreSQL did not return the video digest deadline")
-    return _utc(cast(datetime, rows[0]["deadline_at"]), "deadline_at")
+    return _datetime(rows[0]["deadline_at"])
 
 
 def record_policy_bundle(file: ArtifactFile, *, recorded_at: datetime) -> Sha256:

@@ -718,6 +718,36 @@ def test_record_policy_bundle_validates_and_registers_exact_artifact(
         video_digest_catalog.record_policy_bundle(wrong_kind, recorded_at=datetime.now(UTC))
 
 
+def test_record_generation_policy_validates_and_registers_exact_artifact(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    policy = artifact_file(
+        artifact_id="video-digest-generation-policy:contract",
+        artifact_kind="video_digest_generation_policy",
+        title="Video digest generation policy contract",
+        content=b"generation policy contract",
+        r2_key="video-digest/policies/generation-contract.json",
+        media_type="application/json",
+    )
+
+    assert (
+        video_digest_catalog.record_generation_policy(policy, recorded_at=datetime.now(UTC))
+        == policy.version_id
+    )
+    assert (
+        video_digest_catalog.record_generation_policy(policy, recorded_at=datetime.now(UTC))
+        == policy.version_id
+    )
+    assert _query_one(
+        "SELECT kind, current_version_id FROM artifacts WHERE id = %s", (policy.artifact_id,)
+    ) == ("video_digest_generation_policy", policy.version_id)
+
+    wrong_kind = policy.model_copy(update={"artifact_kind": "test"})
+    with pytest.raises(ValueError, match="generation policy artifact identity"):
+        video_digest_catalog.record_generation_policy(wrong_kind, recorded_at=datetime.now(UTC))
+
+
 def test_accepted_planning_attempt_persists_plan_stories_and_artifacts_atomically(
     postgres_news_schema: str,
 ) -> None:
@@ -1416,6 +1446,88 @@ def test_generation_acceptance_completes_atomically_with_the_story(
         "WHERE story_id = %s",
         (pipeline.story_id(0),),
     ) == ("accepted", clip.version_id)
+
+
+def test_read_generation_deadline_returns_the_slot_utc_deadline(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=31)
+
+    deadline = video_digest_catalog.read_generation_deadline(pipeline.slot.slot_id)
+
+    assert deadline.tzinfo is not None
+    assert deadline.utcoffset() == timedelta(0)
+    assert deadline == SCHEDULED_AT + timedelta(minutes=90)
+
+
+def test_read_generation_attempts_projects_accepted_media_evidence(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=32)
+    pipeline.checkpoint_plan()
+    pipeline.generate(0)
+    state = pipeline.accept(0)
+
+    attempts = video_digest_catalog.read_generation_attempts(pipeline.edition.edition_id)
+
+    assert len(attempts) == 1
+    attempt = attempts[0]
+    assert attempt.request.request_id == pipeline.request_id(0)
+    assert attempt.stage is state.stage
+    assert attempt.accepted_clip is not None
+    assert attempt.accepted_clip.version_id == pipeline.clip_file(0).version_id
+    assert attempt.accepted_clip.byte_size == len(pipeline.clip_file(0).content)
+    assert attempt.validation_evidence is not None
+    assert attempt.validation_evidence.version_id == pipeline.validation_file(0).version_id
+    assert attempt.receipt_evidence is not None
+    assert attempt.receipt_evidence.version_id == pipeline.receipt_file(0).version_id
+    assert attempt.response_evidence is not None
+    assert attempt.response_evidence.version_id == pipeline.response_file(0).version_id
+    assert attempt.cost == MeasuredAttemptCost(usd=Decimal("1.10"))
+
+
+def test_generation_acceptance_replays_exactly_and_rejects_divergence(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=33)
+    pipeline.checkpoint_plan()
+    pipeline.generate(0)
+    state = pipeline.accept(0)
+
+    replayed = pipeline.accept(0)
+
+    assert replayed == state
+    assert _query_one(
+        "SELECT validation_evidence_artifact_version_id "
+        "FROM video_digest_generation_requests WHERE request_id = %s",
+        (pipeline.request_id(0),),
+    ) == (pipeline.validation_file(0).version_id,)
+
+    with pytest.raises(VideoDigestCheckpointConflictError):
+        pipeline.accept(0, usd="9.99")
+    divergent = pipeline._file(
+        f"{pipeline.request_id(0)}:validation",
+        "video_digest_candidate_validation",
+        title="Divergent validation",
+        content=b"divergent validation evidence",
+    )
+    with pytest.raises(VideoDigestCheckpointConflictError):
+        video_digest_catalog.checkpoint_generation_acceptance(
+            pipeline.lease,
+            pipeline.request_id(0),
+            clip_file=pipeline.clip_file(0),
+            validation_file=divergent,
+            cost=MeasuredAttemptCost(usd=Decimal("1.10")),
+            recorded_at=pipeline.recorded_at,
+        )
+    assert _query_one(
+        "SELECT validation_evidence_artifact_version_id "
+        "FROM video_digest_generation_requests WHERE request_id = %s",
+        (pipeline.request_id(0),),
+    ) == (pipeline.validation_file(0).version_id,)
 
 
 def test_first_generation_failure_records_evidence_and_permits_one_retry(
