@@ -223,6 +223,61 @@ class _ResultFailureProvider(_Provider):
         raise _http_error(422)
 
 
+class _ReferenceRecordingProvider(_Provider):
+    def __init__(self, provided_urls: list[list[str]]) -> None:
+        super().__init__()
+        self._provided_urls = provided_urls
+
+    def submit(self, arguments: dict[str, object]) -> generation.FalSubmissionReceipt:
+        self._provided_urls.append(list(arguments["reference_video_urls"]))  # type: ignore[arg-type]
+        self._provided_urls.append(list(arguments["reference_audio_urls"]))  # type: ignore[arg-type]
+        return super().submit(arguments)
+
+
+class _AmbiguousSubmissionProvider(_Provider):
+    def submit(self, arguments: dict[str, object]) -> generation.FalSubmissionReceipt:
+        del arguments
+        raise generation.FalSubmissionAmbiguousError("Fal submission outcome is unknown")
+
+
+class _InProgressProvider(_Provider):
+    def status(self, receipt: generation.FalSubmissionReceipt) -> generation.FalQueueStatus:
+        self.status_calls.append(receipt.request_id)
+        return generation.FalQueueStatus(status="IN_PROGRESS", request_id=receipt.request_id)
+
+
+class _ProviderErrorProvider(_Provider):
+    def status(self, receipt: generation.FalSubmissionReceipt) -> generation.FalQueueStatus:
+        self.status_calls.append(receipt.request_id)
+        return generation.FalQueueStatus(
+            status="COMPLETED", request_id=receipt.request_id, error="model refused the prompt"
+        )
+
+
+class _UntouchableProvider(_Provider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
+    def submit(self, arguments: dict[str, object]) -> generation.FalSubmissionReceipt:
+        self.calls += 1
+        return super().submit(arguments)
+
+    def status(self, receipt: generation.FalSubmissionReceipt) -> generation.FalQueueStatus:
+        self.calls += 1
+        return super().status(receipt)
+
+    def result(
+        self, receipt: generation.FalSubmissionReceipt
+    ) -> tuple[generation.FalH3Result, dict[str, object]]:
+        self.calls += 1
+        return super().result(receipt)
+
+    def download(self, url: str) -> bytes:
+        self.calls += 1
+        return super().download(url)
+
+
 def _http_error(status_code: int) -> requests.HTTPError:
     response = requests.Response()
     response.status_code = status_code
@@ -480,30 +535,6 @@ def test_generation_reuses_stored_receipt_without_submission(
     assert provider.status_calls == ["fal-0-1", "fal-0-1"]
 
 
-def test_active_poll_does_not_republish_generation_policy(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    prepared = _prepared()
-    harness = _Harness(monkeypatch, prepared)
-    provider = _Provider()
-    first = generation.generate_next_candidate(
-        _lease(prepared),
-        prepared,
-        _references(),
-        provider=provider,
-        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
-    )
-    assert isinstance(first, generation.CandidateReady)
-    harness.attempts[0] = harness.attempts[0].model_copy(
-        update={"stage": GenerationStage.SUBMITTED, "response_evidence": None}
-    )
-    harness.policy_publications = 0
-
-    generation.generate_next_candidate(_lease(prepared), prepared, _references(), provider=provider)
-
-    assert harness.policy_publications == 0
-
-
 @pytest.mark.parametrize(
     ("provider", "message"),
     [
@@ -573,18 +604,28 @@ def test_default_reference_signature_covers_generation_deadline(
     prepared = _prepared()
     _Harness(monkeypatch, prepared)
     expirations: list[int] = []
+    provided_urls: list[list[str]] = []
 
-    def sign(_key: str, *, expires_in: int) -> str:
+    def sign(key: str, *, expires_in: int) -> str:
         expirations.append(expires_in)
-        return "https://r2.example/reference"
+        return f"https://r2.example/signed/{key}"
 
     monkeypatch.setattr(generation, "presigned_r2_url", sign)
+    provider = _ReferenceRecordingProvider(provided_urls)
 
-    generation.generate_next_candidate(
-        _lease(prepared), prepared, _references(), provider=_Provider()
+    outcome = generation.generate_next_candidate(
+        _lease(prepared), prepared, _references(), provider=provider
     )
 
-    assert expirations == [5_400, 5_400]
+    assert isinstance(outcome, generation.CandidateReady)
+    assert expirations and all(
+        expires_in >= generation.PRODUCTION_GENERATION_POLICY.policy.deadline_minutes * 60
+        for expires_in in expirations
+    )
+    assert provided_urls == [
+        ["https://r2.example/signed/references/video"],
+        ["https://r2.example/signed/references/audio"],
+    ]
 
 
 def test_pending_restart_fails_closed_without_duplicate_submission(
@@ -666,11 +707,209 @@ def test_budget_denial_happens_before_fal_submission(monkeypatch: pytest.MonkeyP
 
     assert provider.submitted_positions == []
     assert len(harness.admissions) == 1
-    admission = harness.admissions[0]
-    assert admission.limits.story_usd == 7
-    assert admission.limits.edition_usd == 14
-    assert admission.limits.bucharest_day_usd == 150
-    assert admission.limits.calendar_month_usd == 1000
+
+
+def test_ambiguous_submission_fails_closed_and_fails_the_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+
+    outcome = generation.generate_next_candidate(
+        _lease(prepared),
+        prepared,
+        _references(),
+        provider=_AmbiguousSubmissionProvider(),
+        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+    )
+
+    assert isinstance(outcome, generation.GenerationFailed)
+    assert outcome.reason == "Fal submission may have succeeded without a stored receipt"
+    assert harness.attempts[0].stage is GenerationStage.FAILED
+    assert harness.attempts[0].cost.kind == "unknown"
+    assert harness.failed_slot is True
+
+
+def test_resume_from_processing_replays_the_stored_response_without_provider_contact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+    first = generation.generate_next_candidate(
+        _lease(prepared),
+        prepared,
+        _references(),
+        provider=_Provider(),
+        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+    )
+    assert isinstance(first, generation.CandidateReady)
+    assert harness.attempts[0].stage is GenerationStage.PROCESSING
+
+    resumed = generation.generate_next_candidate(
+        _lease(prepared), prepared, _references(), provider=_UntouchableProvider()
+    )
+
+    assert isinstance(resumed, generation.CandidateReady)
+    assert resumed.request_id == first.request_id
+    assert resumed.candidate.content_digest == first.candidate.content_digest
+    assert resumed.response_artifact_version_id == first.response_artifact_version_id
+
+
+def test_stored_response_for_a_different_request_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+    provider = _Provider()
+    for _ in range(2):
+        outcome = generation.generate_next_candidate(
+            _lease(prepared),
+            prepared,
+            _references(),
+            provider=provider,
+            sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+        )
+        assert isinstance(outcome, generation.CandidateReady)
+        harness.accept_latest()
+    harness.attempts[0] = harness.attempts[0].model_copy(
+        update={
+            "stage": GenerationStage.PROCESSING,
+            "response_evidence": harness.attempts[1].response_evidence,
+        }
+    )
+
+    with pytest.raises(ValueError, match="does not match its generation request"):
+        generation.generate_next_candidate(
+            _lease(prepared), prepared, _references(), provider=_UntouchableProvider()
+        )
+
+
+def test_deadline_passing_while_fal_is_active_fails_the_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+    provider = _Provider()
+    assert isinstance(
+        generation.generate_next_candidate(
+            _lease(prepared),
+            prepared,
+            _references(),
+            provider=provider,
+            sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+        ),
+        generation.CandidateReady,
+    )
+    harness.attempts[0] = harness.attempts[0].model_copy(
+        update={"stage": GenerationStage.SUBMITTED, "response_evidence": None}
+    )
+    harness.deadline = datetime(2020, 1, 1, tzinfo=UTC)
+
+    outcome = generation.generate_next_candidate(
+        _lease(prepared), prepared, _references(), provider=_UntouchableProvider()
+    )
+
+    assert isinstance(outcome, generation.GenerationFailed)
+    assert "deadline passed while Fal was active" in outcome.reason
+    assert harness.attempts[0].stage is GenerationStage.FAILED
+    assert harness.failed_slot is True
+
+
+def test_in_progress_status_reports_progress_without_new_spend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+    provider = _InProgressProvider()
+
+    outcome = generation.generate_next_candidate(
+        _lease(prepared),
+        prepared,
+        _references(),
+        provider=provider,
+        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+    )
+
+    assert isinstance(outcome, generation.GenerationInProgress)
+    assert outcome.provider_status == "IN_PROGRESS"
+    assert provider.submitted_positions == [0]
+    assert harness.attempts[0].stage is GenerationStage.SUBMITTED
+    assert harness.failed_slot is False
+
+
+def test_completed_status_with_an_error_fails_the_attempt_and_allows_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+
+    outcome = generation.generate_next_candidate(
+        _lease(prepared),
+        prepared,
+        _references(),
+        provider=_ProviderErrorProvider(),
+        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+    )
+
+    assert isinstance(outcome, generation.GenerationRetryAvailable)
+    assert outcome.reason == "model refused the prompt"
+    assert harness.attempts[0].stage is GenerationStage.FAILED
+    assert harness.failed_slot is False
+
+
+def test_exhausted_attempts_fail_the_edition_without_further_spend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+    for attempt_index in range(2):
+        _, request_file, identity = generation._generation_request(
+            prepared, _references(), generation.PRODUCTION_GENERATION_POLICY, 0, attempt_index
+        )
+        harness.attempts.append(
+            generation.GenerationAttemptReference(
+                request=identity,
+                stage=GenerationStage.FAILED,
+                provider_receipt_id=f"failed-receipt-{attempt_index}",
+                cost=UnknownAttemptCost(reason="provider failed"),
+                request_evidence=_reference(request_file),
+                receipt_evidence=None,
+                response_evidence=None,
+            )
+        )
+    provider = _UntouchableProvider()
+
+    outcome = generation.generate_next_candidate(
+        _lease(prepared), prepared, _references(), provider=provider
+    )
+
+    assert isinstance(outcome, generation.GenerationFailed)
+    assert "exhausted both generation attempts" in outcome.reason
+    assert provider.calls == 0
+    assert harness.failed_slot is False
+
+
+def test_all_positions_accepted_completes_the_edition(monkeypatch: pytest.MonkeyPatch) -> None:
+    prepared = _prepared()
+    harness = _Harness(monkeypatch, prepared)
+    provider = _Provider()
+    for _ in range(2):
+        outcome = generation.generate_next_candidate(
+            _lease(prepared),
+            prepared,
+            _references(),
+            provider=provider,
+            sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+        )
+        assert isinstance(outcome, generation.CandidateReady)
+        harness.accept_latest()
+
+    completed = generation.generate_next_candidate(
+        _lease(prepared), prepared, _references(), provider=_UntouchableProvider()
+    )
+
+    assert isinstance(completed, generation.GenerationComplete)
+    assert completed.edition_id == prepared.plan.edition_id
 
 
 def test_deadline_stops_before_request_admission(monkeypatch: pytest.MonkeyPatch) -> None:

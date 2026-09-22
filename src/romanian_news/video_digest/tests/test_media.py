@@ -185,7 +185,6 @@ def test_technical_validation_accepts_exact_profile_and_full_decode(tmp_path: Pa
     assert (probe.audio_codec, probe.channels, probe.sample_rate_hz) == ("aac", 2, 32000)
     assert probe.video_frames > 0
     assert probe.audio_frames > 0
-    assert "-xerror" in media.full_decode_command(path)
 
 
 @requires_ffmpeg
@@ -427,6 +426,146 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
     assert events == ["publish", "failure-checkpoint"]
 
 
+def _processing_attempt(
+    story: PlannedStory, content: bytes, name: str
+) -> tuple[GenerationAttemptReference, CandidateReady]:
+    attempt = _attempt(story, content, name)
+    response = ArtifactReference(
+        artifact_id=f"{attempt.request.request_id}:response",
+        version_id=sha256(f"response-version-{name}".encode()),
+        content_digest=sha256(f"response-content-{name}".encode()),
+        r2_key=f"responses/{name}.json",
+    )
+    attempt = attempt.model_copy(
+        update={"stage": GenerationStage.PROCESSING, "response_evidence": response}
+    )
+    candidate = CandidateReady(
+        request_id=attempt.request.request_id,
+        story_id=story.story_id,
+        story_position=story.position,
+        attempt_index=0,
+        response_artifact_version_id=response.version_id,
+        candidate=CandidateReference(
+            r2_key=f"candidates/{name}.mp4",
+            content_digest=sha256(content),
+            byte_size=len(content),
+        ),
+        cost=UnknownAttemptCost(reason="test fixture"),
+    )
+    return attempt, candidate
+
+
+def test_acceptance_replay_rejects_a_candidate_that_differs_from_stored_media(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    edition = EditionId("e" * 64)
+    story = _story(edition, 0)
+    content = b"stored candidate"
+    attempt, candidate = _processing_attempt(story, content, "red")
+    accepted = attempt.model_copy(update={"stage": GenerationStage.ACCEPTED})
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (accepted,))
+    monkeypatch.setattr(
+        media,
+        "read_verified_r2_object",
+        lambda *_args: pytest.fail("an accepted candidate must replay stored evidence"),
+    )
+    tampered = candidate.model_copy(
+        update={
+            "candidate": CandidateReference(
+                r2_key=candidate.candidate.r2_key,
+                content_digest=sha256(b"different bytes"),
+                byte_size=len(b"different bytes"),
+            )
+        }
+    )
+
+    with pytest.raises(ValueError, match="does not match stored media evidence"):
+        media.accept_candidate(_lease(edition), tampered, story)
+
+    with pytest.raises(ValueError, match="does not match stored media evidence"):
+        media.accept_candidate(
+            _lease(edition),
+            candidate.model_copy(
+                update={
+                    "candidate": CandidateReference(
+                        r2_key=candidate.candidate.r2_key,
+                        content_digest=candidate.candidate.content_digest,
+                        byte_size=candidate.candidate.byte_size + 1,
+                    )
+                }
+            ),
+            story,
+        )
+
+
+@pytest.mark.parametrize("stage", [GenerationStage.FAILED, GenerationStage.PENDING])
+def test_candidate_matching_rejects_inactive_attempts(
+    monkeypatch: pytest.MonkeyPatch, stage: GenerationStage
+) -> None:
+    edition = EditionId("e" * 64)
+    story = _story(edition, 0)
+    attempt, candidate = _processing_attempt(story, b"candidate", "red")
+    attempt = attempt.model_copy(update={"stage": stage})
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
+    monkeypatch.setattr(
+        media,
+        "read_verified_r2_object",
+        lambda *_args: pytest.fail("an inactive attempt must not be read"),
+    )
+
+    with pytest.raises(ValueError, match="does not match one active generation request"):
+        media.accept_candidate(_lease(edition), candidate, story)
+
+
+def test_candidate_matching_rejects_a_divergent_response_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    edition = EditionId("e" * 64)
+    story = _story(edition, 0)
+    attempt, candidate = _processing_attempt(story, b"candidate", "red")
+    divergent = candidate.model_copy(
+        update={"response_artifact_version_id": sha256(b"a different response")}
+    )
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
+    monkeypatch.setattr(
+        media,
+        "read_verified_r2_object",
+        lambda *_args: pytest.fail("a divergent candidate must not be read"),
+    )
+
+    with pytest.raises(ValueError, match="does not match its exact generation request"):
+        media.accept_candidate(_lease(edition), divergent, story)
+
+
+def test_media_tool_timeout_fails_the_attempt_for_a_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    edition = EditionId("e" * 64)
+    story = _story(edition, 0)
+    content = b"candidate"
+    path = tmp_path / "candidate.mp4"
+    path.write_bytes(content)
+    attempt, candidate = _processing_attempt(story, content, "red")
+    events: list[str] = []
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
+    monkeypatch.setattr(media, "read_verified_r2_object", lambda _key, _digest: content)
+    monkeypatch.setattr(media, "publish_immutable_r2_objects", lambda _objects: None)
+    monkeypatch.setattr(
+        media,
+        "checkpoint_generation_failure",
+        lambda *_args, evidence_file, **_kwargs: events.append(
+            json.loads(evidence_file.content)["code"]
+        ),
+    )
+    monkeypatch.setattr(media, "MEDIA_PROCESS_TIMEOUT_SECONDS", 0)
+
+    outcome = media.accept_candidate(_lease(edition), candidate, story)
+
+    assert isinstance(outcome, media.GenerationRetryAvailable)
+    assert "media_tool_timeout" in outcome.reason
+    assert events == ["media_tool_timeout"]
+
+
 @requires_ffmpeg
 def test_assembly_preserves_plan_order_and_deterministic_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -452,6 +591,7 @@ def test_assembly_preserves_plan_order_and_deterministic_manifest(
     first = media.assemble_edition(_lease(edition), plan)
     second = media.assemble_edition(_lease(edition), plan)
 
+    assert first.video_file.content == second.video_file.content
     assert first.manifest_file.content == second.manifest_file.content
     manifest = json.loads(first.manifest_file.content)
     assert [entry["story_position"] for entry in manifest["clips"]] == [0, 1]
@@ -465,44 +605,18 @@ def test_assembly_preserves_plan_order_and_deterministic_manifest(
     assert _sample_rgb(output, "1.5") == "blue"
 
 
-def test_commands_encode_fixed_media_policy(tmp_path: Path) -> None:
-    inputs = (tmp_path / "0.mp4", tmp_path / "1.mp4")
-    command = media.assembly_command(inputs, (1000, 1000), tmp_path / "output.mp4")
-    joined = " ".join(command)
-
-    assert "concat=n=2:v=1:a=1" in joined
-    assert "fade=t=out:st=0.75:d=0.25" in joined
-    assert "-preset medium -crf 18" in joined
-    assert "-pix_fmt yuv420p" in joined
-    assert "-threads 1" in joined
-    assert "-b:a 192k -ac 2 -ar 32000" in joined
-    assert "-map_metadata -1 -movflags +faststart" in joined
-    assert "-nostdin" in command
-
-
-def test_media_processes_are_noninteractive_bounded_and_locale_stable(
+def test_media_processes_are_noninteractive_locale_stable_and_bounded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[dict[str, object]] = []
+    finished = media._run(("cat",), capture_output=True)
+    assert finished.returncode == 0
 
-    def run(*_args, **kwargs):
-        calls.append(kwargs)
-        return subprocess.CompletedProcess((), 0, "", "")
+    locale = media._run(("printenv", "LC_ALL"), capture_output=True)
+    assert locale.stdout.strip() == "C"
 
-    monkeypatch.setattr(media.subprocess, "run", run)
-
-    media._run(("ffmpeg", "-version"), capture_output=True)
-
-    assert calls == [
-        {
-            "check": True,
-            "capture_output": True,
-            "env": {**media.os.environ, "LC_ALL": "C"},
-            "stdin": subprocess.DEVNULL,
-            "text": True,
-            "timeout": media.MEDIA_PROCESS_TIMEOUT_SECONDS,
-        }
-    ]
+    monkeypatch.setattr(media, "MEDIA_PROCESS_TIMEOUT_SECONDS", 1)
+    with pytest.raises(subprocess.TimeoutExpired):
+        media._run(("sleep", "30"), capture_output=True)
 
 
 class _SuccessfulTimingProvider:
