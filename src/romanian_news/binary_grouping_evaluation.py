@@ -10,7 +10,6 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_evaluation import (
     BinaryAttemptEvidence,
     BinaryProbabilityObservation,
@@ -21,6 +20,7 @@ from romanian_news.analysis.binary_evaluation import (
 )
 from romanian_news.analysis.binary_grouping import BinaryGroupingCase, build_grouping_binary_request
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_benchmark import (
     BINARY_TARGET_REGISTRY,
     BinaryBenchmarkCase,
@@ -49,6 +49,13 @@ from romanian_news.storage import read_verified_r2_object
 
 NonEmptyText = Annotated[str, StringConstraints(min_length=1)]
 BinaryGroupingExecutionKey = tuple[TargetId, str, str]
+BinaryGroupingPreparedCase = tuple[BinaryGroupingCase, BinaryRequest]
+BinaryGroupingPreparedExecution = tuple[
+    BinaryTarget,
+    str,
+    BinaryGroupingCase,
+    BinaryRequest,
+]
 
 
 class BinaryGroupingSource(NewsModel):
@@ -114,42 +121,42 @@ class BinaryGroupingCaseResult(NewsModel):
         ):
             raise ValueError("Binary grouping case accounting does not match its attempts")
         if self.status == "completed":
-            if any(
-                value is None
-                for value in (
-                    self.actual_model,
-                    self.adapter_request_id,
-                    self.probability,
-                    self.predicted_same_group,
-                )
+            if None in (
+                self.actual_model,
+                self.adapter_request_id,
+                self.probability,
+                self.predicted_same_group,
             ):
                 raise ValueError("Completed binary grouping cases require an observation")
-            if self.errors or self.passed != (
-                self.predicted_same_group == self.expected_same_group
+            if (self.errors, self.passed) != (
+                (),
+                self.predicted_same_group == self.expected_same_group,
             ):
                 raise ValueError("Completed binary grouping case has an inconsistent verdict")
             final = self.attempts[-1]
             if (
-                final.status != "completed"
-                or final.provider_request_id != self.provider_request_id
-                or final.actual_model != self.actual_model
-                or final.probability != self.probability
+                final.status,
+                final.provider_request_id,
+                final.actual_model,
+                final.probability,
+            ) != (
+                "completed",
+                self.provider_request_id,
+                self.actual_model,
+                self.probability,
             ):
                 raise ValueError("Completed binary grouping case does not match its final attempt")
         elif (
-            any(
-                value is not None
-                for value in (
-                    self.actual_model,
-                    self.adapter_request_id,
-                    self.provider_request_id,
-                    self.probability,
-                    self.predicted_same_group,
-                )
-            )
-            or self.passed
-            or not self.errors
-        ):
+            (
+                self.actual_model,
+                self.adapter_request_id,
+                self.provider_request_id,
+                self.probability,
+                self.predicted_same_group,
+            ),
+            self.passed,
+            bool(self.errors),
+        ) != ((None, None, None, None, None), False, True):
             raise ValueError("Failed binary grouping cases require only error evidence")
         return self
 
@@ -198,17 +205,32 @@ class BinaryGroupingRunResult(NewsModel):
     @model_validator(mode="after")
     def require_consistent_run(self) -> BinaryGroupingRunResult:
         if any(
-            case.source_artifact_id != self.source_artifact_id
-            or case.declared_manifest_version != self.declared_manifest_version
-            or case.target_id != self.target.target_id
-            or case.provider != self.target.provider
-            or case.trial_ref != self.trial_ref
-            or case.requested_model != self.target.requested_model
-            or case.question_id != self.question_id
-            or case.question_digest != self.question_digest
-            or case.execution_policy_id != self.target.execution_policy_id
-            or case.execution_policy_digest != self.target.execution_policy_digest
-            or case.cost_basis != self.target.cost_basis
+            (
+                case.source_artifact_id,
+                case.declared_manifest_version,
+                case.target_id,
+                case.provider,
+                case.trial_ref,
+                case.requested_model,
+                case.question_id,
+                case.question_digest,
+                case.execution_policy_id,
+                case.execution_policy_digest,
+                case.cost_basis,
+            )
+            != (
+                self.source_artifact_id,
+                self.declared_manifest_version,
+                self.target.target_id,
+                self.target.provider,
+                self.trial_ref,
+                self.target.requested_model,
+                self.question_id,
+                self.question_digest,
+                self.target.execution_policy_id,
+                self.target.execution_policy_digest,
+                self.target.cost_basis,
+            )
             for case in self.cases
         ):
             raise ValueError("Binary grouping case identity does not match its run")
@@ -230,10 +252,11 @@ class BinaryGroupingEvaluationResult(NewsModel):
     @model_validator(mode="after")
     def require_exact_ordered_coverage(self) -> BinaryGroupingEvaluationResult:
         target_ids = tuple(target.target_id for target in self.targets)
-        if target_ids != tuple(sorted(target_ids)) or len(set(target_ids)) != len(target_ids):
+        if (target_ids, len(set(target_ids))) != (tuple(sorted(target_ids)), len(target_ids)):
             raise ValueError("Binary grouping targets must be unique and ordered")
-        if self.trial_refs != tuple(sorted(self.trial_refs)) or len(set(self.trial_refs)) != len(
-            self.trial_refs
+        if (self.trial_refs, len(set(self.trial_refs))) != (
+            tuple(sorted(self.trial_refs)),
+            len(self.trial_refs),
         ):
             raise ValueError("Binary grouping trial references must be unique and ordered")
         expected_runs = tuple(
@@ -242,11 +265,20 @@ class BinaryGroupingEvaluationResult(NewsModel):
         if tuple((run.target.target_id, run.trial_ref) for run in self.runs) != expected_runs:
             raise ValueError("Binary grouping runs must exactly cover targets and trials")
         if any(
-            run.source_artifact_id != self.source_artifact_id
-            or run.declared_manifest_version != self.declared_manifest_version
-            or run.question_id != self.question_id
-            or run.question_digest != self.question_digest
-            or tuple(case.case_id for case in run.cases) != self.case_ids
+            (
+                run.source_artifact_id,
+                run.declared_manifest_version,
+                run.question_id,
+                run.question_digest,
+                tuple(case.case_id for case in run.cases),
+            )
+            != (
+                self.source_artifact_id,
+                self.declared_manifest_version,
+                self.question_id,
+                self.question_digest,
+                self.case_ids,
+            )
             for run in self.runs
         ):
             raise ValueError("Binary grouping runs must exactly cover the frozen cases")
@@ -343,17 +375,7 @@ def run_binary_grouping_evaluation(
     dry_run: bool = False,
     clock: Callable[[], float] = time.monotonic,
 ) -> BinaryGroupingEvaluationResult:
-    ordered_targets = tuple(sorted(targets, key=lambda target: target.target_id))
-    ordered_trials = tuple(sorted(trial_refs))
-    target_ids = tuple(target.target_id for target in ordered_targets)
-    if not ordered_targets or len(set(target_ids)) != len(target_ids):
-        raise ValueError("Binary grouping targets must be non-empty and unique")
-    if not ordered_trials or any(not value.strip() for value in ordered_trials):
-        raise ValueError("Binary grouping trial references must be non-empty")
-    if len(set(ordered_trials)) != len(ordered_trials):
-        raise ValueError("Binary grouping trial references must be unique")
-    if set(evaluators) != set(target_ids):
-        raise ValueError("Binary grouping evaluators must exactly match selected targets")
+    ordered_targets, ordered_trials = _ordered_evaluation_inputs(targets, trial_refs, evaluators)
 
     prepared = tuple((case, build_grouping_binary_request(case)) for case in source.cases)
     target_by_id: dict[TargetId, BinaryTarget] = {
@@ -382,35 +404,18 @@ def run_binary_grouping_evaluation(
         )
         for target_id, trial, case_id in canonical_plan
     }
-    if not set(reusable).issubset(expected):
-        raise ValueError("Reusable binary grouping cases do not match this evaluation")
-    for request_id, result in reusable.items():
-        _validate_reusable(result, *expected[request_id])
-
-    results: dict[BinaryGroupingExecutionKey, BinaryGroupingCaseResult] = {}
-    for target_id, trial, case_id in selected_plan:
-        target = target_by_id[target_id]
-        case, request = request_by_case[case_id]
-        request_id = _request_id(target, trial, case_id, request)
-        result = reusable.get(request_id)
-        if result is None:
-            if spend is not None:
-                spend.reserve(
-                    Decimal(0)
-                    if dry_run
-                    else BINARY_TARGET_REGISTRY[target_id].maximum_request_cost_usd
-                )
-            result = _evaluate_case(target, trial, case, request, evaluators[target_id], clock)
-            if spend is not None:
-                try:
-                    spend.settle(result.cost_usd)
-                except BinarySpendLimitExceeded:
-                    if on_case_result is not None:
-                        on_case_result(result)
-                    raise
-            if on_case_result is not None:
-                on_case_result(result)
-        results[(target_id, trial, case_id)] = result
+    _validate_reusable_cases(reusable, expected)
+    results = _execute_plan(
+        selected_plan,
+        target_by_id=target_by_id,
+        request_by_case=request_by_case,
+        reusable=reusable,
+        evaluators=evaluators,
+        on_case_result=on_case_result,
+        spend=spend,
+        dry_run=dry_run,
+        clock=clock,
+    )
 
     runs = tuple(
         _build_run(
@@ -436,32 +441,35 @@ def run_binary_grouping_evaluation(
 def binary_grouping_metrics(
     cases: tuple[BinaryGroupingCaseResult, ...],
 ) -> BinaryGroupingMetrics:
-    completed = tuple(case for case in cases if case.status == "completed")
-    positives = tuple(case for case in completed if case.expected_same_group)
-    negatives = tuple(case for case in completed if not case.expected_same_group)
-    controls = tuple(case for case in completed if case.control)
-    attempts = tuple(attempt for case in cases for attempt in case.attempts)
+    completed = _matching_cases(cases, lambda case: case.status == "completed")
+    positives = _matching_cases(completed, lambda case: case.expected_same_group)
+    negatives = _matching_cases(completed, lambda case: not case.expected_same_group)
+    controls = _matching_cases(completed, lambda case: case.control)
+    attempts = _all_attempts(cases)
     latencies = tuple(attempt.latency_ms for attempt in attempts)
-    input_tokens = sum(attempt.input_tokens or 0 for attempt in attempts)
-    output_tokens = sum(attempt.output_tokens or 0 for attempt in attempts)
+    input_tokens, output_tokens = _attempt_token_totals(attempts)
     return BinaryGroupingMetrics(
-        passed_cases=sum(case.passed for case in cases),
+        passed_cases=_count_cases(cases, lambda case: case.passed),
         completed_cases=len(completed),
         failed_cases=len(cases) - len(completed),
         total_cases=len(cases),
-        accuracy=_ratio(sum(case.passed for case in completed), len(completed)),
+        accuracy=_ratio(_count_cases(completed, lambda case: case.passed), len(completed)),
         same_group_recall=_ratio(
-            sum(case.predicted_same_group is True for case in positives), len(positives)
+            _count_cases(positives, lambda case: case.predicted_same_group is True),
+            len(positives),
         ),
         different_group_preservation=_ratio(
-            sum(case.predicted_same_group is False for case in negatives), len(negatives)
+            _count_cases(negatives, lambda case: case.predicted_same_group is False),
+            len(negatives),
         ),
-        control_preservation=_ratio(sum(case.passed for case in controls), len(controls)),
-        false_merge_ids=tuple(
-            case.case_id for case in negatives if case.predicted_same_group is True
+        control_preservation=_ratio(
+            _count_cases(controls, lambda case: case.passed), len(controls)
         ),
-        false_split_ids=tuple(
-            case.case_id for case in positives if case.predicted_same_group is False
+        false_merge_ids=_matching_case_ids(
+            negatives, lambda case: case.predicted_same_group is True
+        ),
+        false_split_ids=_matching_case_ids(
+            positives, lambda case: case.predicted_same_group is False
         ),
         request_count=len(attempts),
         input_tokens=input_tokens,
@@ -473,6 +481,108 @@ def binary_grouping_metrics(
         total_attempt_latency_ms=sum(latencies),
         p50_wall_latency_ms=_percentile(latencies, Decimal("0.50")),
         p95_wall_latency_ms=_percentile(latencies, Decimal("0.95")),
+    )
+
+
+def _ordered_evaluation_inputs(
+    targets: tuple[BinaryTarget, ...],
+    trial_refs: tuple[str, ...],
+    evaluators: Mapping[TargetId, BinaryEvaluator],
+) -> tuple[tuple[BinaryTarget, ...], tuple[str, ...]]:
+    ordered_targets = tuple(sorted(targets, key=lambda target: target.target_id))
+    ordered_trials = tuple(sorted(trial_refs))
+    target_ids = tuple(target.target_id for target in ordered_targets)
+    if not ordered_targets or len(set(target_ids)) != len(target_ids):
+        raise ValueError("Binary grouping targets must be non-empty and unique")
+    if not ordered_trials or any(not value.strip() for value in ordered_trials):
+        raise ValueError("Binary grouping trial references must be non-empty")
+    if len(set(ordered_trials)) != len(ordered_trials):
+        raise ValueError("Binary grouping trial references must be unique")
+    if set(evaluators) != set(target_ids):
+        raise ValueError("Binary grouping evaluators must exactly match selected targets")
+    return ordered_targets, ordered_trials
+
+
+def _validate_reusable_cases(
+    reusable: Mapping[Sha256, BinaryGroupingCaseResult],
+    expected: Mapping[Sha256, BinaryGroupingPreparedExecution],
+) -> None:
+    if not set(reusable).issubset(expected):
+        raise ValueError("Reusable binary grouping cases do not match this evaluation")
+    for request_id, result in reusable.items():
+        _validate_reusable(result, *expected[request_id])
+
+
+def _execute_plan(
+    selected_plan: tuple[BinaryGroupingExecutionKey, ...],
+    *,
+    target_by_id: Mapping[TargetId, BinaryTarget],
+    request_by_case: Mapping[str, BinaryGroupingPreparedCase],
+    reusable: Mapping[Sha256, BinaryGroupingCaseResult],
+    evaluators: Mapping[TargetId, BinaryEvaluator],
+    on_case_result: Callable[[BinaryGroupingCaseResult], None] | None,
+    spend: BinarySpendLedger | None,
+    dry_run: bool,
+    clock: Callable[[], float],
+) -> dict[BinaryGroupingExecutionKey, BinaryGroupingCaseResult]:
+    results: dict[BinaryGroupingExecutionKey, BinaryGroupingCaseResult] = {}
+    for target_id, trial, case_id in selected_plan:
+        target = target_by_id[target_id]
+        case, request = request_by_case[case_id]
+        request_id = _request_id(target, trial, case_id, request)
+        result = reusable.get(request_id)
+        if result is None:
+            if spend is not None:
+                spend.reserve(
+                    Decimal(0)
+                    if dry_run
+                    else BINARY_TARGET_REGISTRY[target_id].maximum_request_cost_usd
+                )
+            result = _evaluate_case(target, trial, case, request, evaluators[target_id], clock)
+            if spend is not None:
+                try:
+                    spend.settle(result.cost_usd)
+                except BinarySpendLimitExceeded:
+                    if on_case_result is not None:
+                        on_case_result(result)
+                    raise
+            if on_case_result is not None:
+                on_case_result(result)
+        results[(target_id, trial, case_id)] = result
+    return results
+
+
+def _matching_cases(
+    cases: tuple[BinaryGroupingCaseResult, ...],
+    predicate: Callable[[BinaryGroupingCaseResult], bool],
+) -> tuple[BinaryGroupingCaseResult, ...]:
+    return tuple(case for case in cases if predicate(case))
+
+
+def _matching_case_ids(
+    cases: tuple[BinaryGroupingCaseResult, ...],
+    predicate: Callable[[BinaryGroupingCaseResult], bool],
+) -> tuple[str, ...]:
+    return tuple(case.case_id for case in cases if predicate(case))
+
+
+def _count_cases(
+    cases: tuple[BinaryGroupingCaseResult, ...],
+    predicate: Callable[[BinaryGroupingCaseResult], bool],
+) -> int:
+    return sum(predicate(case) for case in cases)
+
+
+def _all_attempts(
+    cases: tuple[BinaryGroupingCaseResult, ...],
+) -> tuple[BinaryAttemptEvidence, ...]:
+    return tuple(attempt for case in cases for attempt in case.attempts)
+
+
+def _attempt_token_totals(attempts: tuple[BinaryAttemptEvidence, ...]) -> tuple[int, int]:
+    return (
+        sum(attempt.input_tokens or 0 for attempt in attempts),
+        sum(attempt.output_tokens or 0 for attempt in attempts),
     )
 
 
@@ -576,26 +686,47 @@ def _validate_reusable(
     case: BinaryGroupingCase,
     request: BinaryRequest,
 ) -> None:
-    if (
-        result.source_artifact_id != V11_SOURCE_ARTIFACT_ID
-        or result.declared_manifest_version != V11_MANIFEST_VERSION
-        or result.case_id != case.case_id
-        or result.left_article_version_id != case.left_article.version_id
-        or result.right_article_version_id != case.right_article.version_id
-        or result.target_id != target.target_id
-        or result.provider != target.provider
-        or result.trial_ref != trial_ref
-        or result.requested_model != target.requested_model
-        or result.question_id != request.question.question_id
-        or result.question_digest != request.question.semantic_digest
-        or result.state_digest != request.state_digest
-        or result.execution_policy_id != target.execution_policy_id
-        or result.execution_policy_digest != target.execution_policy_digest
-        or result.request_id != _request_id(target, trial_ref, case.case_id, request)
-        or result.expected_same_group != case.expected_same_group
-        or result.control != case.control
-        or result.cost_basis != target.cost_basis
-    ):
+    actual_identity = (
+        result.source_artifact_id,
+        result.declared_manifest_version,
+        result.case_id,
+        result.left_article_version_id,
+        result.right_article_version_id,
+        result.target_id,
+        result.provider,
+        result.trial_ref,
+        result.requested_model,
+        result.question_id,
+        result.question_digest,
+        result.state_digest,
+        result.execution_policy_id,
+        result.execution_policy_digest,
+        result.request_id,
+        result.expected_same_group,
+        result.control,
+        result.cost_basis,
+    )
+    expected_identity = (
+        V11_SOURCE_ARTIFACT_ID,
+        V11_MANIFEST_VERSION,
+        case.case_id,
+        case.left_article.version_id,
+        case.right_article.version_id,
+        target.target_id,
+        target.provider,
+        trial_ref,
+        target.requested_model,
+        request.question.question_id,
+        request.question.semantic_digest,
+        request.state_digest,
+        target.execution_policy_id,
+        target.execution_policy_digest,
+        _request_id(target, trial_ref, case.case_id, request),
+        case.expected_same_group,
+        case.control,
+        target.cost_basis,
+    )
+    if actual_identity != expected_identity:
         raise ValueError("Reusable binary grouping case identity does not match its execution")
 
 

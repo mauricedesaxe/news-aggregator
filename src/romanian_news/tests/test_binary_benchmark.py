@@ -29,6 +29,7 @@ from romanian_news.binary_benchmark import (
     BinarySpendLedger,
     BinarySpendLimitExceeded,
     build_execution_identity,
+    invoke_binary_evaluator,
     load_binary_checkpoint,
     run_registered_binary_benchmark,
     write_binary_checkpoint,
@@ -246,6 +247,28 @@ def test_actual_model_identity_mismatch_stops_execution() -> None:
         )
 
     assert sum(calls.values()) == 1
+
+
+def test_callback_evaluator_failure_records_full_wall_latency() -> None:
+    def fail_before_callback(
+        _request: BinaryRequest,
+        _trial_ref: str,
+        *,
+        on_attempt: object | None = None,
+    ) -> BinaryProbabilityObservation:
+        _ = on_attempt
+        raise RuntimeError("provider failed before callback")
+
+    ticks = iter((10.0, 10.125))
+    invocation = invoke_binary_evaluator(
+        fail_before_callback,
+        _request(DERIVED_BINARY_BENCHMARKS["confidence"].questions[0], "state"),
+        "trial-001",
+        clock=lambda: next(ticks),
+    )
+
+    assert invocation.observation is None
+    assert invocation.attempts[0].latency_ms == 125
 
 
 def _cases(benchmark: BenchmarkId) -> tuple[BinaryBenchmarkCase, ...]:

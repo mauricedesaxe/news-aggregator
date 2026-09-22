@@ -9,11 +9,11 @@ from typing import Annotated, Literal, cast
 from pydantic import Field, StringConstraints, TypeAdapter, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_evaluation import BinaryRequest, binary_state_digest
 from romanian_news.analysis.groups.models import GroupSummary
 from romanian_news.analysis.relevance import RelevanceDecision
 from romanian_news.analysis.relevance_v3 import ContextDecision, ImpactDecision
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_benchmark import (
     BinaryBenchmarkCase,
     BinaryBenchmarkEvaluationResult,

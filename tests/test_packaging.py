@@ -84,3 +84,8 @@ def test_source_distribution_excludes_tests_and_recorded_fixtures(tmp_path: Path
 
     assert not any("/tests/" in name for name in names)
     assert not any("fixtures" in name for name in names)
+    assert not any(
+        excluded in name
+        for name in names
+        for excluded in ("/.audit/", "/.opencode/", "/artifacts/")
+    )

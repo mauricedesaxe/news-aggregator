@@ -11,7 +11,6 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_evaluation import (
     RELEVANCE_BINARY_QUESTION,
     BinaryAttemptEvidence,
@@ -23,6 +22,7 @@ from romanian_news.analysis.binary_evaluation import (
 )
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_benchmark import (
     OPENROUTER_GEMINI_25_TARGET as OPENROUTER_GEMINI_25_TARGET,
 )
@@ -128,49 +128,59 @@ class BinaryRelevanceCaseResult(NewsModel):
     @model_validator(mode="after")
     def require_consistent_outcome(self) -> BinaryRelevanceCaseResult:
         validate_binary_attempts(self.attempts)
-        input_tokens, output_tokens, cost_usd, latency_ms = binary_attempt_totals(self.attempts)
-        if (
-            self.input_tokens != input_tokens
-            or self.output_tokens != output_tokens
-            or self.cost_usd != cost_usd
-            or self.wall_latency_ms != latency_ms
-        ):
-            raise ValueError("Binary relevance case accounting does not match its attempts")
+        _validate_case_accounting(self)
         if self.status == "completed":
-            if self.actual_model is None or self.probability is None or self.verdict is None:
-                raise ValueError("Completed binary relevance cases require an observation")
-            if self.adapter_request_id is None:
-                raise ValueError("Completed binary relevance cases require an adapter request ID")
-            if self.errors:
-                raise ValueError("Completed binary relevance cases cannot contain errors")
-            final = self.attempts[-1]
-            if (
-                final.status != "completed"
-                or final.provider_request_id != self.provider_request_id
-                or final.actual_model != self.actual_model
-                or final.probability != self.probability
-            ):
-                raise ValueError("Completed binary relevance case does not match its final attempt")
-            if self.passed != (self.verdict == self.expected):
-                raise ValueError("Binary relevance pass result conflicts with its verdict")
+            _validate_completed_case(self)
         else:
-            if any(
-                value is not None
-                for value in (
-                    self.actual_model,
-                    self.adapter_request_id,
-                    self.provider_request_id,
-                    self.probability,
-                    self.verdict,
-                )
-            ):
-                raise ValueError("Failed binary relevance cases cannot contain an observation")
-            if self.passed or not self.errors:
-                raise ValueError("Failed binary relevance cases require errors and cannot pass")
+            _validate_failed_case(self)
         return self
 
 
+def _validate_case_accounting(result: BinaryRelevanceCaseResult) -> None:
+    totals = binary_attempt_totals(result.attempts)
+    recorded = (
+        result.input_tokens,
+        result.output_tokens,
+        result.cost_usd,
+        result.wall_latency_ms,
+    )
+    if recorded != totals:
+        raise ValueError("Binary relevance case accounting does not match its attempts")
+
+
+def _validate_completed_case(result: BinaryRelevanceCaseResult) -> None:
+    if result.actual_model is None or result.probability is None or result.verdict is None:
+        raise ValueError("Completed binary relevance cases require an observation")
+    if result.adapter_request_id is None:
+        raise ValueError("Completed binary relevance cases require an adapter request ID")
+    if result.errors:
+        raise ValueError("Completed binary relevance cases cannot contain errors")
+    final = result.attempts[-1]
+    final_observation = (final.provider_request_id, final.actual_model, final.probability)
+    recorded_observation = (result.provider_request_id, result.actual_model, result.probability)
+    if final.status != "completed" or final_observation != recorded_observation:
+        raise ValueError("Completed binary relevance case does not match its final attempt")
+    if result.passed != (result.verdict == result.expected):
+        raise ValueError("Binary relevance pass result conflicts with its verdict")
+
+
+def _validate_failed_case(result: BinaryRelevanceCaseResult) -> None:
+    observation = (
+        result.actual_model,
+        result.adapter_request_id,
+        result.provider_request_id,
+        result.probability,
+        result.verdict,
+    )
+    if any(value is not None for value in observation):
+        raise ValueError("Failed binary relevance cases cannot contain an observation")
+    if result.passed or not result.errors:
+        raise ValueError("Failed binary relevance cases require errors and cannot pass")
+
+
 BinaryCaseResultCallback = Callable[[BinaryRelevanceCaseResult], None]
+BinaryRequestCase = tuple[RelevanceEvaluationSpec, BinaryRequest]
+ExpectedBinaryCase = tuple[BinaryRelevanceTarget, str, RelevanceEvaluationSpec, BinaryRequest]
 
 
 class BinaryRelevanceMetrics(NewsModel):
@@ -303,18 +313,7 @@ def run_binary_relevance_evaluation(
     request_loader: Callable[[ArtifactReference], BinaryRequest] | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> BinaryRelevanceEvaluationResult:
-    ordered_targets = tuple(sorted(targets, key=lambda target: target.target_id))
-    ordered_trial_refs = tuple(sorted(trial_refs))
-    target_ids = tuple(target.target_id for target in ordered_targets)
-    if not ordered_targets or len(set(target_ids)) != len(target_ids):
-        raise ValueError("Binary relevance targets must be non-empty and unique")
-    if not ordered_trial_refs or any(not ref.strip() for ref in ordered_trial_refs):
-        raise ValueError("Binary relevance trial references must be non-empty")
-    if len(set(ordered_trial_refs)) != len(ordered_trial_refs):
-        raise ValueError("Binary relevance trial references must be unique")
-    if set(evaluators) != set(target_ids):
-        raise ValueError("Binary relevance evaluators must exactly match selected targets")
-
+    ordered_targets, ordered_trial_refs = _validate_run_inputs(targets, trial_refs, evaluators)
     cases = tuple(case for case in source.manifest.cases if case.concern == "relevance")
     load_request = request_loader or _load_request
     requests = tuple((case, load_request(case.article)) for case in cases)
@@ -322,61 +321,22 @@ def run_binary_relevance_evaluation(
         target.target_id: target for target in ordered_targets
     }
     request_by_case_id = {case.case_id: (case, request) for case, request in requests}
-    canonical_plan: tuple[BinaryExecutionKey, ...] = tuple(
-        (target.target_id, trial_ref, case.case_id)
-        for target in ordered_targets
-        for trial_ref in ordered_trial_refs
-        for case, _request in requests
-    )
+    canonical_plan = _canonical_execution_plan(ordered_targets, ordered_trial_refs, requests)
     selected_plan: tuple[BinaryExecutionKey, ...] = execution_plan or canonical_plan
-    if len(selected_plan) != len(set(selected_plan)) or set(selected_plan) != set(canonical_plan):
-        raise ValueError(
-            "Binary relevance execution plan must exactly cover targets, trials, and cases"
-        )
-
+    _validate_execution_plan(selected_plan, canonical_plan)
     reusable = dict(reusable_cases or {})
-    expected_cases = {
-        _request_id(target_by_id[target_id], trial_ref, case_id, request_by_case_id[case_id][1]): (
-            target_by_id[target_id],
-            trial_ref,
-            request_by_case_id[case_id][0],
-            request_by_case_id[case_id][1],
-        )
-        for target_id, trial_ref, case_id in canonical_plan
-    }
-    if not set(reusable).issubset(expected_cases):
-        raise ValueError("Reusable binary relevance cases do not match this evaluation identity")
-    for request_id, result in reusable.items():
-        _validate_reusable_case(result, *expected_cases[request_id])
-
-    results: dict[BinaryExecutionKey, BinaryRelevanceCaseResult] = {}
-    for target_id, trial_ref, case_id in selected_plan:
-        target = target_by_id[target_id]
-        case, request = request_by_case_id[case_id]
-        request_id = _request_id(target, trial_ref, case_id, request)
-        result = reusable.get(request_id)
-        if result is None:
-            result = _evaluate_case(
-                target,
-                trial_ref,
-                case,
-                request,
-                evaluators[target_id],
-                clock,
-            )
-            if on_case_result is not None:
-                on_case_result(result)
-        results[(target_id, trial_ref, case_id)] = result
-
-    runs = tuple(
-        _build_run(
-            target,
-            trial_ref,
-            tuple(results[(target.target_id, trial_ref, case.case_id)] for case, _ in requests),
-        )
-        for target in ordered_targets
-        for trial_ref in ordered_trial_refs
+    expected_cases = _expected_cases(canonical_plan, target_by_id, request_by_case_id)
+    _validate_reusable_cases(reusable, expected_cases)
+    results = _execute_plan(
+        selected_plan,
+        target_by_id,
+        request_by_case_id,
+        evaluators,
+        reusable,
+        on_case_result,
+        clock,
     )
+    runs = _build_runs(ordered_targets, ordered_trial_refs, requests, results)
     return BinaryRelevanceEvaluationResult(
         source_artifact_id=V11_SOURCE_ARTIFACT_ID,
         declared_manifest_version=V11_MANIFEST_VERSION,
@@ -389,19 +349,125 @@ def run_binary_relevance_evaluation(
     )
 
 
+def _validate_run_inputs(
+    targets: tuple[BinaryRelevanceTarget, ...],
+    trial_refs: tuple[str, ...],
+    evaluators: Mapping[TargetId, BinaryEvaluator],
+) -> tuple[tuple[BinaryRelevanceTarget, ...], tuple[str, ...]]:
+    ordered_targets = tuple(sorted(targets, key=lambda target: target.target_id))
+    ordered_trial_refs = tuple(sorted(trial_refs))
+    target_ids = tuple(target.target_id for target in ordered_targets)
+    if not ordered_targets or len(set(target_ids)) != len(target_ids):
+        raise ValueError("Binary relevance targets must be non-empty and unique")
+    if not ordered_trial_refs or any(not ref.strip() for ref in ordered_trial_refs):
+        raise ValueError("Binary relevance trial references must be non-empty")
+    if len(set(ordered_trial_refs)) != len(ordered_trial_refs):
+        raise ValueError("Binary relevance trial references must be unique")
+    if set(evaluators) != set(target_ids):
+        raise ValueError("Binary relevance evaluators must exactly match selected targets")
+    return ordered_targets, ordered_trial_refs
+
+
+def _canonical_execution_plan(
+    targets: tuple[BinaryRelevanceTarget, ...],
+    trial_refs: tuple[str, ...],
+    requests: tuple[BinaryRequestCase, ...],
+) -> tuple[BinaryExecutionKey, ...]:
+    return tuple(
+        (target.target_id, trial_ref, case.case_id)
+        for target in targets
+        for trial_ref in trial_refs
+        for case, _request in requests
+    )
+
+
+def _validate_execution_plan(
+    selected: tuple[BinaryExecutionKey, ...],
+    canonical: tuple[BinaryExecutionKey, ...],
+) -> None:
+    if len(selected) != len(set(selected)) or set(selected) != set(canonical):
+        raise ValueError(
+            "Binary relevance execution plan must exactly cover targets, trials, and cases"
+        )
+
+
+def _expected_cases(
+    canonical_plan: tuple[BinaryExecutionKey, ...],
+    target_by_id: Mapping[TargetId, BinaryRelevanceTarget],
+    request_by_case_id: Mapping[str, BinaryRequestCase],
+) -> dict[Sha256, ExpectedBinaryCase]:
+    expected = {}
+    for target_id, trial_ref, case_id in canonical_plan:
+        target = target_by_id[target_id]
+        case, request = request_by_case_id[case_id]
+        expected[_request_id(target, trial_ref, case_id, request)] = (
+            target,
+            trial_ref,
+            case,
+            request,
+        )
+    return expected
+
+
+def _validate_reusable_cases(
+    reusable: Mapping[Sha256, BinaryRelevanceCaseResult],
+    expected: Mapping[Sha256, ExpectedBinaryCase],
+) -> None:
+    if not set(reusable).issubset(expected):
+        raise ValueError("Reusable binary relevance cases do not match this evaluation identity")
+    for request_id, result in reusable.items():
+        _validate_reusable_case(result, *expected[request_id])
+
+
+def _execute_plan(
+    selected_plan: tuple[BinaryExecutionKey, ...],
+    target_by_id: Mapping[TargetId, BinaryRelevanceTarget],
+    request_by_case_id: Mapping[str, BinaryRequestCase],
+    evaluators: Mapping[TargetId, BinaryEvaluator],
+    reusable: Mapping[Sha256, BinaryRelevanceCaseResult],
+    on_case_result: BinaryCaseResultCallback | None,
+    clock: Callable[[], float],
+) -> dict[BinaryExecutionKey, BinaryRelevanceCaseResult]:
+    results = {}
+    for target_id, trial_ref, case_id in selected_plan:
+        target = target_by_id[target_id]
+        case, request = request_by_case_id[case_id]
+        request_id = _request_id(target, trial_ref, case_id, request)
+        result = reusable.get(request_id)
+        if result is None:
+            result = _evaluate_case(target, trial_ref, case, request, evaluators[target_id], clock)
+            if on_case_result is not None:
+                on_case_result(result)
+        results[(target_id, trial_ref, case_id)] = result
+    return results
+
+
+def _build_runs(
+    targets: tuple[BinaryRelevanceTarget, ...],
+    trial_refs: tuple[str, ...],
+    requests: tuple[BinaryRequestCase, ...],
+    results: Mapping[BinaryExecutionKey, BinaryRelevanceCaseResult],
+) -> tuple[BinaryRelevanceRunResult, ...]:
+    return tuple(
+        _build_run(
+            target,
+            trial_ref,
+            tuple(results[(target.target_id, trial_ref, case.case_id)] for case, _ in requests),
+        )
+        for target in targets
+        for trial_ref in trial_refs
+    )
+
+
 def binary_relevance_metrics(
     cases: tuple[BinaryRelevanceCaseResult, ...],
 ) -> BinaryRelevanceMetrics:
-    completed = tuple(case for case in cases if case.status == "completed")
-    true_positives = sum(case.expected and case.verdict is True for case in completed)
-    false_positives = sum(not case.expected and case.verdict is True for case in completed)
-    expected_positives = tuple(case for case in completed if case.expected)
-    false_negatives = tuple(case.case_id for case in expected_positives if case.verdict is False)
-    positive_controls = tuple(case for case in completed if case.control and case.expected)
-    preserved_controls = sum(case.verdict is True for case in positive_controls)
+    completed = _completed_cases(cases)
+    true_positives, false_positives = _prediction_counts(completed)
+    expected_positives, false_negatives = _expected_positive_results(completed)
+    positive_controls, preserved_controls = _positive_control_results(completed)
     attempts = tuple(attempt for case in cases for attempt in case.attempts)
-    input_tokens = sum(attempt.input_tokens or 0 for attempt in attempts)
-    output_tokens = sum(attempt.output_tokens or 0 for attempt in attempts)
+    input_tokens, output_tokens, total_cost_usd, total_latency_ms = binary_attempt_totals(attempts)
     latencies = tuple(attempt.latency_ms for attempt in attempts)
     return BinaryRelevanceMetrics(
         passed_cases=sum(case.passed for case in cases),
@@ -417,13 +483,39 @@ def binary_relevance_metrics(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total_tokens=input_tokens + output_tokens,
-        total_cost_usd=sum(
-            (attempt.cost_usd or Decimal(0) for attempt in attempts), start=Decimal(0)
-        ),
-        total_attempt_latency_ms=sum(attempt.latency_ms for attempt in attempts),
+        total_cost_usd=total_cost_usd,
+        total_attempt_latency_ms=total_latency_ms,
         p50_wall_latency_ms=_percentile(latencies, Decimal("0.50")),
         p95_wall_latency_ms=_percentile(latencies, Decimal("0.95")),
     )
+
+
+def _completed_cases(
+    cases: tuple[BinaryRelevanceCaseResult, ...],
+) -> tuple[BinaryRelevanceCaseResult, ...]:
+    return tuple(case for case in cases if case.status == "completed")
+
+
+def _prediction_counts(cases: tuple[BinaryRelevanceCaseResult, ...]) -> tuple[int, int]:
+    true_positives = sum(case.expected and case.verdict is True for case in cases)
+    false_positives = sum(not case.expected and case.verdict is True for case in cases)
+    return true_positives, false_positives
+
+
+def _expected_positive_results(
+    cases: tuple[BinaryRelevanceCaseResult, ...],
+) -> tuple[tuple[BinaryRelevanceCaseResult, ...], tuple[str, ...]]:
+    expected = tuple(case for case in cases if case.expected)
+    false_negatives = tuple(case.case_id for case in expected if case.verdict is False)
+    return expected, false_negatives
+
+
+def _positive_control_results(
+    cases: tuple[BinaryRelevanceCaseResult, ...],
+) -> tuple[tuple[BinaryRelevanceCaseResult, ...], int]:
+    controls = tuple(case for case in cases if case.control and case.expected)
+    preserved = sum(case.verdict is True for case in controls)
+    return controls, preserved
 
 
 def _load_request(article_reference: ArtifactReference) -> BinaryRequest:

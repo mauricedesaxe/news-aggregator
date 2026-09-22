@@ -7,8 +7,8 @@ from typing import cast
 import pytest
 from pydantic import HttpUrl
 
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_benchmark import (
     TYPESAFE_JEV_TARGET,
     build_binary_evaluators,

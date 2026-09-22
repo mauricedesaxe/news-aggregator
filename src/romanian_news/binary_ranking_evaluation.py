@@ -5,7 +5,6 @@ from typing import Literal
 from pydantic import model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_ranking import (
     RankingArticleEvidence,
     RankingGroupEvidence,
@@ -14,6 +13,7 @@ from romanian_news.analysis.binary_ranking import (
     canonical_ranking_groups,
 )
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_benchmark import BinaryBenchmarkCase, BinaryJudgmentCase
 from romanian_news.catalog.evaluations import load_news_evaluation_release
 from romanian_news.derived_binary_protocol import DERIVED_BINARY_BENCHMARKS

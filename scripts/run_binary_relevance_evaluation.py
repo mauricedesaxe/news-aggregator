@@ -14,12 +14,12 @@ from typing import Literal, cast
 from pydantic import ValidationError
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_evaluation import (
     RELEVANCE_BINARY_QUESTION,
     BinaryRequest,
     binary_state_digest,
 )
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_benchmark import (
     REGISTERED_BINARY_TARGETS,
     BinaryEvaluator,

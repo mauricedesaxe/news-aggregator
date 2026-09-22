@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Literal, NamedTuple, TypedDict, cast
 
 from romanian_news import Sha256
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_evaluation import (
     BinaryRequest,
     build_relevance_binary_request,
@@ -32,6 +31,7 @@ from romanian_news.analysis.groups.models import GroupSummary
 from romanian_news.analysis.relevance import ArticleAnalysisInput, RelevanceDecision
 from romanian_news.analysis.relevance_v3 import ContextDecision, ImpactDecision
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_confidence_evaluation import (
     CONFIDENCE_BENCHMARK,
     BinaryConfidenceCase,

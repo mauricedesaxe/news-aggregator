@@ -6,12 +6,12 @@ from typing import Any, cast
 from pydantic import model_validator
 
 from romanian_news import NewsModel
-from romanian_news.analysis.artifacts import ArtifactReference
 from romanian_news.analysis.binary_benchmark import analyze_binary_benchmark
 from romanian_news.analysis.binary_evaluation import BinaryRequest, binary_state_digest
 from romanian_news.analysis.relevance import RelevanceDecision
 from romanian_news.analysis.relevance_v3 import ImpactDecision
 from romanian_news.articles.models import ExtractedArticle
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.binary_benchmark import BinaryBenchmarkEvaluationResult
 from romanian_news.derived_binary_protocol import DERIVED_BINARY_BENCHMARKS
 from romanian_news.groups import NewsGroup

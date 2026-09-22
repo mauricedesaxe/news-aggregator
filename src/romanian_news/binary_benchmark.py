@@ -462,13 +462,7 @@ def run_registered_binary_benchmark(
         ): item
         for item in canonical_plan
     }
-    reusable = dict(reusable_results or {})
-    if not set(reusable).issubset(expected_results):
-        raise ValueError("Reusable binary judgments do not match this evaluation identity")
-    for request_id, result in reusable.items():
-        item = expected_results[request_id]
-        judgment = judgment_by_key[(item.case_id, item.judgment_id)]
-        _validate_reusable_result(result, request_id, item, judgment)
+    reusable = _validated_reusable_results(reusable_results, expected_results, judgment_by_key)
 
     ledger = spend or BinarySpendLedger(definition.spend_ceiling_usd)
     target_by_id = {target.target_id: target for target in targets}
@@ -479,30 +473,17 @@ def run_registered_binary_benchmark(
         request_id = _judgment_request_id(identity, item, case, judgment)
         if request_id in results:
             continue
-        maximum_cost = (
-            Decimal(0)
-            if identity.execution_mode == "dry_run"
-            else BINARY_TARGET_REGISTRY[item.target_id].maximum_request_cost_usd
+        result = _evaluate_binary_item(
+            request_id,
+            item,
+            judgment,
+            evaluators[item.target_id],
+            target_by_id[item.target_id],
+            identity.execution_mode,
+            ledger,
+            on_result,
+            clock,
         )
-        ledger.reserve(maximum_cost)
-        invocation = invoke_binary_evaluator(
-            evaluators[item.target_id], judgment.request, item.trial_ref, clock=clock
-        )
-        if invocation.observation is not None and not actual_model_matches_target(
-            target_by_id[item.target_id], invocation.observation.model
-        ):
-            ledger.settle(binary_attempt_totals(invocation.attempts)[2])
-            raise BinaryModelIdentityMismatch(
-                f"Actual model {invocation.observation.model!r} does not match "
-                + f"registered target {item.target_id!r}"
-            )
-        result = _judgment_result(request_id, item, judgment, invocation)
-        try:
-            ledger.settle(result.cost_usd)
-        except BinarySpendLimitExceeded:
-            if on_result is not None:
-                on_result(result)
-            raise
         results[request_id] = result
         if on_result is not None:
             on_result(result)
@@ -522,6 +503,57 @@ def run_registered_binary_benchmark(
             for item in canonical_plan
         ),
     )
+
+
+def _evaluate_binary_item(
+    request_id: Sha256,
+    item: BinaryExecutionItem,
+    judgment: BinaryJudgmentCase,
+    evaluator: BinaryEvaluator,
+    target: BinaryTarget,
+    execution_mode: ExecutionMode,
+    ledger: BinarySpendLedger,
+    on_result: Callable[[BinaryJudgmentResult], None] | None,
+    clock: Callable[[], float],
+) -> BinaryJudgmentResult:
+    maximum_cost = (
+        Decimal(0)
+        if execution_mode == "dry_run"
+        else BINARY_TARGET_REGISTRY[item.target_id].maximum_request_cost_usd
+    )
+    ledger.reserve(maximum_cost)
+    invocation = invoke_binary_evaluator(evaluator, judgment.request, item.trial_ref, clock=clock)
+    if invocation.observation is not None and not actual_model_matches_target(
+        target, invocation.observation.model
+    ):
+        ledger.settle(binary_attempt_totals(invocation.attempts)[2])
+        raise BinaryModelIdentityMismatch(
+            f"Actual model {invocation.observation.model!r} does not match "
+            + f"registered target {item.target_id!r}"
+        )
+    result = _judgment_result(request_id, item, judgment, invocation)
+    try:
+        ledger.settle(result.cost_usd)
+    except BinarySpendLimitExceeded:
+        if on_result is not None:
+            on_result(result)
+        raise
+    return result
+
+
+def _validated_reusable_results(
+    reusable_results: Mapping[Sha256, BinaryJudgmentResult] | None,
+    expected_results: Mapping[Sha256, BinaryExecutionItem],
+    judgment_by_key: Mapping[tuple[str, str], BinaryJudgmentCase],
+) -> dict[Sha256, BinaryJudgmentResult]:
+    reusable = dict(reusable_results or {})
+    if not set(reusable).issubset(expected_results):
+        raise ValueError("Reusable binary judgments do not match this evaluation identity")
+    for request_id, result in reusable.items():
+        item = expected_results[request_id]
+        judgment = judgment_by_key[(item.case_id, item.judgment_id)]
+        _validate_reusable_result(result, request_id, item, judgment)
+    return reusable
 
 
 def trial_references(execution_ref: str, trials: int, *, dry_run: bool) -> tuple[str, ...]:
@@ -595,7 +627,7 @@ def invoke_binary_evaluator(
 ) -> BinaryInvocation:
     captured: list[BinaryAttemptEvidence] = []
     supports_callback = _supports_attempt_callback(evaluator)
-    started = None if supports_callback else _clock_value(clock())
+    started = _clock_value(clock())
     try:
         observation = _invoke_evaluator(
             evaluator,
@@ -612,8 +644,6 @@ def invoke_binary_evaluator(
         return BinaryInvocation(observation=observation, attempts=attempts, error=None)
     except Exception as error:
         if not captured:
-            if started is None:
-                started = _clock_value(clock())
             captured.append(
                 BinaryAttemptEvidence(
                     attempt_number=1,

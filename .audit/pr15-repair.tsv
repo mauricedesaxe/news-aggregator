@@ -1,0 +1,6 @@
+ts	phase	decision	why	evidence	result
+2026-09-22T13:35:31Z	frame	Preserve the frozen evaluation results while repairing their integration and provenance	PR 15 is evidence for issue 9 and must not change production relevance authority	PR #15; issue #9	open
+2026-09-22T13:35:31Z	rebase	Kept the manual Jev evaluation job and the stopped video job in Dagster definitions	Both jobs are intentional and neither Jev evaluation nor video activation should gain an automatic schedule	src/romanian_news/worker/definitions.py	rebase completed
+2026-09-22T13:35:31Z	integration	Moved evaluation imports to the canonical ArtifactReference module	The old analysis.artifacts module was removed on main	src/romanian_news/artifacts.py	17 stale imports repaired
+2026-09-22T13:35:31Z	provenance	Updated three manifest generator hashes to the committed script bytes	Frozen outputs must be attributable to the exact generators in the branch	artifacts/jev-aspect-v1/manifest.json	pending regeneration tests
+2026-09-22T13:35:31Z	accounting	Started failure latency measurement before callback-capable evaluator invocation	A provider failure before its first callback must retain full elapsed time	src/romanian_news/tests/test_binary_benchmark.py	regression test added
