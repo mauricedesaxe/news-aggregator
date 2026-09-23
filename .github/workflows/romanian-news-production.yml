@@ -79,9 +79,11 @@ jobs:
         run: |
           uv run --no-sync python - <<'PY'
           from romanian_news.catalog.schema import ensure_news_catalog_schema
+          from romanian_news.worker.catalog_status import print_catalog_status
 
           ensure_news_catalog_schema()
           print("PostgreSQL catalog connection and schema verified")
+          print_catalog_status()
           PY
 
       - name: Start stored automation state
