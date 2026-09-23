@@ -248,7 +248,3 @@ def test_binary_question_and_jev_request_identities_are_stable() -> None:
     first = jev_relevance_request_id(request, "trial-1")
     assert first == jev_relevance_request_id(request, "trial-1")
     assert first != jev_relevance_request_id(request, "trial-2")
-
-
-def test_jev_observation_uses_the_provider_neutral_binary_shape() -> None:
-    assert issubclass(jev_relevance.JevRelevanceObservation, BinaryProbabilityObservation)

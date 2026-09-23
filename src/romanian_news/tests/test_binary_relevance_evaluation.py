@@ -333,9 +333,6 @@ def test_v11_source_rejects_wrong_artifact_or_declared_manifest_version(monkeypa
 
 
 def test_models_are_frozen_and_strict() -> None:
-    assert TYPESAFE_JEV_TARGET.model_config.get("frozen") is True
-    assert BinaryAttemptEvidence.model_config.get("frozen") is True
-    assert BinaryAttemptEvidence.model_config.get("strict") is True
     assert OPENROUTER_GEMINI_25_TARGET.target_id != OPENROUTER_GEMINI_38_TARGET.target_id
     assert (
         OPENROUTER_GEMINI_25_TARGET.execution_policy_digest

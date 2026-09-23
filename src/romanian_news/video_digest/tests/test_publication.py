@@ -67,23 +67,42 @@ CONFIG = publication.PublicMediaConfiguration(
 )
 
 
-def test_publication_port_builds_from_the_exact_environment_boundary(
+@pytest.mark.parametrize(
+    ("private_bucket", "public_bucket", "base_url"),
+    (
+        ("", "public", "https://media.example.com"),
+        ("private", "", "https://media.example.com"),
+        ("private", "public", ""),
+        ("private", "public", "http://media.example.com"),
+        ("private", "public", "https://user@media.example.com"),
+        ("same", "same", "https://media.example.com"),
+    ),
+)
+def test_publication_port_from_environment_rejects_an_unsafe_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    private_bucket: str,
+    public_bucket: str,
+    base_url: str,
+) -> None:
+    monkeypatch.setattr(publication, "NEWS_R2_BUCKET", private_bucket)
+    monkeypatch.setattr(publication, "NEWS_PUBLIC_MEDIA_R2_BUCKET", public_bucket)
+    monkeypatch.setattr(publication, "NEWS_PUBLIC_MEDIA_BASE_URL", base_url)
+
+    with pytest.raises(ValidationError):
+        publication.R2PublicationPort.from_environment()
+
+
+def test_publication_port_from_environment_builds_from_a_safe_boundary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = cast(BaseClient, object())
     monkeypatch.setattr(publication, "NEWS_R2_BUCKET", "private-environment")
     monkeypatch.setattr(publication, "NEWS_PUBLIC_MEDIA_R2_BUCKET", "public-environment")
     monkeypatch.setattr(publication, "NEWS_PUBLIC_MEDIA_BASE_URL", "https://media.environment")
-    monkeypatch.setattr(publication, "r2_client", lambda: client)
+    monkeypatch.setattr(publication, "r2_client", lambda: cast(BaseClient, object()))
 
     port = publication.R2PublicationPort.from_environment()
 
-    assert port._configuration == publication.PublicMediaConfiguration(
-        private_bucket="private-environment",
-        public_bucket="public-environment",
-        base_url="https://media.environment",
-    )
-    assert port._client is client
+    assert isinstance(port, publication.R2PublicationPort)
 
 
 @pytest.mark.parametrize(

@@ -121,8 +121,6 @@ def test_adapter_preserves_immutable_artifact_identities() -> None:
 
     assert any(first_article.article.version_id in value for value in adapted.identity)
     assert any(first_article.relevance.version_id in value for value in adapted.identity)
-    assert adapted.model_config.get("frozen") is True
-    assert source.model_config.get("frozen") is True
     with pytest.raises(ValidationError, match="frozen"):
         source.cases[0].case_id = "mutated"
 

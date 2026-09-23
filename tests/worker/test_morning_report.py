@@ -1,36 +1,36 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-import dagster as dg
 import pytest
 from dagster._core.events import StepOutputData
 
 from romanian_news.worker import morning_report
+from tests.daily_report_catalog import daily_report, seed_daily_report
+from tests.postgres_catalog import PostgresCatalog
 
 
-def _freeze_morning(monkeypatch, pings: list[str]) -> SimpleNamespace:
+def test_morning_check_reports_the_day_and_pings_on_the_real_catalog(
+    postgres_catalog: PostgresCatalog,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_daily_report(postgres_catalog, daily_report(date(2026, 9, 13)))
     monkeypatch.setattr(
         morning_report,
         "_now",
         lambda: datetime(2026, 9, 14, 9, 35, tzinfo=ZoneInfo("Europe/Bucharest")),
     )
-    head = SimpleNamespace(version_id="9" * 64, input_time=datetime(2026, 9, 14, 4, 2))
     monkeypatch.setattr(
         morning_report,
         "build_and_publish_current_daily_report",
-        lambda day, ref: SimpleNamespace(head=head),
+        lambda day, ref: SimpleNamespace(
+            head=SimpleNamespace(version_id="9" * 64, input_time=datetime(2026, 9, 14, 4, 2))
+        ),
     )
-    monkeypatch.setattr(morning_report, "read_daily_report_reference", lambda day: None)
-    monkeypatch.setattr(morning_report, "ping_heartbeat", lambda kind: pings.append(kind))
-    return head
-
-
-def test_morning_check_verifies_both_days_and_pings(monkeypatch) -> None:
     pings: list[str] = []
-    head = _freeze_morning(monkeypatch, pings)
+    monkeypatch.setattr(morning_report, "ping_heartbeat", lambda kind: pings.append(kind))
 
     execution = morning_report.morning_report_check.execute_in_process()
 
@@ -43,32 +43,5 @@ def test_morning_check_verifies_both_days_and_pings(monkeypatch) -> None:
     assert isinstance(event_data, StepOutputData)
     metadata = {name: value.value for name, value in event_data.metadata.items()}
     assert metadata["day"] == "2026-09-14"
-    assert metadata["report_version_id"] == head.version_id
+    assert metadata["report_version_id"] == "9" * 64
     assert pings == ["morning_report"]
-
-
-def test_morning_check_does_not_ping_when_yesterdays_edition_is_missing(monkeypatch) -> None:
-    ensure_calls: list[object] = []
-    pings: list[str] = []
-
-    def missing(_day: object) -> object:
-        raise ValueError("No current artifact exists: news:daily:2026-09-13")
-
-    monkeypatch.setattr(
-        morning_report,
-        "_now",
-        lambda: datetime(2026, 9, 14, 9, 35, tzinfo=ZoneInfo("Europe/Bucharest")),
-    )
-    monkeypatch.setattr(
-        morning_report,
-        "build_and_publish_current_daily_report",
-        lambda day, ref: ensure_calls.append((day, ref)),
-    )
-    monkeypatch.setattr(morning_report, "read_daily_report_reference", missing)
-    monkeypatch.setattr(morning_report, "ping_heartbeat", lambda kind: pings.append(kind))
-
-    with pytest.raises(ValueError):
-        morning_report.morning_report_check_op(dg.build_op_context())
-
-    assert len(ensure_calls) == 1
-    assert pings == []

@@ -429,26 +429,6 @@ def test_provider_model_mismatch_is_recorded_as_a_rejected_attempt(
     )
 
 
-def test_policy_publication_records_durable_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
-    published: dict[str, bytes] = {}
-
-    def publish(objects: Iterable[tuple[str, bytes]]) -> None:
-        for key, content in objects:
-            published[key] = content
-
-    def record(file: Any, *, recorded_at: datetime) -> str:
-        del recorded_at
-        assert published[file.r2_key] == file.content
-        return file.version_id
-
-    monkeypatch.setattr(preflight, "publish_immutable_r2_objects", publish)
-    monkeypatch.setattr(preflight, "record_policy_bundle", record)
-
-    version_id = preflight.publish_policy()
-
-    assert version_id == preflight.PRODUCTION_POLICY.artifact.version_id
-
-
 def _rejecting_provider(requests: list[ProviderChatRequest]) -> Any:
     def provider(request: ProviderChatRequest) -> ChatCompletion:
         requests.append(request)

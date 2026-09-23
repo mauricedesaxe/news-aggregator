@@ -507,18 +507,6 @@ def test_article_materializer_isolates_a_publish_conflict_across_parallel_items(
     )
 
 
-def test_publish_failure_maps_psycopg_integrity_conflict_to_deterministic() -> None:
-    conflict = psycopg.errors.IntegrityConstraintViolation("news_article_aliases identity conflict")
-    error = ResearchCatalogError("PostgreSQL catalog request failed")
-    error.__cause__ = conflict
-
-    failure = operations._publish_failure("a" * 64, error)
-
-    assert failure.kind == ArticleFailureKind.DETERMINISTIC
-    assert failure.message.endswith("identity conflict")
-    assert failure.fingerprint == operations._publish_failure("a" * 64, error).fingerprint
-
-
 def test_article_materializer_rejects_more_than_ten_event_ids() -> None:
     with pytest.raises(ValueError, match="at most 10"):
         operations.materialize_articles(

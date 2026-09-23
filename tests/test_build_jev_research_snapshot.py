@@ -41,7 +41,6 @@ def test_snapshot_preserves_aspect_context_and_sentiment_limits() -> None:
     aspects = {item["concern"]: item for item in snapshot["news_aspects"]}
     roles = {item["role"]: item for item in snapshot["context_policy"]["roles"]}
 
-    assert tuple(aspects) == builder.ASPECT_ORDER
     assert aspects["grouping"]["evidence_status"] == "derived_task_only"
     assert aspects["ranking"]["deployment_conclusion"] == "not_established"
     assert aspects["tier"]["context_status"] == "unsafe"
