@@ -252,7 +252,7 @@ ARTICLE_ASSET_KEY = dg.AssetKey("articles")
 @dg.sensor(
     job=article_batch_job,
     minimum_interval_seconds=60,
-    default_status=dg.DefaultSensorStatus.STOPPED,
+    default_status=dg.DefaultSensorStatus.RUNNING,
 )
 def article_batch_controller(
     context: dg.SensorEvaluationContext,
