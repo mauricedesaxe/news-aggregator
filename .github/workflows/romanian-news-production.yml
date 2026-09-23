@@ -209,7 +209,15 @@ jobs:
                       query RunDiagnostics($runId: ID!) {
                         pipelineRunOrError(runId: $runId) {
                           __typename
-                          ... on Run { status }
+                          ... on Run {
+                            status
+                            jobName
+                            eventConnection(limit: 80) {
+                              events { message }
+                            }
+                          }
+                          ... on PythonError { message }
+                          ... on RunNotFoundError { message }
                         }
                       }
                   """,
@@ -223,8 +231,13 @@ jobs:
               raise RuntimeError("Dagster run lookup failed")
           run = body["data"]["pipelineRunOrError"]
           if run["__typename"] != "Run":
-              raise RuntimeError("Dagster run was not found")
+              raise RuntimeError(run.get("message") or "Dagster run was not found")
           print(f"Run status: {run['status']}")
+          print(f"Job: {run['jobName']}")
+          for row in run["eventConnection"]["events"]:
+              text = row.get("message") or ""
+              if text:
+                  print(text)
           PY
 
       - name: Run current feed probe
