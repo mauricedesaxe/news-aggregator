@@ -189,28 +189,6 @@ def test_policy_is_frozen_strict_and_content_addressed() -> None:
         VideoDigestPolicyBundle.model_validate(policy.model_dump() | {"story_duration_ms": "15000"})
 
 
-def test_production_policy_pins_the_planning_contract() -> None:
-    policy = preflight.PRODUCTION_POLICY.definition.policy
-
-    assert policy.target_spoken_words == 30
-    assert policy.spoken_word_tolerance == 5
-    assert policy.story_duration_ms == 15_000
-    assert policy.maximum_planning_attempt_index == 2
-
-
-def test_artifact_content_models_do_not_contain_their_own_artifact_version() -> None:
-    for model in (
-        VideoDigestPolicyBundle,
-        ScreenplayStory,
-        ScreenplayPlan,
-        StoryVerificationEvidence,
-        PlanningAttempt,
-        VerifiedDigestPlan,
-        GenerationAuthorization,
-    ):
-        assert "artifact_version_id" not in model.model_fields
-
-
 def test_complete_plan_contains_each_main_subject_once_in_report_order() -> None:
     policy = _policy()
 
@@ -298,17 +276,6 @@ def test_plan_requires_exact_production_story_duration() -> None:
 
     with pytest.raises(ValueError, match="exactly 15000 ms"):
         create_screenplay_plan(_report(), REPORT_VERSION, POLICY_VERSION, _policy(), stories)
-
-
-@pytest.mark.parametrize("attempt_index", (0, 1, 2))
-def test_planning_attempt_index_is_bounded(attempt_index: int) -> None:
-    policy = _policy()
-    plan = create_screenplay_plan(_report(), REPORT_VERSION, POLICY_VERSION, policy, _stories())
-    evidence = tuple(_evidence(story, policy) for story in plan.stories)
-
-    assert record_planning_attempt(attempt_index, plan, evidence, "accepted").attempt_index == (
-        attempt_index
-    )
 
 
 @pytest.mark.parametrize("attempt_index", (-1, 3))

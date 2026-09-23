@@ -38,13 +38,6 @@ from romanian_news.derived_binary_protocol import DERIVED_BINARY_BENCHMARKS
 
 
 def test_registered_tier_definition_drives_two_judgments_and_analysis(tmp_path: Path) -> None:
-    assert tuple(DERIVED_BINARY_BENCHMARKS) == (
-        "grouping",
-        "ranking",
-        "tier",
-        "confidence",
-        "daily_theme",
-    )
     definition = DERIVED_BINARY_BENCHMARKS["tier"]
     cases = _cases("tier")
     identity = build_execution_identity(

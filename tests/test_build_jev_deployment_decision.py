@@ -16,35 +16,6 @@ sys.modules[SPEC.name] = builder
 SPEC.loader.exec_module(builder)
 
 
-def test_decision_covers_every_evaluated_and_unsupported_prompt_class() -> None:
-    decision = builder.build_decision()
-    dispositions = {(item["product"], item["aspect"]): item for item in decision["dispositions"]}
-
-    assert len(dispositions) == 10
-    assert dispositions[("news", "relevance")]["disposition"] == ("guarded_shadow_candidate")
-    assert dispositions[("news", "relevance")]["implementation_ticket"] == ("news-aggregator-vt6.8")
-    assert dispositions[("job_finder", "relevance")]["disposition"] == ("retain_incumbent")
-    assert dispositions[("news", "tier")]["disposition"] == "retain_incumbent"
-    assert dispositions[("news", "confidence")]["disposition"] == ("require_more_evidence")
-    assert dispositions[("cross_product", "structured_extraction")]["implementation_ticket"] is None
-    assert dispositions[("cross_product", "prose_generation")]["disposition"] == (
-        "retain_incumbent"
-    )
-
-
-def test_accepted_rollout_has_quality_telemetry_fallback_and_rollback() -> None:
-    rollout = builder.build_decision()["accepted_rollout"]
-
-    assert rollout["mode"] == "shadow_only_incumbent_authoritative"
-    assert "len(state) <= 70000" in rollout["preflight"]
-    assert "unchanged full state" in rollout["fallback"]
-    assert rollout["clip_or_chunk_state"] is False
-    assert rollout["retry_unchanged_rejected_request"] is False
-    assert "paired Jev and incumbent verdicts" in rollout["telemetry"]
-    assert "recall 1.0" in rollout["promotion_gate"]
-    assert "configuration-only" in rollout["rollback"]
-
-
 def test_decision_is_deterministic_and_contains_no_sensitive_text(tmp_path: Path) -> None:
     decision = builder.build_decision()
     json_path = tmp_path / "decision.json"

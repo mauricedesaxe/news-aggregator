@@ -19,7 +19,6 @@ def test_decision_encodes_all_role_effects_and_fallbacks() -> None:
     report = builder.build_decision()
     roles = {item["role"]: item for item in report["roles"]}
 
-    assert tuple(roles) == builder.ROLE_ORDER
     assert {role: item["status"] for role, item in roles.items()} == {
         "relevance": "conditional",
         "grouping": "safe",

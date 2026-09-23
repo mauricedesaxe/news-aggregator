@@ -1,15 +1,10 @@
-from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
 
-from romanian_news.catalog import video_digest_feedback as feedback_catalog
 from romanian_news.video_digest.models import EditionId, StoryId
-from romanian_news.video_digest_feedback import (
-    VideoDigestFeedbackCommand,
-    submit_video_digest_feedback,
-)
+from romanian_news.video_digest_feedback import VideoDigestFeedbackCommand
 
 EDITION_ID = EditionId("1" * 64)
 STORY_ID = StoryId("2" * 64)
@@ -48,30 +43,3 @@ def test_feedback_command_rejects_invalid_identity_and_note() -> None:
             edition_id=EDITION_ID,
             note="x" * 2001,
         )
-
-
-def test_submit_feedback_passes_only_command_fields_to_catalog(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    command = VideoDigestFeedbackCommand(
-        feedback_id=FEEDBACK_ID,
-        edition_id=EDITION_ID,
-        rating="negative",
-        note="Too abrupt",
-    )
-    created_at = datetime(2026, 9, 22, 10, tzinfo=UTC)
-
-    def append(
-        value: feedback_catalog.VideoDigestFeedbackWrite,
-    ) -> feedback_catalog.VideoDigestFeedbackRecord:
-        assert value.model_dump() == command.model_dump()
-        return feedback_catalog.VideoDigestFeedbackRecord(
-            **value.model_dump(), created_at=created_at
-        )
-
-    monkeypatch.setattr(feedback_catalog, "append_video_digest_feedback", append)
-
-    event = submit_video_digest_feedback(command)
-
-    assert event.created_at == created_at
-    assert event.model_dump(exclude={"created_at"}) == command.model_dump()

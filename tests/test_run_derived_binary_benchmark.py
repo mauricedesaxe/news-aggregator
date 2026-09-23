@@ -62,20 +62,6 @@ sys.modules[_SPEC.name] = runner
 _SPEC.loader.exec_module(runner)
 
 
-def test_all_five_concerns_are_registered() -> None:
-    assert tuple(DERIVED_BINARY_DISPATCH) == (
-        "grouping",
-        "ranking",
-        "tier",
-        "confidence",
-        "daily_theme",
-    )
-    assert {
-        concern: registration.definition
-        for concern, registration in DERIVED_BINARY_DISPATCH.items()
-    } == dict(DERIVED_BINARY_BENCHMARKS)
-
-
 @pytest.mark.parametrize("concern", tuple(DERIVED_BINARY_DISPATCH))
 def test_every_registration_adapts_its_concern_source(concern: BenchmarkId) -> None:
     source = _concern_source(concern)

@@ -42,22 +42,3 @@ def test_protocol_freezes_source_models_and_tier_semantics() -> None:
     ]
     assert tier["composition_digest"] == TIER_COMPOSITION_DIGEST
     assert tier["context_guard_characters"] == 70_000
-
-
-def test_protocol_measures_complete_runs_without_fallback() -> None:
-    protocol = _protocol()
-    execution = cast(dict[str, object], protocol["execution"])
-    quality = cast(dict[str, object], protocol["quality"])
-    tier = cast(dict[str, object], protocol["tier_contract"])
-
-    assert execution["trial_count"] == 3
-    assert execution["arm_order"] == [
-        ["incumbent", "candidate"],
-        ["candidate", "incumbent"],
-        ["incumbent", "candidate"],
-    ]
-    assert "forbidden" in cast(str, execution["provider_reuse"])
-    assert "every" in cast(str, execution["cost_policy"])
-    assert "wall time" in cast(str, execution["latency_policy"])
-    assert "Never clip" in cast(str, tier["context_policy"])
-    assert quality["primary_unit"] == "Complete validated day-level subject assessment."

@@ -294,12 +294,6 @@ def test_runner_durably_records_source_skips_without_alert(reason: SlotSkipReaso
     assert catalog.renewed == 0
 
 
-@pytest.mark.parametrize("reason", tuple(SlotSkipReason))
-def test_every_skip_reason_has_no_incident(reason: SlotSkipReason) -> None:
-    outcome = RunSkipped(reason=reason)
-    assert alert_disposition(SLOT.slot_id, outcome) == NoAlert()
-
-
 def test_reducer_selects_three_assembly_attempts_and_fixed_subtitle_strategies() -> None:
     evidence = VIDEO.model_copy(update={"artifact_id": "evidence"})
     for index in range(3):

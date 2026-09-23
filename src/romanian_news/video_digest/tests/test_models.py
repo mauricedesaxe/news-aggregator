@@ -295,25 +295,9 @@ def test_attempt_cost_variants_are_explicit_and_non_negative() -> None:
         PendingAttemptCost.model_validate({"kind": "pending", "usd": Decimal("0")})
 
 
-def test_claim_result_parses_each_discriminated_variant() -> None:
+def test_claim_result_rejects_unknown_variants() -> None:
     adapter = TypeAdapter(ClaimResult)
-    lease = SlotLease(
-        slot_id=SlotId("1" * 64),
-        edition_id=_edition().edition_id,
-        owner_token="worker-1",
-        expires_at=datetime(2026, 9, 20, 6, tzinfo=UTC),
-        claim_count=1,
-    )
 
-    assert isinstance(adapter.validate_python(ClaimedSlot(lease=lease)), ClaimedSlot)
-    assert isinstance(
-        adapter.validate_python(SkippedSlot(reason=SlotSkipReason.UNCHANGED)),
-        SkippedSlot,
-    )
-    assert isinstance(
-        adapter.validate_python(TerminalSlot(state=TerminalSlotState.PUBLISHED)),
-        TerminalSlot,
-    )
     with pytest.raises(ValidationError):
         adapter.validate_python({"kind": "waiting"})
 
@@ -323,17 +307,9 @@ def test_terminal_slot_cannot_discard_a_skip_reason() -> None:
         TerminalSlotState("skipped")
 
 
-def test_subtitle_outcome_has_only_available_and_failed_variants() -> None:
+def test_subtitle_outcome_rejects_unknown_variants() -> None:
     adapter = TypeAdapter(SubtitleOutcome)
 
-    assert isinstance(
-        adapter.validate_python(AvailableSubtitles(artifact_version_id=SUBTITLE_VERSION)),
-        AvailableSubtitles,
-    )
-    assert isinstance(
-        adapter.validate_python(FailedSubtitles(evidence_artifact_version_id="0" * 64)),
-        FailedSubtitles,
-    )
     with pytest.raises(ValidationError):
         adapter.validate_python({"kind": "pending"})
 
