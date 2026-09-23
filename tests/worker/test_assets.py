@@ -66,7 +66,7 @@ def test_automation_starts_running_and_uses_bucharest_time() -> None:
     assert weekly_news_report.default_status == dg.DefaultScheduleStatus.RUNNING
     assert scheduled_video_digest.default_status == dg.DefaultScheduleStatus.STOPPED
     assert news_automation.default_status == dg.DefaultSensorStatus.RUNNING
-    assert article_batch_controller.default_status == dg.DefaultSensorStatus.STOPPED
+    assert article_batch_controller.default_status == dg.DefaultSensorStatus.RUNNING
     assert hourly_registered_feed_poll.cron_schedule == "0 * * * *"
     assert daily_morning_report_check.cron_schedule == "35 9 * * *"
     assert weekly_news_report.cron_schedule == "0 * * * *"

@@ -29,6 +29,20 @@ def test_production_workflow_starts_every_defined_schedule() -> None:
     assert "scheduled_video_digest" not in workflow_schedules
 
 
+def test_production_workflow_starts_every_running_sensor() -> None:
+    workflow = WORKFLOW.read_text()
+    sensor_block = workflow.split("for sensor_name in (", maxsplit=1)[1].split("):", maxsplit=1)[0]
+    workflow_sensors = set(re.findall(r'"([a-z_]+)"', sensor_block))
+
+    sensors = defs.sensors
+    assert sensors is not None
+    running_sensors = {
+        sensor.name for sensor in sensors if sensor.default_status.value == "RUNNING"
+    }
+    assert workflow_sensors == running_sensors
+    assert "article_batch_controller" in workflow_sensors
+
+
 def test_production_workflow_rejects_noncurrent_or_inspection_activation() -> None:
     workflow = WORKFLOW.read_text()
     validation_step = workflow.split("- name: Validate operation", maxsplit=1)[1].split(
@@ -75,14 +89,15 @@ def test_production_workflow_rejects_noncurrent_or_inspection_activation() -> No
     assert "requires a current-day feed probe" in inspection.stderr
 
 
-def test_production_workflow_checks_morning_report_after_controller_activation() -> None:
+def test_production_workflow_checks_morning_report_after_feed_probe() -> None:
     workflow = WORKFLOW.read_text()
 
-    controller = workflow.index("- name: Start article batch controller")
+    feed_probe = workflow.index("- name: Run current feed probe")
     health_check = workflow.index("- name: Run morning report health check")
     health_check_block = workflow[health_check:]
 
-    assert controller < health_check
+    assert feed_probe < health_check
+    assert "Start article batch controller" not in workflow
     assert "if: inputs.enable_article_controller && inputs.partition != ''" in health_check_block
     assert "--job morning_report_check" in health_check_block
     assert "--wait" in health_check_block
