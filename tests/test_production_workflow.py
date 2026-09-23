@@ -96,6 +96,7 @@ def test_production_workflow_keeps_starting_automation_if_schema_check_fails() -
     )[0]
 
     assert "continue-on-error: true" in schema_step
+    assert "print_catalog_status" in schema_step
 
 
 def test_production_workflow_checks_morning_report_after_feed_probe() -> None:
