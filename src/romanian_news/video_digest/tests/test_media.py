@@ -603,13 +603,11 @@ def test_candidate_matching_rejects_a_divergent_response_version(
 
 
 def test_media_tool_timeout_fails_the_attempt_for_a_retry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     edition = EditionId("e" * 64)
     story = _story(edition, 0)
     content = b"candidate"
-    path = tmp_path / "candidate.mp4"
-    path.write_bytes(content)
     attempt, candidate = _processing_attempt(story, content, "red")
     events: list[str] = []
     monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
@@ -622,7 +620,11 @@ def test_media_tool_timeout_fails_the_attempt_for_a_retry(
             json.loads(evidence_file.content)["code"]
         ),
     )
-    monkeypatch.setattr(media, "MEDIA_PROCESS_TIMEOUT_SECONDS", 0)
+
+    def timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired("ffprobe", 0)
+
+    monkeypatch.setattr(media, "_run", timeout)
 
     outcome = media.accept_candidate(_lease(edition), candidate, story)
 
