@@ -132,13 +132,15 @@ def _apply_migrations(connection: psycopg.Connection[dict[str, Any]]) -> None:
             continue
         migration_sql = migration.path.read_text()
         try:
-            connection.execute(sql.SQL(cast(LiteralString, migration_sql)), prepare=False)
+            with connection.transaction():
+                connection.execute(sql.SQL(cast(LiteralString, migration_sql)), prepare=False)
+                connection.execute(
+                    "INSERT INTO news_schema_migrations (version, name, sha256)"
+                    " VALUES (%s, %s, %s)",
+                    (migration.version, migration.name, migration.sha256),
+                )
         except psycopg.errors.InsufficientPrivilege:
             continue
-        connection.execute(
-            "INSERT INTO news_schema_migrations (version, name, sha256) VALUES (%s, %s, %s)",
-            (migration.version, migration.name, migration.sha256),
-        )
 
 
 def _verify_schema(connection: psycopg.Connection[dict[str, Any]]) -> None:
