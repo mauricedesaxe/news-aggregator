@@ -376,9 +376,9 @@ def _article_batch_request(
         ),
         limit=1,
     )
-    if succeeded or (
-        not event_ids and (plan.remaining_entries or day not in plan.source_covered_days)
-    ):
+    today = now.astimezone(BUCHAREST).date()
+    waiting_for_coverage = day not in plan.source_covered_days and day >= today
+    if succeeded or (not event_ids and (plan.remaining_entries or waiting_for_coverage)):
         return None
     recovery_slot = now.replace(second=0, microsecond=0).isoformat()
     return dg.RunRequest(
