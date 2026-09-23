@@ -38,13 +38,8 @@ from romanian_news.split_subject_assessment_experiment import (
     load_frozen_v11_source,
     run_candidate_arm,
 )
-from romanian_news.tests.test_subject_assessments import _input
-from romanian_news.themes import (
-    LEGACY_SPARSE_THEME_DEFINITION,
-    DailyThemeInput,
-    SparseDailyThemeSet,
-    construct_daily_themes,
-)
+from romanian_news.tests.evaluation_factories import relevance_decision
+from romanian_news.tests.test_subject_assessments import _input, _sparse_input
 from scripts.run_split_subject_assessment_experiment import (
     GEMINI_REQUEST_RESERVE_USD,
     JEV_REQUEST_RESERVE_USD,
@@ -216,13 +211,7 @@ def test_candidate_batches_both_tier_questions_and_freezes_whole_day() -> None:
 
 
 def test_frozen_v11_loader_reconstructs_exact_assessment_inputs(monkeypatch) -> None:
-    value = _input(empty=True)
-    theme_set = construct_daily_themes(
-        DailyThemeInput(day=value.day, cluster_set=value.theme_set.cluster_set, groups=()),
-        LEGACY_SPARSE_THEME_DEFINITION,
-    )
-    assert isinstance(theme_set.theme_set, SparseDailyThemeSet)
-    value = value.model_copy(update={"theme_set": theme_set.theme_set})
+    value = _sparse_input(monkeypatch)
     cluster = DailyClusterSet(
         day=value.day,
         algorithm="test",
@@ -261,27 +250,28 @@ def test_frozen_v11_loader_reconstructs_exact_assessment_inputs(monkeypatch) -> 
         )
         for item in reports
     }
+    articles = {item.article.version_id: item.article for item in value.evidence}
     artifacts = {
         value.themes.version_id: value.theme_set.model_dump_json().encode(),
         value.theme_set.cluster_set.version_id: cluster.model_dump_json().encode(),
     }
-    summaries = {item.reference.version_id: item for item in value.summaries}
-    relevance = {
-        item.relevance.version_id: (item.article.version_id, item.evidence_quote)
-        for item in value.evidence
-    }
-    articles = {item.article.version_id: item.article for item in value.evidence}
-    monkeypatch.setattr(
-        "romanian_news.split_subject_assessment_experiment._summary_item",
-        lambda reference, _reader: (
-            summaries[reference.version_id].group_id,
-            summaries[reference.version_id].summary,
-        ),
-    )
-    monkeypatch.setattr(
-        "romanian_news.split_subject_assessment_experiment._relevance_item",
-        lambda reference, _reader: relevance[reference.version_id],
-    )
+    for item in value.summaries:
+        artifacts[item.reference.version_id] = json.dumps(
+            {
+                "group_id": item.group_id,
+                "summary": item.summary.model_dump(mode="json"),
+            }
+        ).encode()
+    for item in value.evidence:
+        decision = relevance_decision(accepted=True).model_copy(
+            update={"evidence_quote": item.evidence_quote}
+        )
+        artifacts[item.relevance.version_id] = json.dumps(
+            {
+                "article_version_id": item.article.version_id,
+                "decision": decision.model_dump(mode="json"),
+            }
+        ).encode()
     loaded = load_frozen_v11_assessment_inputs(
         manifest,
         artifact_reader=lambda reference: artifacts[reference.version_id],
