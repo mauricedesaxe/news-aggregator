@@ -1,6 +1,4 @@
-import ast
 import hashlib
-import inspect
 import json
 from decimal import Decimal
 from types import SimpleNamespace
@@ -86,7 +84,7 @@ def test_gemini_binary_sends_only_canonical_semantics_and_normalizes_accounting(
         clock=iter((10.0, 10.125)).__next__,
     )
 
-    body, = sent
+    (body,) = sent
     assert body == {
         "model": "google/gemini-2.5-flash",
         "messages": [

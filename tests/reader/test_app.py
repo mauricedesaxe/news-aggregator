@@ -2554,6 +2554,42 @@ def _reader_video_digest(*, subtitle_failed: bool = False) -> ReaderVideoDigest:
     )
 
 
+def test_written_only_deployment_rejects_video_feedback() -> None:
+    domain = ReaderDomain(
+        list_reports=lambda _limit: _report_summaries(),
+        resolve_current_report_version=lambda version: version,
+        read_report=lambda _version: _daily_report(),
+        read_current_report=_live_report,
+        read_feedback=lambda _version: (),
+        submit_feedback=lambda command: _event(command),
+        read_research_flags=lambda _version: None,
+    )
+    app = create_app(
+        ReaderSettings(
+            app_password="correct horse",
+            session_secret=TEST_SESSION_SECRET,
+        ),
+        domain,
+    )
+
+    with TestClient(app) as client:
+        csrf_token = _login(app, client)
+        response = client.post(
+            "/video-feedback",
+            data={
+                "feedback_id": FEEDBACK_ID,
+                "edition_id": VIDEO_EDITION,
+                "story_id": VIDEO_STORY,
+                "rating": "positive",
+                "note": "",
+                "csrf_token": csrf_token,
+            },
+        )
+
+    assert response.status_code == 400
+    assert "Feedback could not be saved." in response.text
+
+
 def _video_app(
     digest: ReaderVideoDigest,
     *,

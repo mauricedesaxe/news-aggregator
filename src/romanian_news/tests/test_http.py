@@ -1,5 +1,6 @@
 import socket
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
@@ -99,6 +100,23 @@ def test_news_session_stops_retrying_a_sustained_throttle(
         _stop(server)
 
     assert _ThrottlingHandler.request_count == 4
+
+
+def test_news_session_waits_for_the_retry_after_header_before_retrying() -> None:
+    _ThrottlingHandler.failures_left = 1
+    _ThrottlingHandler.retry_after = "1"
+    _ThrottlingHandler.request_count = 0
+    session, url, server = _local_session()
+    started = time.monotonic()
+    try:
+        response = get_with_validated_redirects(session, url, headers={}, timeout=10)
+    finally:
+        _stop(server)
+
+    assert response.status_code == 200
+    assert response.content == b"recovered"
+    assert _ThrottlingHandler.request_count == 2
+    assert 1.0 <= time.monotonic() - started < 10.0
 
 
 def test_get_validates_redirect_before_sending_the_next_request(monkeypatch) -> None:

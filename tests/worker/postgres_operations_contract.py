@@ -8,7 +8,6 @@ from zoneinfo import ZoneInfo
 
 import dagster as dg
 import dlt
-import psycopg.errors
 import pytest
 import requests
 from pydantic import HttpUrl
@@ -37,7 +36,6 @@ from romanian_news.catalog.artifacts import (
     sha256,
 )
 from romanian_news.catalog_transport import (
-    ResearchCatalogError,
     advance_artifact_current_version_statement,
 )
 from romanian_news.feeds import acquisition as feed_acquisition

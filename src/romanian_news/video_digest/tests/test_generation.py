@@ -992,6 +992,13 @@ def test_fal_submit_treats_an_invalid_success_body_as_ambiguous(
         generation.FalH3Client("secret").submit({})
 
 
+def test_fal_client_requires_an_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(generation, "FAL_KEY", "   ")
+
+    with pytest.raises(RuntimeError, match="FAL_KEY is required"):
+        generation.FalH3Client()
+
+
 def test_fal_submit_retries_a_connect_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     def post(*args, **kwargs):
         raise requests.ConnectTimeout("connect timed out")
