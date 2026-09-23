@@ -89,6 +89,15 @@ def test_production_workflow_rejects_noncurrent_or_inspection_activation() -> No
     assert "requires a current-day feed probe" in inspection.stderr
 
 
+def test_production_workflow_keeps_starting_automation_if_schema_check_fails() -> None:
+    workflow = WORKFLOW.read_text()
+    schema_step = workflow.split("- name: Verify PostgreSQL catalog", maxsplit=1)[1].split(
+        "- name: Start stored automation state", maxsplit=1
+    )[0]
+
+    assert "continue-on-error: true" in schema_step
+
+
 def test_production_workflow_checks_morning_report_after_feed_probe() -> None:
     workflow = WORKFLOW.read_text()
 

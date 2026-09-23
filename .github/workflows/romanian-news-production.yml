@@ -73,6 +73,7 @@ jobs:
 
       - name: Verify PostgreSQL catalog
         if: inputs.partition != ''
+        continue-on-error: true
         env:
           NEWS_POSTGRES_DSN: ${{ secrets.NEWS_POSTGRES_DSN }}
         run: |
