@@ -217,7 +217,10 @@ jobs:
                                 __typename
                                 ... on MessageEvent { message }
                                 ... on ExecutionStepFailureEvent {
-                                  error { message }
+                                  error {
+                                    message
+                                    cause { message }
+                                  }
                                 }
                               }
                             }
@@ -244,9 +247,12 @@ jobs:
               text = row.get("message") or ""
               if text:
                   print(text)
-              err = (row.get("error") or {}).get("message")
-              if err:
-                  print(err)
+              err = row.get("error") or {}
+              if err.get("message"):
+                  print(err["message"])
+              nested = (err.get("cause") or {}).get("message")
+              if nested:
+                  print(nested)
           PY
 
       - name: Run current feed probe
