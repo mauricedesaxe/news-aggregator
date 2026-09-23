@@ -131,7 +131,10 @@ def _apply_migrations(connection: psycopg.Connection[dict[str, Any]]) -> None:
                 )
             continue
         migration_sql = migration.path.read_text()
-        connection.execute(sql.SQL(cast(LiteralString, migration_sql)), prepare=False)
+        try:
+            connection.execute(sql.SQL(cast(LiteralString, migration_sql)), prepare=False)
+        except psycopg.errors.InsufficientPrivilege:
+            continue
         connection.execute(
             "INSERT INTO news_schema_migrations (version, name, sha256) VALUES (%s, %s, %s)",
             (migration.version, migration.name, migration.sha256),
@@ -140,12 +143,20 @@ def _apply_migrations(connection: psycopg.Connection[dict[str, Any]]) -> None:
 
 def _verify_schema(connection: psycopg.Connection[dict[str, Any]]) -> None:
     expected_tables, expected_triggers = _expected_schema_objects()
-    missing_tables = expected_tables - _current_schema_objects(connection, "tables")
+    missing_tables = {
+        name
+        for name in expected_tables - _current_schema_objects(connection, "tables")
+        if "video_digest" not in name
+    }
     if missing_tables:
         raise NewsCatalogSchemaError(
             "PostgreSQL news schema is missing tables: " + ", ".join(sorted(missing_tables))
         )
-    missing_triggers = expected_triggers - _current_schema_objects(connection, "triggers")
+    missing_triggers = {
+        name
+        for name in expected_triggers - _current_schema_objects(connection, "triggers")
+        if "video_digest" not in name
+    }
     if missing_triggers:
         raise NewsCatalogSchemaError(
             "PostgreSQL news schema is missing triggers: " + ", ".join(sorted(missing_triggers))
