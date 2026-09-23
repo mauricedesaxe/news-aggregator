@@ -7,14 +7,12 @@ from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
-import requests
 from pydantic import ValidationError
 
 from romanian_news.analysis import jev_relevance
 from romanian_news.analysis.binary_evaluation import (
     RELEVANCE_BINARY_QUESTION,
     BinaryAttemptEvidence,
-    BinaryProbabilityObservation,
     BinaryQuestion,
     BinaryRequest,
     binary_decision,
@@ -93,7 +91,7 @@ def test_jev_boundary_posts_exact_article_and_validates_noul(monkeypatch) -> Non
             policy=_local_policy(base_url),
         )
 
-    (_path, headers, payload), = handler.seen
+    ((_path, headers, payload),) = handler.seen
     assert headers["Authorization"] == "Bearer test-key"
     assert payload == {
         "state": binary_request.state,
@@ -136,7 +134,7 @@ def test_jev_boundary_matches_the_v3_article_body_limit(monkeypatch) -> None:
             policy=_local_policy(base_url),
         )
 
-    (_path, _headers, payload), = handler.seen
+    ((_path, _headers, payload),) = handler.seen
     assert payload["state"].endswith("a" * 24_000)
     assert result.predicted_accepted is True
 
@@ -213,13 +211,51 @@ def test_jev_boundary_retries_transient_failures(monkeypatch) -> None:
     assert result.latency_ms == 500
 
 
+def test_jev_boundary_exhausts_retries_with_capped_backoff(monkeypatch) -> None:
+    monkeypatch.setattr(jev_relevance, "TYPESAFE_API_KEY", "test-key")
+    delays: list[float] = []
+    attempts: list[BinaryAttemptEvidence] = []
+    ticks = iter(_tick())
+    with _jev_server([(503, {}, b"")] * 4) as (base_url, handler):
+        with pytest.raises(RuntimeError, match="Jev relevance request failed"):
+            evaluate_jev_relevance(
+                ArticleAnalysisInput(
+                    reference=embedded_article(1).article,
+                    article=embedded_article(1).value,
+                ),
+                execution_ref="trial-1",
+                policy=_local_policy(base_url).model_copy(update={"max_retry_delay_seconds": 3.0}),
+                sleep=delays.append,
+                clock=ticks.__next__,
+                on_attempt=attempts.append,
+            )
+
+    assert len(handler.seen) == 4
+    assert delays == [1.0, 2.0, 3.0]
+    assert tuple(attempt.status for attempt in attempts) == (
+        "retryable_error",
+        "retryable_error",
+        "retryable_error",
+        "terminal_error",
+    )
+    assert all(attempt.http_status == 503 for attempt in attempts)
+
+
+def _tick() -> Iterator[float]:
+    value = 1.0
+    while True:
+        yield value
+        value += 0.25
+
+
 def test_jev_boundary_reports_the_final_failed_http_attempt(monkeypatch) -> None:
     attempts: list[BinaryAttemptEvidence] = []
     monkeypatch.setattr(jev_relevance, "TYPESAFE_API_KEY", "test-key")
 
-    with _jev_server(
-        [(400, {"x-typesafe-request-id": "provider-request-failed"}, b"")]
-    ) as (base_url, _handler):
+    with _jev_server([(400, {"x-typesafe-request-id": "provider-request-failed"}, b"")]) as (
+        base_url,
+        _handler,
+    ):
         with pytest.raises(RuntimeError, match="Jev relevance request failed"):
             evaluate_jev_relevance(
                 build_relevance_binary_request(

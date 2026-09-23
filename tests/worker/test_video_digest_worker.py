@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 import dagster as dg
 import pytest
 
-from romanian_news.video_digest.models import ScheduledSlot, SlotFailureReason, SlotSkipReason
+from romanian_news.video_digest.models import SlotFailureReason
 from romanian_news.video_digest.orchestration import (
     IncidentAlert,
     NoAlert,
@@ -12,6 +12,12 @@ from romanian_news.video_digest.orchestration import (
     RunFailed,
 )
 from romanian_news.worker import video_digest
+from tests.postgres_catalog import TEST_POSTGRES_DSN, PostgresCatalog
+
+requires_postgres = pytest.mark.skipif(
+    TEST_POSTGRES_DSN is None,
+    reason="NEWS_TEST_POSTGRES_DSN is required",
+)
 
 
 def test_schedule_contract_and_deterministic_slot_mapping() -> None:
@@ -34,15 +40,22 @@ def test_schedule_contract_and_deterministic_slot_mapping() -> None:
         assert slot.name.value == expected
 
 
-def test_schedule_records_slot_and_uses_slot_run_key(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("hour", "minute", "message"),
+    ((15, 0, "outside a configured slot"), (8, 30, "on the hour")),
+)
+def test_schedule_slot_rejects_off_slot_times(hour: int, minute: int, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        video_digest.scheduled_video_digest_slot(
+            datetime(2026, 9, 21, hour, minute, tzinfo=ZoneInfo("Europe/Bucharest"))
+        )
+
+
+@requires_postgres
+def test_schedule_records_slot_and_uses_slot_run_key(
+    postgres_catalog: PostgresCatalog,
+) -> None:
     scheduled_at = datetime(2026, 9, 21, 8, tzinfo=ZoneInfo("Europe/Bucharest"))
-    recorded: list[ScheduledSlot] = []
-
-    def record_slot(slot: ScheduledSlot, *, recorded_at: datetime) -> None:
-        assert recorded_at == scheduled_at
-        recorded.append(slot)
-
-    monkeypatch.setattr(video_digest, "schedule_slot", record_slot)
 
     with dg.DagsterInstance.local_temp() as instance:
         with dg.build_schedule_context(
@@ -50,37 +63,21 @@ def test_schedule_records_slot_and_uses_slot_run_key(monkeypatch: pytest.MonkeyP
         ) as context:
             evaluation = video_digest.scheduled_video_digest.evaluate_tick(context)
 
-    slot = recorded[0]
     assert evaluation.run_requests is not None
-    assert evaluation.run_requests[0].run_key == f"video-digest:{slot.slot_id}"
-    assert {
-        key: evaluation.run_requests[0].tags[key]
-        for key in (
-            "news/video_digest_slot_id",
-            "news/video_digest_slot_name",
-            "news/scheduled_at",
-        )
-    } == {
-        "news/video_digest_slot_id": slot.slot_id,
-        "news/video_digest_slot_name": "morning",
-        "news/scheduled_at": scheduled_at.isoformat(),
-    }
+    run_request = evaluation.run_requests[0]
+    stored = postgres_catalog.execute(
+        "SELECT name, stage FROM video_digest_slots WHERE slot_id = %s",
+        (run_request.tags["news/video_digest_slot_id"],),
+    ).fetchone()
+    assert stored == {"name": "morning", "stage": "scheduled"}
+    assert run_request.run_key == (f"video-digest:{run_request.tags['news/video_digest_slot_id']}")
+    assert run_request.tags["news/video_digest_slot_name"] == "morning"
+    assert run_request.tags["news/scheduled_at"] == scheduled_at.isoformat()
 
 
-def test_schedule_durably_skips_colliding_tick(monkeypatch: pytest.MonkeyPatch) -> None:
+@requires_postgres
+def test_schedule_durably_skips_colliding_tick(postgres_catalog: PostgresCatalog) -> None:
     scheduled_at = datetime(2026, 9, 21, 13, tzinfo=ZoneInfo("Europe/Bucharest"))
-    skipped: list[tuple[str, SlotSkipReason]] = []
-
-    def record_slot(slot: ScheduledSlot, *, recorded_at: datetime) -> ScheduledSlot:
-        assert recorded_at == scheduled_at
-        return slot
-
-    def record_skip(slot_id: str, reason: SlotSkipReason, *, recorded_at: datetime) -> None:
-        assert recorded_at == scheduled_at
-        skipped.append((slot_id, reason))
-
-    monkeypatch.setattr(video_digest, "schedule_slot", record_slot)
-    monkeypatch.setattr(video_digest, "skip_slot", record_skip)
 
     with dg.DagsterInstance.local_temp() as instance:
         _ = instance.create_run_for_job(
@@ -94,7 +91,12 @@ def test_schedule_durably_skips_colliding_tick(monkeypatch: pytest.MonkeyPatch) 
 
     assert evaluation.run_requests == []
     assert evaluation.skip_message == "A video digest run is already queued or active."
-    assert skipped[0][1] is SlotSkipReason.OVERLAPPING_RUN
+    skipped = postgres_catalog.execute(
+        "SELECT slot_id, stage, skip_reason FROM video_digest_slots WHERE stage = 'skipped'"
+    ).fetchall()
+    assert [(row["slot_id"], row["stage"], row["skip_reason"]) for row in skipped] == [
+        (skipped[0]["slot_id"], "skipped", "overlapping_run")
+    ]
 
 
 def test_action_waiting_requests_a_dagster_retry(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -155,6 +157,30 @@ def test_missing_or_malformed_slot_tag_fails_without_retry(tags: dict[str, str])
     assert raised.value.description == (
         "Video digest run requires a valid news/video_digest_slot_id tag"
     )
+
+
+def test_unconfigured_runtime_fails_without_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    slot = video_digest.scheduled_video_digest_slot(
+        datetime(2026, 9, 21, 8, tzinfo=ZoneInfo("Europe/Bucharest"))
+    )
+
+    class Run:
+        tags = {"news/video_digest_slot_id": slot.slot_id}
+
+    class Context:
+        run = Run()
+        run_id = "run-1"
+
+    monkeypatch.setattr(video_digest, "runtime_factory", None)
+    compute_fn = video_digest.orchestrate_video_digest.compute_fn
+    decorated_fn = getattr(compute_fn, "decorated_fn", None)
+    assert callable(decorated_fn)
+
+    with pytest.raises(dg.Failure) as raised:
+        decorated_fn(Context())
+
+    assert raised.value.allow_retries is False
+    assert raised.value.description == "Video digest production adapters are not configured"
 
 
 def test_terminal_failure_fails_the_dagster_step_without_retry(

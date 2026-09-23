@@ -28,13 +28,30 @@ from romanian_news.binary_benchmark import (
     BinaryModelIdentityMismatch,
     BinarySpendLedger,
     BinarySpendLimitExceeded,
+    build_binary_evaluators,
     build_execution_identity,
     invoke_binary_evaluator,
     load_binary_checkpoint,
     run_registered_binary_benchmark,
     write_binary_checkpoint,
 )
+from romanian_news.binary_relevance_evaluation import OPENROUTER_GEMINI_25_TARGET
 from romanian_news.derived_binary_protocol import DERIVED_BINARY_BENCHMARKS
+
+
+def test_live_evaluators_require_the_provider_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import romanian_news.binary_benchmark as benchmark_module
+
+    monkeypatch.setattr(benchmark_module, "TYPESAFE_API_KEY", "")
+    monkeypatch.setattr(benchmark_module, "OPENROUTER_API_KEY", "")
+
+    with pytest.raises(
+        ValueError,
+        match="Missing credentials for selected targets: TYPESAFE_API_KEY, OPENROUTER_API_KEY",
+    ):
+        build_binary_evaluators((TYPESAFE_JEV_TARGET, OPENROUTER_GEMINI_25_TARGET), dry_run=False)
 
 
 def test_registered_tier_definition_drives_two_judgments_and_analysis(tmp_path: Path) -> None:

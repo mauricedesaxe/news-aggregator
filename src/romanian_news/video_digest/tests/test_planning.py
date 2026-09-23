@@ -14,15 +14,12 @@ from romanian_news.reports import (
     ReportEvent,
     ReportSubjectCitation,
 )
-from romanian_news.video_digest import preflight
 from romanian_news.video_digest.planning import (
-    GenerationAuthorization,
     PlanningAttempt,
     PlanningFailure,
     ScreenplayPlan,
     ScreenplayStory,
     StoryVerificationEvidence,
-    VerifiedDigestPlan,
     VideoDigestPolicyBundle,
     accept_planning_attempt,
     authorize_generation,

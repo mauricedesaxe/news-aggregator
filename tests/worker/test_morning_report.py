@@ -9,7 +9,12 @@ from dagster._core.events import StepOutputData
 
 from romanian_news.worker import morning_report
 from tests.daily_report_catalog import daily_report, seed_daily_report
-from tests.postgres_catalog import PostgresCatalog
+from tests.postgres_catalog import TEST_POSTGRES_DSN, PostgresCatalog
+
+pytestmark = pytest.mark.skipif(
+    TEST_POSTGRES_DSN is None,
+    reason="NEWS_TEST_POSTGRES_DSN is required",
+)
 
 
 def test_morning_check_reports_the_day_and_pings_on_the_real_catalog(

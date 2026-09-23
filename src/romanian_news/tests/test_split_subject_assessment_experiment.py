@@ -28,6 +28,7 @@ from romanian_news.split_subject_assessment_experiment import (
     V11_MANIFEST_R2_KEY,
     V11_MANIFEST_VERSION_ID,
     V11_REPORT_VERSION_IDS,
+    CompletedArm,
     ExperimentAttempt,
     FailedArm,
     FrozenV11SourceDescriptor,
@@ -37,9 +38,14 @@ from romanian_news.split_subject_assessment_experiment import (
     load_frozen_v11_assessment_inputs,
     load_frozen_v11_source,
     run_candidate_arm,
+    run_incumbent_arm,
+)
+from romanian_news.subject_assessments import (
+    DailySubjectAssessmentInput,
+    DailySubjectAssessmentOutput,
 )
 from romanian_news.tests.evaluation_factories import relevance_decision
-from romanian_news.tests.test_subject_assessments import _input, _sparse_input
+from romanian_news.tests.test_subject_assessments import _assessment_set, _input, _sparse_input
 from scripts.run_split_subject_assessment_experiment import (
     GEMINI_REQUEST_RESERVE_USD,
     JEV_REQUEST_RESERVE_USD,
@@ -208,6 +214,46 @@ def test_candidate_batches_both_tier_questions_and_freezes_whole_day() -> None:
     assert [item.tier for item in outcome.assessments] == ["main", "worth_knowing"]
     assert len(outcome.attempts) == 3
     assert outcome.accounting_complete
+
+
+def test_incumbent_arm_returns_ranked_assessments_and_maps_constructor_failure() -> None:
+    value = _input()
+    assessment_set = _assessment_set(value)
+    output = DailySubjectAssessmentOutput.model_construct(
+        assessment_set=_assessment_set(value),
+        content_digest="a" * 64,
+        content=b"assessment",
+    )
+
+    completed = run_incumbent_arm(
+        REPORT_ID,
+        value,
+        constructor=lambda _value: output,
+        clock=iter((5.0, 6.5)).__next__,
+    )
+
+    assert isinstance(completed, CompletedArm)
+    assert completed.report_version_id == REPORT_ID
+    assert completed.assessments == assessment_set.assessments
+    assert completed.attempts == ()
+    assert completed.accounting_complete is True
+    assert completed.wall_latency_ms == 1500
+
+    def failing(_value: DailySubjectAssessmentInput) -> DailySubjectAssessmentOutput:
+        raise RuntimeError("ranking unavailable")
+
+    failed = run_incumbent_arm(
+        REPORT_ID,
+        value,
+        constructor=failing,
+        clock=iter((7.0, 7.25)).__next__,
+    )
+
+    assert isinstance(failed, FailedArm)
+    assert failed.report_version_id == REPORT_ID
+    assert failed.error == "RuntimeError: ranking unavailable"
+    assert failed.attempts == ()
+    assert failed.wall_latency_ms == 250
 
 
 def test_frozen_v11_loader_reconstructs_exact_assessment_inputs(monkeypatch) -> None:
