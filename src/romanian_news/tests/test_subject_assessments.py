@@ -588,6 +588,48 @@ def _input(*, empty: bool = False) -> DailySubjectAssessmentInput:
     return value
 
 
+def _sparse_input(monkeypatch) -> DailySubjectAssessmentInput:
+    value = _input()
+    theme_input = DailyThemeInput(
+        day=value.day,
+        cluster_set=value.theme_set.cluster_set,
+        groups=tuple(
+            ThemeGroupInput(group=group, summary=summary.reference, value=summary.summary)
+            for group, summary in zip(value.theme_set.groups, value.summaries, strict=True)
+        ),
+    )
+    response = _theme_response(
+        {
+            "assignments": {
+                group.id: index for index, group in enumerate(value.theme_set.groups, start=1)
+            }
+        }
+    )
+    monkeypatch.setattr(
+        "romanian_news.themes.openrouter_client",
+        lambda: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response))
+        ),
+    )
+    monkeypatch.setattr(
+        "romanian_news.themes.record_model_attempt",
+        lambda response, **_kwargs: SimpleNamespace(
+            attempt_id=hashlib.sha256(response.id.encode()).hexdigest(),
+            response_id=response.id,
+        ),
+    )
+    sparse_output = construct_daily_themes(theme_input, LEGACY_SPARSE_THEME_DEFINITION)
+    sparse_theme_set = parse_daily_theme_set(sparse_output.content)
+    assert isinstance(sparse_theme_set, SparseDailyThemeSet)
+
+    payload = value.model_dump(mode="json")
+    payload["theme_set"] = sparse_theme_set.model_dump(mode="json")
+    theme_by_group = {theme.group_ids[0]: theme.id for theme in sparse_theme_set.themes}
+    for item in payload["evidence"]:
+        item["theme_id"] = theme_by_group[item["group_id"]]
+    return DailySubjectAssessmentInput.model_validate_json(json.dumps(payload), strict=True)
+
+
 def _reference(index: int, kind: str, version_id: str | None = None) -> ArtifactReference:
     value = version_id or f"{index:064x}"
     return ArtifactReference(

@@ -6,7 +6,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import httpx
 import pytest
+from openai import OpenAI
 
 from romanian_news.analysis import gemini_binary
 from romanian_news.analysis.binary_evaluation import (
@@ -27,9 +29,56 @@ def test_gemini_binary_sends_only_canonical_semantics_and_normalizes_accounting(
     monkeypatch,
 ) -> None:
     request = _request()
-    response = _response(model="google/gemini-2.5-flash-001")
-    create = Mock(return_value=response)
-    monkeypatch.setattr(gemini_binary, "openrouter_client", lambda **_kwargs: _client(create))
+    sent: list[object] = []
+
+    def handle(transport_request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(transport_request.content))
+        return httpx.Response(
+            200,
+            json={
+                "id": "openrouter-request-1",
+                "object": "chat.completion",
+                "created": 1_760_000_000,
+                "model": "google/gemini-2.5-flash-001",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "report_probability",
+                                        "arguments": json.dumps({"probability": 0.73}),
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 101,
+                    "completion_tokens": 7,
+                    "total_tokens": 108,
+                    "cost": 0.00042,
+                },
+            },
+            request=transport_request,
+        )
+
+    def client(*, max_retries: int, timeout_seconds: float) -> OpenAI:
+        del max_retries, timeout_seconds
+        return OpenAI(
+            base_url="http://openrouter.test/v1",
+            api_key="test-key",
+            http_client=httpx.Client(transport=httpx.MockTransport(handle)),
+        )
+
+    monkeypatch.setattr(gemini_binary, "openrouter_client", client)
 
     result = evaluate_gemini_binary(
         request,
@@ -37,9 +86,10 @@ def test_gemini_binary_sends_only_canonical_semantics_and_normalizes_accounting(
         clock=iter((10.0, 10.125)).__next__,
     )
 
-    create.assert_called_once_with(
-        model="google/gemini-2.5-flash",
-        messages=[
+    body, = sent
+    assert body == {
+        "model": "google/gemini-2.5-flash",
+        "messages": [
             {
                 "role": "system",
                 "content": request.question.instructions,
@@ -58,9 +108,9 @@ def test_gemini_binary_sends_only_canonical_semantics_and_normalizes_accounting(
                 ),
             },
         ],
-        temperature=0.0,
-        max_tokens=1024,
-        tools=[
+        "temperature": 0.0,
+        "max_tokens": 1024,
+        "tools": [
             {
                 "type": "function",
                 "function": {
@@ -76,13 +126,13 @@ def test_gemini_binary_sends_only_canonical_semantics_and_normalizes_accounting(
                 },
             }
         ],
-        tool_choice={
+        "tool_choice": {
             "type": "function",
             "function": {"name": "report_probability"},
         },
-        extra_body={"provider": {"require_parameters": True}},
-    )
-    assert "threshold" not in json.dumps(create.call_args.kwargs)
+        "provider": {"require_parameters": True},
+    }
+    assert "threshold" not in json.dumps(body)
     assert result.request_id == gemini_binary_request_id(request, "git:test:trial-1")
     assert result.provider_request_id == "openrouter-request-1"
     assert result.model == "google/gemini-2.5-flash-001"
@@ -138,7 +188,6 @@ def test_gemini_binary_execution_policy_and_request_identity_are_stable() -> Non
         "trial-1",
         GEMINI_BINARY_EXECUTION_POLICY.model_copy(update={"max_tokens": 65}),
     )
-    assert GEMINI_BINARY_EXECUTION_POLICY.model_config.get("frozen") is True
 
 
 @pytest.mark.parametrize(

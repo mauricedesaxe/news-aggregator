@@ -1,7 +1,10 @@
 import hashlib
 import json
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from decimal import Decimal
-from unittest.mock import Mock
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 import requests
@@ -19,6 +22,7 @@ from romanian_news.analysis.binary_evaluation import (
 )
 from romanian_news.analysis.jev_relevance import (
     JEV_EXECUTION_POLICY,
+    JevExecutionPolicy,
     JevNoulResponse,
     evaluate_jev_relevance,
     jev_execution_policy_digest,
@@ -28,31 +32,70 @@ from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.analysis.relevance_v3 import relevance_v3_article_text
 from romanian_news.tests.evaluation_factories import embedded_article
 
+_ScriptedResponse = tuple[int, dict[str, str], bytes]
+
+
+@contextmanager
+def _jev_server(script: list[_ScriptedResponse]) -> Iterator[tuple[str, type]]:
+    class Handler(BaseHTTPRequestHandler):
+        seen: list[tuple[str, dict[str, str], dict[str, object]]] = []
+
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length", 0))
+            payload = json.loads(self.rfile.read(length))
+            type(self).seen.append((self.path, dict(self.headers), payload))
+            status, headers, body = script.pop(0)
+            self.send_response(status)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            del format, args
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", Handler
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _local_policy(base_url: str) -> JevExecutionPolicy:
+    return JEV_EXECUTION_POLICY.model_copy(
+        update={"endpoint": f"{base_url}/v1/systemone", "timeout_seconds": 10.0}
+    )
+
 
 def test_jev_boundary_posts_exact_article_and_validates_noul(monkeypatch) -> None:
     article = embedded_article(1)
-    response = Mock()
-    response.headers = {"x-typesafe-request-id": "provider-request-1"}
-    response.content = json.dumps(
+    body = json.dumps(
         {
             "model": "jev-1.13.0",
             "answers": {"relevant": {"type": "noul", "noul": 0.73}},
             "usage": {"input_tokens": 1_000_000, "output_tokens": 7},
         }
     ).encode()
-    post = Mock(return_value=response)
     monkeypatch.setattr(jev_relevance, "TYPESAFE_API_KEY", "test-key")
-    monkeypatch.setattr(jev_relevance.requests, "post", post)
     value = ArticleAnalysisInput(reference=article.article, article=article.value)
     binary_request = build_relevance_binary_request(value)
 
-    result = evaluate_jev_relevance(binary_request, execution_ref="git:test:fresh-trial-1-of-3")
+    with _jev_server([(200, {"x-typesafe-request-id": "provider-request-1"}, body)]) as (
+        base_url,
+        handler,
+    ):
+        result = evaluate_jev_relevance(
+            binary_request,
+            execution_ref="git:test:fresh-trial-1-of-3",
+            policy=_local_policy(base_url),
+        )
 
-    response.raise_for_status.assert_called_once_with()
-    request = post.call_args
-    assert request.args == ("https://api.typesafe.ai/v1/systemone",)
-    assert request.kwargs["headers"]["Authorization"] == "Bearer test-key"
-    assert request.kwargs["json"] == {
+    (_path, headers, payload), = handler.seen
+    assert headers["Authorization"] == "Bearer test-key"
+    assert payload == {
         "state": binary_request.state,
         "model": "jev-1.13.0",
         "questions": {
@@ -77,25 +120,24 @@ def test_jev_boundary_matches_the_v3_article_body_limit(monkeypatch) -> None:
     article = article.model_copy(
         update={"value": article.value.model_copy(update={"body": "a" * 24_001})}
     )
-    response = Mock()
-    response.headers = {}
-    response.content = json.dumps(
+    body = json.dumps(
         {
             "model": "jev-1.13.0",
             "answers": {"relevant": {"type": "noul", "noul": 0.5}},
             "usage": {"input_tokens": 1, "output_tokens": 1},
         }
     ).encode()
-    post = Mock(return_value=response)
     monkeypatch.setattr(jev_relevance, "TYPESAFE_API_KEY", "test-key")
-    monkeypatch.setattr(jev_relevance.requests, "post", post)
 
-    result = evaluate_jev_relevance(
-        ArticleAnalysisInput(reference=article.article, article=article.value),
-        execution_ref="trial-1",
-    )
+    with _jev_server([(200, {}, body)]) as (base_url, handler):
+        result = evaluate_jev_relevance(
+            ArticleAnalysisInput(reference=article.article, article=article.value),
+            execution_ref="trial-1",
+            policy=_local_policy(base_url),
+        )
 
-    assert post.call_args.kwargs["json"]["state"].endswith("a" * 24_000)
+    (_path, _headers, payload), = handler.seen
+    assert payload["state"].endswith("a" * 24_000)
     assert result.predicted_accepted is True
 
 
@@ -132,34 +174,33 @@ def test_binary_decision_rejects_probability_outside_unit_interval(
 
 def test_jev_boundary_retries_transient_failures(monkeypatch) -> None:
     article = embedded_article(1)
-    overloaded = Mock()
-    overloaded.status_code = 529
-    overloaded.headers = {"retry-after-ms": "250"}
-    overloaded.raise_for_status.side_effect = requests.HTTPError(response=overloaded)
-    accepted = Mock()
-    accepted.headers = {"x-typesafe-request-id": "provider-request-2"}
-    accepted.content = json.dumps(
+    accepted_body = json.dumps(
         {
             "model": "jev-1.13.0",
             "answers": {"relevant": {"type": "noul", "noul": 0.7}},
             "usage": {"input_tokens": 10, "output_tokens": 1},
         }
     ).encode()
-    post = Mock(side_effect=(overloaded, accepted))
     delays: list[float] = []
     attempts: list[BinaryAttemptEvidence] = []
     monkeypatch.setattr(jev_relevance, "TYPESAFE_API_KEY", "test-key")
-    monkeypatch.setattr(jev_relevance.requests, "post", post)
 
-    result = evaluate_jev_relevance(
-        ArticleAnalysisInput(reference=article.article, article=article.value),
-        execution_ref="trial-1",
-        sleep=delays.append,
-        clock=iter((1.0, 1.1, 1.35, 1.75)).__next__,
-        on_attempt=attempts.append,
-    )
+    with _jev_server(
+        [
+            (529, {"retry-after-ms": "250"}, b""),
+            (200, {"x-typesafe-request-id": "provider-request-2"}, accepted_body),
+        ]
+    ) as (base_url, handler):
+        result = evaluate_jev_relevance(
+            ArticleAnalysisInput(reference=article.article, article=article.value),
+            execution_ref="trial-1",
+            policy=_local_policy(base_url),
+            sleep=delays.append,
+            clock=iter((1.0, 1.1, 1.35, 1.75)).__next__,
+            on_attempt=attempts.append,
+        )
 
-    assert post.call_count == 2
+    assert len(handler.seen) == 2
     assert delays == [0.25]
     assert tuple(attempt.status for attempt in attempts) == ("retryable_error", "completed")
     assert tuple(attempt.attempt_number for attempt in attempts) == (1, 2)
@@ -173,28 +214,25 @@ def test_jev_boundary_retries_transient_failures(monkeypatch) -> None:
 
 
 def test_jev_boundary_reports_the_final_failed_http_attempt(monkeypatch) -> None:
-    unavailable = Mock()
-    unavailable.status_code = 400
-    unavailable.headers = {"x-typesafe-request-id": "provider-request-failed"}
-    unavailable.raise_for_status.side_effect = requests.HTTPError(
-        "bad request", response=unavailable
-    )
     attempts: list[BinaryAttemptEvidence] = []
     monkeypatch.setattr(jev_relevance, "TYPESAFE_API_KEY", "test-key")
-    monkeypatch.setattr(jev_relevance.requests, "post", Mock(return_value=unavailable))
 
-    with pytest.raises(RuntimeError, match="Jev relevance request failed"):
-        evaluate_jev_relevance(
-            build_relevance_binary_request(
-                ArticleAnalysisInput(
-                    reference=embedded_article(1).article,
-                    article=embedded_article(1).value,
-                )
-            ),
-            execution_ref="trial-1",
-            clock=iter((2.0, 2.2)).__next__,
-            on_attempt=attempts.append,
-        )
+    with _jev_server(
+        [(400, {"x-typesafe-request-id": "provider-request-failed"}, b"")]
+    ) as (base_url, _handler):
+        with pytest.raises(RuntimeError, match="Jev relevance request failed"):
+            evaluate_jev_relevance(
+                build_relevance_binary_request(
+                    ArticleAnalysisInput(
+                        reference=embedded_article(1).article,
+                        article=embedded_article(1).value,
+                    )
+                ),
+                execution_ref="trial-1",
+                policy=_local_policy(base_url),
+                clock=iter((2.0, 2.2)).__next__,
+                on_attempt=attempts.append,
+            )
 
     assert len(attempts) == 1
     assert attempts[0].status == "terminal_error"
