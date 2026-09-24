@@ -169,7 +169,7 @@ def read_article_candidate_times(lower: datetime, upper: datetime) -> tuple[date
         "WHERE published_at >= %s AND published_at < %s "
         "UNION ALL "
         "SELECT scheduled_slot AS candidate_time FROM news_feed_observations "
-        "WHERE scheduled_slot >= %s AND scheduled_slot < %s)",
+        "WHERE scheduled_slot >= %s AND scheduled_slot < %s) AS candidates",
         [
             lower.astimezone(UTC).isoformat(),
             upper.astimezone(UTC).isoformat(),
