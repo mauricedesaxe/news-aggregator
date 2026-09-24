@@ -41,8 +41,9 @@ from romanian_news.catalog_transport import (
 from romanian_news.feeds import acquisition as feed_acquisition
 from romanian_news.feeds.registry import feed_registry
 from romanian_news.storage import publish_immutable_r2_objects
-from romanian_news.worker import operations
-from tests.daily_report_catalog import daily_report, seed_daily_report
+from romanian_news.worker import definitions, operations
+from romanian_news.worker.catalog_status import print_catalog_status
+from tests.daily_report_catalog import REPORT_VERSION, daily_report, seed_daily_report
 from tests.postgres_catalog import PostgresCatalog
 
 DAY = date(2099, 9, 2)
@@ -829,3 +830,78 @@ def test_morning_report_check_requires_yesterdays_catalog_edition_before_pinging
 
     assert result == "2026-09-14"
     assert pings == ["morning_report"]
+
+
+def _seed_one_feed_observation(harness, fake_http, observed_at: datetime) -> None:
+    registry = feed_registry()
+    harness.seed(fake_http, registry, registry.feeds[0], (), observed_at)
+
+
+def test_article_controller_closes_a_past_day_without_full_feed_coverage(
+    harness,
+    postgres_catalog,
+    fake_r2,
+    fake_http,
+    monkeypatch,
+) -> None:
+    _seed_one_feed_observation(harness, fake_http, datetime(2026, 9, 22, 10, tzinfo=UTC))
+    now = datetime(2026, 9, 24, 10, tzinfo=UTC)
+    monkeypatch.setattr(definitions, "_controller_time", lambda: now)
+
+    with dg.instance_for_test() as instance:
+        context = dg.build_sensor_context(
+            instance=instance,
+            repository_def=definitions.defs.get_repository_def(),
+        )
+        evaluation = definitions.article_batch_controller.evaluate_tick(context)
+
+    assert evaluation.run_requests
+    request = evaluation.run_requests[0]
+    assert request.partition_key == "2026-09-22"
+    assert json.loads(request.tags["news/article_event_ids"]) == []
+
+
+def test_article_controller_waits_for_full_coverage_on_the_current_day(
+    harness,
+    postgres_catalog,
+    fake_r2,
+    fake_http,
+    monkeypatch,
+) -> None:
+    _seed_one_feed_observation(harness, fake_http, datetime(2026, 9, 24, 10, tzinfo=UTC))
+    now = datetime(2026, 9, 24, 15, tzinfo=UTC)
+    monkeypatch.setattr(definitions, "_controller_time", lambda: now)
+
+    with dg.instance_for_test() as instance:
+        context = dg.build_sensor_context(
+            instance=instance,
+            repository_def=definitions.defs.get_repository_def(),
+        )
+        evaluation = definitions.article_batch_controller.evaluate_tick(context)
+
+    assert not evaluation.run_requests
+    assert evaluation.skip_message == "No article work is ready."
+
+
+def test_print_catalog_status_reports_each_day_from_the_real_catalog(
+    capsys,
+    harness,
+    postgres_catalog,
+    fake_r2,
+    fake_http,
+) -> None:
+    expected = len(feed_registry().feeds)
+    _seed_one_feed_observation(harness, fake_http, datetime(2026, 9, 22, 10, tzinfo=UTC))
+    seed_daily_report(postgres_catalog, daily_report(date(2026, 9, 22)))
+
+    print_catalog_status(days=(date(2026, 9, 21), date(2026, 9, 22)))
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == f"expected_feeds={expected}"
+    assert (
+        lines[1] == "2026-09-21 feeds=0/" + str(expected) + " freshness=inputs_not_ready report=-"
+    )
+    assert lines[2] == (
+        "2026-09-22 feeds=1/" + str(expected) + " freshness=inputs_not_ready report=" + "a" * 12
+    )
+    assert REPORT_VERSION.startswith("a")

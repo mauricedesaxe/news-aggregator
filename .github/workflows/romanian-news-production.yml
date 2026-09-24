@@ -12,7 +12,7 @@ on:
         required: false
         type: string
       enable_article_controller:
-        description: Start article batches after the current-day feed probe succeeds
+        description: Run the morning report health check after the current-day feed probe succeeds
         required: false
         default: false
         type: boolean
@@ -73,14 +73,17 @@ jobs:
 
       - name: Verify PostgreSQL catalog
         if: inputs.partition != ''
+        continue-on-error: true
         env:
           NEWS_POSTGRES_DSN: ${{ secrets.NEWS_POSTGRES_DSN }}
         run: |
           uv run --no-sync python - <<'PY'
           from romanian_news.catalog.schema import ensure_news_catalog_schema
+          from romanian_news.worker.catalog_status import print_catalog_status
 
           ensure_news_catalog_schema()
           print("PostgreSQL catalog connection and schema verified")
+          print_catalog_status()
           PY
 
       - name: Start stored automation state
@@ -164,7 +167,11 @@ jobs:
                   raise RuntimeError(f"Could not start {schedule_name}")
               print(f"{schedule_name}: RUNNING")
 
-          for sensor_name in ("romanian_news_automation", "youtube_relevance_controller"):
+          for sensor_name in (
+              "article_batch_controller",
+              "romanian_news_automation",
+              "youtube_relevance_controller",
+          ):
               sensor = execute(
                   """
                   mutation StartSensor($selector: SensorSelector!) {
@@ -204,7 +211,24 @@ jobs:
                       query RunDiagnostics($runId: ID!) {
                         pipelineRunOrError(runId: $runId) {
                           __typename
-                          ... on Run { status }
+                          ... on Run {
+                            status
+                            jobName
+                            eventConnection(limit: 80) {
+                              events {
+                                __typename
+                                ... on MessageEvent { message }
+                                ... on ExecutionStepFailureEvent {
+                                  error {
+                                    message
+                                    cause { message }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          ... on PythonError { message }
+                          ... on RunNotFoundError { message }
                         }
                       }
                   """,
@@ -212,14 +236,25 @@ jobs:
               },
               timeout=30,
           )
-          response.raise_for_status()
           body = response.json()
           if body.get("errors"):
-              raise RuntimeError("Dagster run lookup failed")
+              raise RuntimeError(body["errors"][0]["message"])
+          response.raise_for_status()
           run = body["data"]["pipelineRunOrError"]
           if run["__typename"] != "Run":
-              raise RuntimeError("Dagster run was not found")
+              raise RuntimeError(run.get("message") or "Dagster run was not found")
           print(f"Run status: {run['status']}")
+          print(f"Job: {run['jobName']}")
+          for row in run["eventConnection"]["events"]:
+              text = row.get("message") or ""
+              if text:
+                  print(text)
+              err = row.get("error") or {}
+              if err.get("message"):
+                  print(err["message"])
+              nested = (err.get("cause") or {}).get("message")
+              if nested:
+                  print(nested)
           PY
 
       - name: Run current feed probe
@@ -261,81 +296,6 @@ jobs:
             *"finished successfully."*) ;;
             *) exit 1 ;;
           esac
-
-      - name: Start article batch controller
-        if: inputs.enable_article_controller && inputs.partition != ''
-        env:
-          DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
-          DAGSTER_CLOUD_GRAPHQL_URL: ${{ secrets.DAGSTER_CLOUD_GRAPHQL_URL }}
-          DAGSTER_CLOUD_LOCATION: ${{ secrets.DAGSTER_CLOUD_LOCATION }}
-        run: |
-          uv run --no-sync python - <<'PY'
-          import os
-
-          import requests
-
-          url = os.environ["DAGSTER_CLOUD_GRAPHQL_URL"]
-          location_name = os.environ["DAGSTER_CLOUD_LOCATION"]
-          headers = {"Dagster-Cloud-Api-Token": os.environ["DAGSTER_CLOUD_API_TOKEN"]}
-
-
-          def execute(query, variables=None):
-              response = requests.post(
-                  url,
-                  headers=headers,
-                  json={"query": query, "variables": variables or {}},
-                  timeout=30,
-              )
-              response.raise_for_status()
-              body = response.json()
-              if body.get("errors"):
-                  raise RuntimeError("Dagster GraphQL operation failed")
-              return body["data"]
-
-
-          repositories = execute(
-              """
-              query Repositories {
-                repositoriesOrError {
-                  __typename
-                  ... on RepositoryConnection {
-                    nodes { name location { name } }
-                  }
-                }
-              }
-              """
-          )["repositoriesOrError"]
-          if repositories["__typename"] != "RepositoryConnection":
-              raise RuntimeError("Dagster repository lookup failed")
-          matches = [
-              node for node in repositories["nodes"] if node["location"]["name"] == location_name
-          ]
-          if len(matches) != 1:
-              raise RuntimeError(f"Expected one Romanian news repository, found {len(matches)}")
-          sensor = execute(
-              """
-              mutation StartSensor($selector: SensorSelector!) {
-                startSensor(sensorSelector: $selector) {
-                  __typename
-                  ... on Sensor { sensorState { status } }
-                  ... on SensorNotFoundError { message }
-                  ... on PythonError { message }
-                  ... on UnauthorizedError { message }
-                }
-              }
-              """,
-              {
-                  "selector": {
-                      "repositoryLocationName": location_name,
-                      "repositoryName": matches[0]["name"],
-                      "sensorName": "article_batch_controller",
-                  }
-              },
-          )["startSensor"]
-          if sensor["__typename"] != "Sensor" or sensor["sensorState"]["status"] != "RUNNING":
-              raise RuntimeError("Could not start article_batch_controller")
-          print("article_batch_controller: RUNNING")
-          PY
 
       - name: Run morning report health check
         if: inputs.enable_article_controller && inputs.partition != ''

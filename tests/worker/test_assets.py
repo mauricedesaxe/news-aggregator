@@ -66,7 +66,7 @@ def test_automation_starts_running_and_uses_bucharest_time() -> None:
     assert weekly_news_report.default_status == dg.DefaultScheduleStatus.RUNNING
     assert scheduled_video_digest.default_status == dg.DefaultScheduleStatus.STOPPED
     assert news_automation.default_status == dg.DefaultSensorStatus.RUNNING
-    assert article_batch_controller.default_status == dg.DefaultSensorStatus.STOPPED
+    assert article_batch_controller.default_status == dg.DefaultSensorStatus.RUNNING
     assert hourly_registered_feed_poll.cron_schedule == "0 * * * *"
     assert daily_morning_report_check.cron_schedule == "35 9 * * *"
     assert weekly_news_report.cron_schedule == "0 * * * *"
@@ -737,6 +737,25 @@ def test_article_batch_identity_changes_with_implementation_ref(monkeypatch) -> 
     assert old.tags["news/article_batch_key"] != new.tags["news/article_batch_key"]
 
 
+def test_past_uncovered_article_day_is_complete_once_entries_are_gone() -> None:
+    day = date(2026, 9, 22)
+    result = ArticleBatchResult(
+        references=DailyArtifactReferences(day=day, values=()),
+        requested_event_ids=(),
+        acquired_event_ids=(),
+        skipped_event_ids=(),
+        failures=(),
+        remaining_entries=0,
+        deferred_event_ids=(),
+        quarantined_event_ids=(),
+        source_covered=False,
+    )
+
+    assert result.is_complete(date(2026, 9, 22)) is False
+    assert result.is_complete(date(2026, 9, 21)) is False
+    assert result.is_complete(date(2026, 9, 23)) is True
+
+
 def test_weekly_news_report_requests_only_stale_complete_weeks(monkeypatch) -> None:
     scheduled_at = datetime.fromisoformat("2026-09-21T08:00:00+03:00")
     stale_weeks = (
@@ -813,6 +832,36 @@ def test_partial_article_batch_observes_without_materializing(monkeypatch) -> No
         event for event in result.all_events if event.event_type_value == "ASSET_OBSERVATION"
     ]
     assert len(observations) == 1
+
+
+def test_past_uncovered_empty_batch_materializes_articles(monkeypatch) -> None:
+    day = datetime.fromisoformat(DAY).date()
+    references = DailyArtifactReferences(day=day, values=())
+    monkeypatch.setattr(assets, "materialize_feed_intake", lambda *_args: references)
+    monkeypatch.setattr(
+        assets,
+        "materialize_articles",
+        lambda *_args, **_kwargs: ArticleBatchResult(
+            references=references,
+            requested_event_ids=(),
+            acquired_event_ids=(),
+            skipped_event_ids=(),
+            failures=(),
+            remaining_entries=0,
+            deferred_event_ids=(),
+            quarantined_event_ids=(),
+            source_covered=False,
+        ),
+    )
+
+    result = dg.materialize(
+        [assets.feed_intake, assets.articles],
+        partition_key=DAY,
+        tags={"news/scheduled_at": "2026-09-02T12:00:00+03:00", "news/article_event_ids": "[]"},
+    )
+
+    assert result.success
+    assert result.asset_materializations_for_node("articles")
 
 
 def test_quarantined_inputs_permit_completion_with_visible_metadata(monkeypatch) -> None:

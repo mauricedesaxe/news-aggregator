@@ -136,9 +136,16 @@ class ArticleBatchResult:
     def has_infrastructure_failures(self) -> bool:
         return any(failure.kind == ArticleFailureKind.INFRASTRUCTURE for failure in self.failures)
 
+    def is_complete(self, today: date) -> bool:
+        if self.remaining_entries != 0:
+            return False
+        if self.source_covered:
+            return True
+        return self.references.day < today
+
     @property
     def complete(self) -> bool:
-        return self.source_covered and self.remaining_entries == 0
+        return self.is_complete(datetime.now(BUCHAREST).date())
 
 
 ARTICLE_ITEM_WORKERS = 4
