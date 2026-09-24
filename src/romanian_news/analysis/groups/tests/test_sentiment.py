@@ -184,8 +184,6 @@ def _group_input() -> GroupAnalysisInput:
         cluster_set=_reference(_B),
         group=NewsGroup(id=_C, article_version_ids=(_A,)),
         articles=((_reference(_A), _article()),),
-        summary_needed=False,
-        sentiment_needed=True,
     )
 
 

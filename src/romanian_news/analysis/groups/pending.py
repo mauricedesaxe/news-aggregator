@@ -53,19 +53,12 @@ def read_pending_group_analysis_references(
 
 
 def load_group_analysis_input(value: GroupAnalysisReferenceInput) -> GroupAnalysisInput:
-    """Load exact article content for one claimed group analysis job."""
+    """Load exact article content for one group analysis input."""
     return GroupAnalysisInput(
-        **value.model_dump(exclude={"articles"}),
+        day=value.day,
+        cluster_set=value.cluster_set,
+        group=value.group,
         articles=tuple((reference, _read_article(reference)) for reference in value.articles),
-    )
-
-
-def read_pending_group_analyses(
-    days: set[date] | None = None,
-) -> tuple[GroupAnalysisInput, ...]:
-    """Read complete pending inputs for the legacy monolithic runner."""
-    return tuple(
-        load_group_analysis_input(value) for value in read_pending_group_analysis_references(days)
     )
 
 
@@ -82,13 +75,3 @@ def _read_article(reference: ArtifactReference) -> ExtractedArticle:
     return ExtractedArticle.model_validate_json(
         read_verified_r2_object(reference.r2_key, reference.content_digest), strict=True
     )
-
-
-def _read_articles(
-    version_ids: tuple[Sha256, ...],
-) -> dict[Sha256, tuple[ArtifactReference, ExtractedArticle]]:
-    """Read exact article content for the legacy monolithic runner."""
-    return {
-        version_id: (reference, _read_article(reference))
-        for version_id, reference in _read_article_references(version_ids).items()
-    }

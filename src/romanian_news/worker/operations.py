@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from openai import OpenAIError
+
 from romanian_news import BUCHAREST, Sha256
 from romanian_news.alerts import ping_heartbeat
 from romanian_news.analysis.embeddings import (
@@ -17,7 +19,8 @@ from romanian_news.analysis.groups.pending import (
     load_group_analysis_input,
     read_pending_group_analysis_references,
 )
-from romanian_news.analysis.groups.workflow import analyze_group
+from romanian_news.analysis.groups.sentiment import score_group_sentiment
+from romanian_news.analysis.groups.summary import summarize_group
 from romanian_news.analysis.relevance import (
     load_article_analysis_input,
     read_pending_relevance_references,
@@ -372,13 +375,35 @@ def materialize_clusters(day: date, implementation_ref: str) -> DailyArtifactRef
 
 
 def materialize_group_summaries(day: date, implementation_ref: str) -> DailyArtifactReferences:
-    _materialize_group_analysis(day, implementation_ref, summary=True)
-    return read_daily_group_summary_references(day)
+    try:
+        for pending in read_pending_group_analysis_references({day}):
+            if not pending.summary_needed:
+                continue
+            value = load_group_analysis_input(pending)
+            try:
+                output = summarize_group(value)
+            except (OpenAIError, RuntimeError, ValueError) as error:
+                raise RuntimeError(f"summary: {error}") from None
+            publish_group_analysis_outputs((output,), implementation_ref)
+        return read_daily_group_summary_references(day)
+    finally:
+        flush_langfuse_traces()
 
 
 def materialize_group_sentiment(day: date, implementation_ref: str) -> DailyArtifactReferences:
-    _materialize_group_analysis(day, implementation_ref, summary=False)
-    return read_daily_group_sentiment_references(day)
+    try:
+        for pending in read_pending_group_analysis_references({day}):
+            if not pending.sentiment_needed:
+                continue
+            value = load_group_analysis_input(pending)
+            try:
+                output = score_group_sentiment(value)
+            except (OpenAIError, RuntimeError, ValueError) as error:
+                raise RuntimeError(f"sentiment: {error}") from None
+            publish_group_analysis_outputs((output,), implementation_ref)
+        return read_daily_group_sentiment_references(day)
+    finally:
+        flush_langfuse_traces()
 
 
 def materialize_daily_themes(day: date, implementation_ref: str) -> DailyArtifactReferences:
@@ -463,24 +488,3 @@ def materialize_weekly_report(
     if reference.version_id != publication.version_id:
         raise ValueError("Published weekly report version does not match the current artifact")
     return (reference,)
-
-
-def _materialize_group_analysis(day: date, implementation_ref: str, *, summary: bool) -> None:
-    try:
-        for pending in read_pending_group_analysis_references({day}):
-            if summary and not pending.summary_needed:
-                continue
-            if not summary and not pending.sentiment_needed:
-                continue
-            selected = pending.model_copy(
-                update={"summary_needed": summary, "sentiment_needed": not summary}
-            )
-            output = analyze_group(load_group_analysis_input(selected))
-            if output.errors:
-                raise RuntimeError("; ".join(output.errors))
-            values = tuple(
-                value for value in (output.summary, output.sentiment) if value is not None
-            )
-            publish_group_analysis_outputs(values, implementation_ref)
-    finally:
-        flush_langfuse_traces()

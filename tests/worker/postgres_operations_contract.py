@@ -692,7 +692,7 @@ def test_relevance_materializer_uses_production_v3(
 
 
 @pytest.mark.parametrize(
-    ("run", "patches"),
+    ("run", "patches", "message"),
     [
         (
             lambda: operations.materialize_relevance(DAY, "git:test"),
@@ -704,6 +704,7 @@ def test_relevance_materializer_uses_production_v3(
                     lambda _value, **_kwargs: _raise_model_failure(),
                 ),
             ),
+            "model failed",
         ),
         (
             lambda: operations.materialize_embeddings(DAY, "git:test"),
@@ -712,9 +713,10 @@ def test_relevance_materializer_uses_production_v3(
                 ("load_embedding_input", lambda _reference: object()),
                 ("embed_article", lambda _value: _raise_model_failure()),
             ),
+            "model failed",
         ),
         (
-            lambda: operations._materialize_group_analysis(DAY, "git:test", summary=True),
+            lambda: operations.materialize_group_summaries(DAY, "git:test"),
             (
                 (
                     "read_pending_group_analysis_references",
@@ -727,8 +729,26 @@ def test_relevance_materializer_uses_production_v3(
                     ),
                 ),
                 ("load_group_analysis_input", lambda _pending: object()),
-                ("analyze_group", lambda _value: _raise_model_failure()),
+                ("summarize_group", lambda _value: _raise_model_failure()),
             ),
+            "summary: model failed",
+        ),
+        (
+            lambda: operations.materialize_group_sentiment(DAY, "git:test"),
+            (
+                (
+                    "read_pending_group_analysis_references",
+                    lambda _days: (
+                        SimpleNamespace(
+                            summary_needed=False,
+                            sentiment_needed=True,
+                        ),
+                    ),
+                ),
+                ("load_group_analysis_input", lambda _pending: object()),
+                ("score_group_sentiment", lambda _value: _raise_model_failure()),
+            ),
+            "sentiment: model failed",
         ),
     ],
 )
@@ -736,6 +756,7 @@ def test_model_materializers_flush_traces_without_hiding_model_failure(
     monkeypatch,
     run,
     patches,
+    message,
 ) -> None:
     events = []
     for name, value in patches:
@@ -747,8 +768,83 @@ def test_model_materializers_flush_traces_without_hiding_model_failure(
         raising=False,
     )
 
-    with pytest.raises(RuntimeError, match="model failed"):
+    with pytest.raises(RuntimeError, match=message):
         run()
+
+    assert events == ["flush"]
+
+
+@pytest.mark.parametrize(
+    ("materialize", "pending", "read_references"),
+    [
+        (
+            operations.materialize_group_summaries,
+            SimpleNamespace(summary_needed=False, sentiment_needed=True),
+            "read_daily_group_summary_references",
+        ),
+        (
+            operations.materialize_group_sentiment,
+            SimpleNamespace(summary_needed=True, sentiment_needed=False),
+            "read_daily_group_sentiment_references",
+        ),
+    ],
+)
+def test_group_materializers_skip_completed_branches_without_loading_articles(
+    monkeypatch,
+    materialize,
+    pending,
+    read_references,
+) -> None:
+    expected = object()
+    monkeypatch.setattr(
+        operations,
+        "read_pending_group_analysis_references",
+        lambda _days: (pending,),
+    )
+    monkeypatch.setattr(
+        operations,
+        "load_group_analysis_input",
+        lambda _pending: pytest.fail("completed branch loaded article content"),
+    )
+    monkeypatch.setattr(operations, read_references, lambda _day: expected)
+    monkeypatch.setattr(operations, "flush_langfuse_traces", lambda: None)
+
+    assert materialize(DAY, "git:test") is expected
+
+
+@pytest.mark.parametrize(
+    ("materialize", "pending"),
+    [
+        (
+            operations.materialize_group_summaries,
+            SimpleNamespace(summary_needed=True, sentiment_needed=False),
+        ),
+        (
+            operations.materialize_group_sentiment,
+            SimpleNamespace(summary_needed=False, sentiment_needed=True),
+        ),
+    ],
+)
+def test_group_materializers_preserve_article_loading_failures(
+    monkeypatch,
+    materialize,
+    pending,
+) -> None:
+    events = []
+    monkeypatch.setattr(
+        operations,
+        "read_pending_group_analysis_references",
+        lambda _days: (pending,),
+    )
+    monkeypatch.setattr(
+        operations,
+        "load_group_analysis_input",
+        lambda _pending: (_ for _ in ()).throw(ValueError("article load failed")),
+    )
+    monkeypatch.setattr(operations, "flush_langfuse_traces", lambda: events.append("flush"))
+
+    with pytest.raises(ValueError, match="article load failed"):
+        materialize(DAY, "git:test")
 
     assert events == ["flush"]
 
