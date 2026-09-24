@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import signal
 import threading
 import time
@@ -32,8 +33,9 @@ from romanian_news.articles.models import (
 )
 from romanian_news.articles.recovery import (
     ArticleAttemptState,
+    ArticleRecoveryView,
     article_work_generation,
-    read_article_attempt_states,
+    read_article_recovery_view,
 )
 from romanian_news.catalog import articles as article_catalog
 from romanian_news.catalog import feeds as feed_catalog
@@ -59,6 +61,20 @@ _ARTICLE_MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 _ARTICLE_STREAM_CHUNK_BYTES = 64 * 1024
 _LIVE_UNSEEN_SLOTS = 25
 _HISTORICAL_UNSEEN_SLOTS = 25
+
+
+@dataclass(frozen=True)
+class ArticleRecoveryReceipt:
+    recovery_ids: tuple[Sha256, ...]
+    released_event_ids: tuple[Sha256, ...]
+
+
+@dataclass(frozen=True)
+class ArticleRecoveryStatus:
+    event_id: Sha256
+    work_generation: Sha256
+    quarantined: bool
+    deterministic_fingerprint: Sha256 | None
 
 
 @dataclass(frozen=True)
@@ -107,7 +123,7 @@ def plan_article_work(
     cataloged = read_cataloged_feed_entry_references(start_at=start_at, end_at=end_at)
     sources, _ = _select_article_sources(cataloged, feeds, start_at, end_at)
     states = _article_states(sources, feeds)
-    attempts = read_article_attempt_states(
+    recovery = read_article_recovery_view(
         _article_work_generations(sources, feeds, states),
     )
     plan = _plan_article_work(
@@ -116,7 +132,8 @@ def plan_article_work(
         now=now,
         limit=limit,
         revalidate_before=revalidate_before,
-        attempt_states=attempts,
+        attempt_states=recovery.attempt_states,
+        work_generations=recovery.work_generations,
         article_states=states,
     )
     return plan.model_copy(
@@ -143,7 +160,7 @@ def read_article_work_status(
     cataloged = read_cataloged_feed_entry_references(start_at=start_at, end_at=end_at)
     sources, _ = _select_article_sources(cataloged, feeds, start_at, end_at)
     states = _article_states(sources, feeds)
-    attempts = read_article_attempt_states(
+    recovery = read_article_recovery_view(
         _article_work_generations(sources, feeds, states),
     )
     state = _plan_article_work(
@@ -152,7 +169,8 @@ def read_article_work_status(
         now=now,
         limit=max(1, len(sources)),
         revalidate_before=revalidate_before,
-        attempt_states=attempts,
+        attempt_states=recovery.attempt_states,
+        work_generations=recovery.work_generations,
         article_states=states,
     )
     return ArticleWorkStatus(
@@ -185,13 +203,16 @@ def load_exact_article_work(
     if invalid:
         raise ValueError("Exact article batch contains an invalid source")
     states = _article_states(selected_sources, feeds)
-    attempts = read_article_attempt_states(
+    recovery = read_article_recovery_view(
         _article_work_generations(selected_sources, feeds, states),
     )
     active = tuple(
         source
         for source in selected_sources
-        if not (attempts.get(source.event_id) and attempts[source.event_id].quarantined)
+        if not (
+            recovery.attempt_states.get(source.event_id)
+            and recovery.attempt_states[source.event_id].quarantined
+        )
     )
     work_items = tuple(
         work
@@ -202,12 +223,149 @@ def load_exact_article_work(
                 states.get(_source_alias(source, feeds)),
                 now,
                 revalidate_before,
+                work_generation=recovery.work_generations[source.event_id],
             )
         )
         is not None
     )
     requested = set(event_ids)
     return tuple(work for work in work_items if work.source.event_id in requested)
+
+
+def recover_quarantined_article_events(
+    event_ids: tuple[Sha256, ...],
+    registry: FeedRegistry,
+    *,
+    requested_by: str,
+    reason: str,
+    requested_at: datetime,
+    expected_work_generations: dict[Sha256, Sha256],
+) -> ArticleRecoveryReceipt:
+    _validate_recovery_request(
+        event_ids, requested_by, reason, requested_at, expected_work_generations
+    )
+    timestamp = requested_at.astimezone(UTC)
+    recovery_ids = _recovery_request_ids(
+        event_ids, expected_work_generations, requested_by, reason, timestamp
+    )
+    existing_ids = {
+        override.recovery_id
+        for override in article_catalog.read_article_recovery_overrides(event_ids)
+    }
+    replayed = [recovery_id in existing_ids for recovery_id in recovery_ids]
+    if all(replayed):
+        return ArticleRecoveryReceipt(recovery_ids=recovery_ids, released_event_ids=event_ids)
+    if any(replayed):
+        raise ValueError("Recovery request was only partly recorded")
+    base_generations = _recovery_base_generations(event_ids, registry)
+    view = read_article_recovery_view(base_generations)
+    _require_current_quarantine(event_ids, expected_work_generations, view)
+    overrides = tuple(
+        article_catalog.ArticleRecoveryOverride(
+            recovery_id=recovery_id,
+            event_id=event_id,
+            base_work_generation=base_generations[event_id],
+            expected_work_generation=expected_work_generations[event_id],
+            requested_by=requested_by.strip(),
+            reason=reason.strip(),
+            requested_at=timestamp,
+        )
+        for event_id, recovery_id in zip(event_ids, recovery_ids, strict=True)
+    )
+    article_catalog.write_article_recovery_overrides(overrides)
+    return ArticleRecoveryReceipt(
+        recovery_ids=recovery_ids,
+        released_event_ids=event_ids,
+    )
+
+
+def _validate_recovery_request(
+    event_ids: tuple[Sha256, ...],
+    requested_by: str,
+    reason: str,
+    requested_at: datetime,
+    expected_work_generations: dict[Sha256, Sha256],
+) -> None:
+    if not 1 <= len(event_ids) <= 10 or len(event_ids) != len(set(event_ids)):
+        raise ValueError("Recovery requires 1 to 10 unique event IDs")
+    if not requested_by.strip() or not reason.strip():
+        raise ValueError("Recovery requires a requester and reason")
+    if requested_at.tzinfo is None:
+        raise ValueError("Recovery time must include a UTC offset")
+    if set(expected_work_generations) != set(event_ids):
+        raise ValueError("Recovery needs one expected generation per event")
+
+
+def _recovery_request_ids(
+    event_ids: tuple[Sha256, ...],
+    expected_work_generations: dict[Sha256, Sha256],
+    requested_by: str,
+    reason: str,
+    requested_at: datetime,
+) -> tuple[Sha256, ...]:
+    return tuple(
+        hashlib.sha256(
+            json.dumps(
+                {
+                    "event_id": event_id,
+                    "expected_work_generation": expected_work_generations[event_id],
+                    "requested_by": requested_by.strip(),
+                    "reason": reason.strip(),
+                    "requested_at": requested_at.isoformat(),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        for event_id in event_ids
+    )
+
+
+def _recovery_base_generations(
+    event_ids: tuple[Sha256, ...],
+    registry: FeedRegistry,
+) -> dict[Sha256, Sha256]:
+    sources = tuple(read_cataloged_feed_entry_reference(event_id) for event_id in event_ids)
+    feeds = {feed.id: feed for feed in registry.feeds}
+    selected, invalid = _select_article_sources(sources, feeds, None, None)
+    if invalid or len(selected) != len(event_ids):
+        raise ValueError("Recovery contains an invalid or duplicate article source")
+    return _article_work_generations(selected, feeds, _article_states(selected, feeds))
+
+
+def _require_current_quarantine(
+    event_ids: tuple[Sha256, ...],
+    expected_work_generations: dict[Sha256, Sha256],
+    view: ArticleRecoveryView,
+) -> None:
+    for event_id in event_ids:
+        attempt = view.attempt_states.get(event_id)
+        if attempt is None or not attempt.quarantined:
+            raise ValueError(f"Article is not quarantined: {event_id}")
+        if expected_work_generations[event_id] != view.work_generations[event_id]:
+            raise ValueError(f"Article recovery generation changed: {event_id}")
+
+
+def inspect_article_recovery_event(
+    event_id: Sha256,
+    registry: FeedRegistry,
+) -> ArticleRecoveryStatus:
+    source = read_cataloged_feed_entry_reference(event_id)
+    feeds = {feed.id: feed for feed in registry.feeds}
+    selected, invalid = _select_article_sources((source,), feeds, None, None)
+    if invalid or not selected:
+        raise ValueError(f"Invalid article source: {event_id}")
+    states = _article_states(selected, feeds)
+    view = read_article_recovery_view(_article_work_generations(selected, feeds, states))
+    attempt = view.attempt_states.get(event_id)
+    return ArticleRecoveryStatus(
+        event_id=event_id,
+        work_generation=view.work_generations[event_id],
+        quarantined=attempt.quarantined if attempt is not None else False,
+        deterministic_fingerprint=(
+            attempt.deterministic_fingerprint if attempt is not None else None
+        ),
+    )
 
 
 def acquire_article_batch_item(
@@ -425,26 +583,33 @@ def _article_work_item(
     state: article_catalog.ArticleCatalogState | None,
     now: datetime,
     revalidate_before: datetime | None,
+    *,
+    work_generation: Sha256 | None = None,
 ) -> ArticleWorkItem | None:
+    generation = work_generation or article_work_generation(
+        source.event_id, state.captured_at if state is not None else None
+    )
     if state is None:
         lane = (
             ArticleWorkLane.LIVE_UNSEEN
             if source.published_at.astimezone(BUCHAREST).date() == now.astimezone(BUCHAREST).date()
             else ArticleWorkLane.HISTORICAL_UNSEEN
         )
-        return ArticleWorkItem(source=source, lane=lane)
+        return ArticleWorkItem(source=source, lane=lane, work_generation=generation)
     latest = state.source_updated_at or state.published_at
     captured_at = state.captured_at
     if _effective_time(source) > latest:
         return ArticleWorkItem(
             source=source,
             lane=ArticleWorkLane.SOURCE_UPDATE,
+            work_generation=generation,
             last_captured_at=captured_at,
         )
     if revalidate_before is not None and captured_at < revalidate_before:
         return ArticleWorkItem(
             source=source,
             lane=ArticleWorkLane.REVALIDATION,
+            work_generation=generation,
             last_captured_at=captured_at,
         )
     return None
@@ -458,6 +623,7 @@ def _plan_article_work(
     limit: int,
     revalidate_before: datetime | None,
     attempt_states: dict[Sha256, ArticleAttemptState] | None = None,
+    work_generations: dict[Sha256, Sha256] | None = None,
     article_states: dict[str, article_catalog.ArticleCatalogState] | None = None,
 ) -> ArticleWorkPlan:
     states = article_states if article_states is not None else _article_states(sources, feeds)
@@ -468,7 +634,13 @@ def _plan_article_work(
     quarantined: list[Sha256] = []
     for source, alias in _source_aliases(sources, feeds):
         state = states.get(alias)
-        work = _article_work_item(source, state, now, revalidate_before)
+        work = _article_work_item(
+            source,
+            state,
+            now,
+            revalidate_before,
+            work_generation=_provided_work_generation(source.event_id, work_generations),
+        )
         if work is None:
             complete += 1
             continue
@@ -526,6 +698,13 @@ def _plan_article_work(
         deferred_event_ids=tuple(value.source.event_id for value in deferred),
         quarantined_event_ids=tuple(sorted(quarantined)),
     )
+
+
+def _provided_work_generation(
+    event_id: Sha256,
+    work_generations: dict[Sha256, Sha256] | None,
+) -> Sha256 | None:
+    return None if work_generations is None else work_generations.get(event_id)
 
 
 def _article_work_generations(

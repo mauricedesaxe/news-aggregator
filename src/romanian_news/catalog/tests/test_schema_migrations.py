@@ -74,6 +74,14 @@ def test_news_schema_contains_no_debt_objects() -> None:
     assert "_chartly_catalog_schema" not in migration_sql
 
 
+def test_schema_verification_uses_only_applied_migrations() -> None:
+    tables, triggers = _expected_schema_objects(set(range(1, 7)))
+
+    assert "news_article_recovery_overrides" not in tables
+    assert "news_article_recovery_overrides_reject_updates" not in triggers
+    assert "news_article_failure_attempts" in tables
+
+
 def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
     assert tuple((migration.version, migration.name) for migration in NEWS_CATALOG_MIGRATIONS) == (
         (1, "initial"),
@@ -86,6 +94,7 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         (8, "video_digest_orchestration"),
         (9, "video_digest_publication"),
         (10, "video_digest_feedback"),
+        (11, "article_recovery_overrides"),
     )
     assert tuple(migration.version for migration in NEWS_CATALOG_MIGRATIONS) == tuple(
         range(1, len(NEWS_CATALOG_MIGRATIONS) + 1)
@@ -107,4 +116,5 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         "d8c9c938e7a83abfb4263af5280b6851694843b77524d0f84c6dc9ab55d9b4e3",
         "5f733c2e9e4e331a86eceb9fcb362ff507dbc8681a549fceea2c31b4eb328276",
         "69aa3b48f2079044fc85473aadf4c6e1745b62cd63f146c669784c0f1a08c5a4",
+        "0a655f2a44f7ab03ed2dd01625abe477c029324782e20749e951e5f4a1227e00",
     )

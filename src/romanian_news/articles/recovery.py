@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
@@ -29,6 +30,30 @@ class ArticleAttemptState(NewsModel):
 
     def deferred(self, now: datetime) -> bool:
         return not self.quarantined and self.retry_at > now
+
+
+@dataclass(frozen=True)
+class ArticleRecoveryView:
+    work_generations: dict[Sha256, Sha256]
+    attempt_states: dict[Sha256, ArticleAttemptState]
+
+
+def read_article_recovery_view(
+    base_work_generations: Mapping[Sha256, Sha256],
+) -> ArticleRecoveryView:
+    generations = dict(base_work_generations)
+    if generations:
+        overrides = article_catalog.read_article_recovery_overrides(tuple(generations))
+        active: dict[Sha256, article_catalog.ArticleRecoveryOverride] = {}
+        for override in overrides:
+            if override.base_work_generation != base_work_generations[override.event_id]:
+                continue
+            previous = active.get(override.event_id)
+            if previous is None or override.recovery_sequence > previous.recovery_sequence:
+                active[override.event_id] = override
+        for event_id, override in active.items():
+            generations[event_id] = override.work_generation
+    return ArticleRecoveryView(generations, read_article_attempt_states(generations))
 
 
 def article_work_generation(event_id: Sha256, completed_at: datetime | None) -> Sha256:

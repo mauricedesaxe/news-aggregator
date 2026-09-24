@@ -7,11 +7,18 @@ import pytest
 
 SCHEMA_PATH = Path(__file__).parents[3] / "tests" / "fixtures" / "sqlite_catalog.sql"
 MIGRATION_PATH = Path(__file__).parents[1] / "catalog" / "migrations" / "0001_initial.sql"
+RECOVERY_MIGRATION_PATH = (
+    Path(__file__).parents[1] / "catalog" / "migrations" / "0011_article_recovery_overrides.sql"
+)
 
 
 def test_sqlite_catalog_covers_the_production_catalog_tables() -> None:
     production_tables = set(
-        re.findall(r"CREATE TABLE\s+(\w+)", MIGRATION_PATH.read_text(), flags=re.IGNORECASE)
+        re.findall(
+            r"CREATE TABLE\s+(\w+)",
+            MIGRATION_PATH.read_text() + RECOVERY_MIGRATION_PATH.read_text(),
+            flags=re.IGNORECASE,
+        )
     ) - {"news_schema_migrations"}
     fixture_tables = set(
         re.findall(
@@ -221,6 +228,90 @@ def test_news_article_failure_attempts_are_append_only() -> None:
             )
         with pytest.raises(sqlite3.IntegrityError, match="immutable"):
             connection.execute("DELETE FROM news_article_failure_attempts")
+
+
+def test_article_recovery_overrides_are_append_only() -> None:
+    with closing(sqlite3.connect(":memory:")) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.executescript(SCHEMA_PATH.read_text())
+        connection.execute(
+            "INSERT INTO artifacts "
+            "(id, kind, title, authority_class, lifecycle_state, visibility, "
+            "current_version_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "news:feed:hotnews",
+                "news_feed",
+                "HotNews",
+                "source",
+                "current",
+                "private",
+                None,
+                "2026-09-09T08:00:00+00:00",
+            ),
+        )
+        connection.execute(
+            "INSERT INTO artifact_versions VALUES (?, ?, ?, ?, ?, ?)",
+            ("feed-v1", "news:feed:hotnews", 1, "feed-digest", None, "2026-09-09T08:00:00+00:00"),
+        )
+        connection.execute(
+            "INSERT INTO news_dlt_loads VALUES (?, ?, ?)",
+            ("load-1", "feed-v1", "2026-09-09T08:00:00+00:00"),
+        )
+        event_id = "a" * 64
+        connection.execute(
+            "INSERT INTO news_feed_entry_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                event_id,
+                "load-1",
+                "registry-v1",
+                "feed-v1",
+                "hotnews",
+                "source-1",
+                "https://hotnews.ro/source-1",
+                "2026-09-09T07:00:00+00:00",
+                None,
+                "2026-09-09T08:00:00+00:00",
+            ),
+        )
+        connection.execute(
+            "INSERT INTO news_feed_entry_event_versions VALUES (?, ?)", (event_id, event_id)
+        )
+        values = (
+            "b" * 64,
+            event_id,
+            "c" * 64,
+            "d" * 64,
+            "operator",
+            "Parser updated",
+            "2026-09-09T10:00:00+00:00",
+        )
+        insert = (
+            "INSERT OR IGNORE INTO news_article_recovery_overrides "
+            "(recovery_id, event_id, base_work_generation, expected_work_generation, "
+            "requested_by, reason, requested_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )
+        connection.execute(insert, values)
+        connection.execute(insert, values)
+        assert connection.execute(
+            "SELECT count(*) FROM news_article_recovery_overrides"
+        ).fetchone() == (1,)
+        with pytest.raises(sqlite3.IntegrityError, match="identity conflict"):
+            connection.execute(insert, (*values[:5], "different reason", values[6]))
+        with pytest.raises(sqlite3.IntegrityError, match="identity conflict"):
+            connection.execute(insert, ("e" * 64, *values[1:]))
+        connection.execute(insert, ("e" * 64, *values[1:3], "f" * 64, *values[4:]))
+        sequences = connection.execute(
+            "SELECT recovery_sequence FROM news_article_recovery_overrides "
+            "ORDER BY recovery_sequence"
+        ).fetchall()
+        assert len(sequences) == 2
+        assert sequences[0][0] < sequences[1][0]
+        with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+            connection.execute(insert, ("f" * 64, "e" * 64, *values[2:]))
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            connection.execute("UPDATE news_article_recovery_overrides SET reason = 'other'")
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            connection.execute("DELETE FROM news_article_recovery_overrides")
 
 
 def test_news_feed_observations_cannot_be_rewritten() -> None:

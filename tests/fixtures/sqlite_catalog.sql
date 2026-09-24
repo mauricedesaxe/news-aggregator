@@ -131,6 +131,18 @@ CREATE TABLE IF NOT EXISTS news_article_failure_attempts (
     UNIQUE (dagster_run_id, retry_number, event_id)
 );
 
+CREATE TABLE IF NOT EXISTS news_article_recovery_overrides (
+    recovery_sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    recovery_id TEXT NOT NULL UNIQUE,
+    event_id TEXT NOT NULL REFERENCES news_feed_entry_event_versions(event_id),
+    base_work_generation TEXT NOT NULL,
+    expected_work_generation TEXT NOT NULL,
+    requested_by TEXT NOT NULL CHECK (length(trim(requested_by)) > 0),
+    reason TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+    requested_at TEXT NOT NULL,
+    UNIQUE (event_id, base_work_generation, expected_work_generation)
+);
+
 CREATE TABLE IF NOT EXISTS news_relevance_versions (
     artifact_version_id TEXT PRIMARY KEY REFERENCES artifact_versions(id),
     accepted INTEGER NOT NULL CHECK (accepted IN (0, 1))
@@ -809,6 +821,44 @@ BEGIN
     SELECT RAISE(ABORT, 'news_article_failure_attempts are immutable');
 END;
 
+CREATE TRIGGER IF NOT EXISTS news_article_recovery_overrides_reject_updates
+BEFORE UPDATE ON news_article_recovery_overrides
+BEGIN
+    SELECT RAISE(ABORT, 'news_article_recovery_overrides are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS news_article_recovery_overrides_reject_deletes
+BEFORE DELETE ON news_article_recovery_overrides
+BEGIN
+    SELECT RAISE(ABORT, 'news_article_recovery_overrides are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS news_article_recovery_overrides_reject_conflicting_inserts
+BEFORE INSERT ON news_article_recovery_overrides
+WHEN EXISTS (
+    SELECT 1 FROM news_article_recovery_overrides AS existing
+    WHERE (
+        existing.recovery_id = NEW.recovery_id
+        OR (
+            existing.event_id = NEW.event_id
+            AND existing.base_work_generation = NEW.base_work_generation
+            AND existing.expected_work_generation = NEW.expected_work_generation
+        )
+    )
+      AND (
+          existing.recovery_id IS NOT NEW.recovery_id
+          OR existing.event_id IS NOT NEW.event_id
+          OR existing.base_work_generation IS NOT NEW.base_work_generation
+          OR existing.expected_work_generation IS NOT NEW.expected_work_generation
+          OR existing.requested_by IS NOT NEW.requested_by
+          OR existing.reason IS NOT NEW.reason
+          OR existing.requested_at IS NOT NEW.requested_at
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'news_article_recovery_overrides identity conflict');
+END;
+
 CREATE TRIGGER IF NOT EXISTS news_article_failure_attempts_reject_conflicting_inserts
 BEFORE INSERT ON news_article_failure_attempts
 WHEN EXISTS (
@@ -1485,6 +1535,11 @@ CREATE INDEX IF NOT EXISTS news_article_failure_attempts_by_ref_event_generation
         work_generation,
         attempted_at,
         attempt_id
+    );
+
+CREATE INDEX IF NOT EXISTS news_article_recovery_overrides_by_event_generation_sequence
+    ON news_article_recovery_overrides(
+        event_id, base_work_generation, recovery_sequence DESC
     );
 
 CREATE INDEX IF NOT EXISTS news_feedback_by_report_target_time

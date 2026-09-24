@@ -42,7 +42,6 @@ from romanian_news.articles.models import (
     ArticleWorkItem,
 )
 from romanian_news.articles.recovery import (
-    article_work_generation,
     record_article_failure_attempts,
 )
 from romanian_news.artifacts import ArtifactReference
@@ -221,12 +220,7 @@ def materialize_articles(
     def _record_attempt(failure, work):
         record_article_failure_attempts(
             (failure,),
-            work_generations={
-                work.source.event_id: article_work_generation(
-                    work.source.event_id,
-                    work.last_captured_at,
-                )
-            },
+            work_generations={work.source.event_id: work.work_generation},
             run_id=run_id,
             retry_number=retry_number,
             implementation_ref=implementation_ref,
