@@ -9,12 +9,17 @@ from pydantic import TypeAdapter
 from romanian_news import BUCHAREST, Sha256
 from romanian_news.articles.acquisition import plan_article_work
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.config import IMPLEMENTATION_REF, NEWS_WORKSPACE
+from romanian_news.config import (
+    IMPLEMENTATION_REF,
+    NEWS_JEV_RELEVANCE_SHADOW_ENABLED,
+    NEWS_WORKSPACE,
+)
 from romanian_news.daily import (
     check_current_artifact_inputs,
 )
 from romanian_news.feeds.registry import feed_registry
 from romanian_news.groups import parse_daily_cluster_set
+from romanian_news.jev_relevance_shadow import materialize_jev_relevance_shadow
 from romanian_news.reports import (
     read_daily_report_input,
     read_recorded_daily_report_input,
@@ -53,6 +58,19 @@ WEEKLY_PARTITIONS = dg.WeeklyPartitionsDefinition(
     timezone=BUCHAREST_TIMEZONE,
 )
 EAGER = dg.AutomationCondition.eager()
+SHADOW_FRESHNESS = (
+    dg.AutomationCondition.in_latest_time_window(timedelta(days=7))
+    & (
+        dg.AutomationCondition.initial_evaluation()
+        | dg.AutomationCondition.missing()
+        | dg.AutomationCondition.any_deps_updated()
+        | dg.AutomationCondition.code_version_changed()
+        | dg.AutomationCondition.execution_failed()
+    )
+    & ~dg.AutomationCondition.any_deps_missing()
+    & ~dg.AutomationCondition.any_deps_in_progress()
+    & ~dg.AutomationCondition.in_progress()
+)
 WEEKLY_FRESHNESS = (
     (
         dg.AutomationCondition.initial_evaluation()
@@ -181,6 +199,28 @@ def _youtube_result(metadata: dict[str, str | int | bool]) -> dg.MaterializeResu
 )
 def relevance(context: dg.AssetExecutionContext) -> dg.MaterializeResult[object]:
     return _result(materialize_relevance(_partition_day(context), IMPLEMENTATION_REF).values)
+
+
+@dg.asset(
+    deps=[relevance],
+    partitions_def=DAILY_PARTITIONS,
+    group_name="romanian_news_daily",
+    pool="news_model",
+    code_version=f"jev-shadow-{'on' if NEWS_JEV_RELEVANCE_SHADOW_ENABLED else 'off'}",
+    automation_condition=SHADOW_FRESHNESS,
+    check_specs=[dg.AssetCheckSpec(name="paired_accounting", asset="jev_relevance_shadow")],
+)
+def jev_relevance_shadow(
+    context: dg.AssetExecutionContext,
+) -> Iterator[dg.MaterializeResult[object] | dg.AssetCheckResult]:
+    result = materialize_jev_relevance_shadow(_partition_day(context))
+    metadata = result.model_dump(mode="json")
+    yield dg.MaterializeResult(metadata=metadata)
+    yield dg.AssetCheckResult(
+        passed=not (result.failed or result.unresolved or result.missing_incumbent),
+        check_name="paired_accounting",
+        metadata=metadata,
+    )
 
 
 @dg.asset(

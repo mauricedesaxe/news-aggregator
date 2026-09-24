@@ -16,6 +16,9 @@ REPAIR_MIGRATION_PATH = (
 YOUTUBE_RECOVERY_MIGRATION_PATH = (
     Path(__file__).parents[1] / "catalog" / "migrations" / "0013_youtube_quarantine_releases.sql"
 )
+JEV_SHADOW_MIGRATION_PATH = (
+    Path(__file__).parents[1] / "catalog" / "migrations" / "0014_jev_relevance_shadow.sql"
+)
 
 
 def test_sqlite_catalog_covers_the_production_catalog_tables() -> None:
@@ -25,7 +28,8 @@ def test_sqlite_catalog_covers_the_production_catalog_tables() -> None:
             MIGRATION_PATH.read_text()
             + RECOVERY_MIGRATION_PATH.read_text()
             + REPAIR_MIGRATION_PATH.read_text()
-            + YOUTUBE_RECOVERY_MIGRATION_PATH.read_text(),
+            + YOUTUBE_RECOVERY_MIGRATION_PATH.read_text()
+            + JEV_SHADOW_MIGRATION_PATH.read_text(),
             flags=re.IGNORECASE,
         )
     ) - {"news_schema_migrations"}
