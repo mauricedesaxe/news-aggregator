@@ -84,6 +84,11 @@ NEWS_CATALOG_MIGRATIONS = (
         "daily_report_repair_requests",
         MIGRATIONS_PATH / "0012_daily_report_repair_requests.sql",
     ),
+    NewsCatalogMigration(
+        13,
+        "youtube_quarantine_releases",
+        MIGRATIONS_PATH / "0013_youtube_quarantine_releases.sql",
+    ),
 )
 
 

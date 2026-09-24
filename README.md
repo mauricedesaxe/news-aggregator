@@ -58,6 +58,22 @@ article sensor schedules the retry on its next tick. Use the `requested_at`
 value printed by the release command with `--requested-at` to replay an
 uncertain command with the same identity.
 
+For a quarantined YouTube video, inspect its generation and failure before
+releasing it after the cause is fixed:
+
+```bash
+uv run python -m romanian_news.youtube.recover status SOURCE_ID VIDEO_ID
+uv run python -m romanian_news.youtube.recover release SOURCE_ID VIDEO_ID \
+  --expected-generation GENERATION_FROM_STATUS \
+  --requested-by OPERATOR --reason "Source payload fixed"
+```
+
+The release records the failure and returns the video to the pending queue.
+The next source poll retries it while reusing stored metadata and accepted
+clips. The command prints `request_id` and `requested_at` before writing to
+PostgreSQL. If its result is uncertain, retry with those values using
+`--request-id` and `--requested-at`.
+
 Reader-triggered daily report repairs use a PostgreSQL reservation and a
 `news/daily_report_repair_request` Dagster run tag. If a launch reply is lost,
 the reader looks up that tag before returning the run. A reservation marked

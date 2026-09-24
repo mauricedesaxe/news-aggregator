@@ -283,6 +283,7 @@ CREATE TABLE IF NOT EXISTS youtube_videos (
     unchanged_deterministic_failures INTEGER NOT NULL DEFAULT 0
         CHECK (unchanged_deterministic_failures >= 0),
     last_error TEXT,
+    quarantine_generation INTEGER NOT NULL DEFAULT 0 CHECK (quarantine_generation >= 0),
     PRIMARY KEY (source_id, video_id),
     CHECK (
         (state = 'running' AND owner_token IS NOT NULL AND lease_expires_at IS NOT NULL)
@@ -298,6 +299,33 @@ CREATE TABLE IF NOT EXISTS youtube_videos (
     ),
     CHECK (state != 'quarantined' OR unchanged_deterministic_failures >= 3)
 );
+
+CREATE TABLE IF NOT EXISTS youtube_quarantine_releases (
+    request_id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL,
+    video_id TEXT NOT NULL,
+    quarantine_generation INTEGER NOT NULL CHECK (quarantine_generation > 0),
+    failure_fingerprint TEXT NOT NULL,
+    unchanged_failures INTEGER NOT NULL CHECK (unchanged_failures >= 3),
+    last_error TEXT NOT NULL,
+    requested_by TEXT NOT NULL CHECK (length(trim(requested_by)) > 0),
+    reason TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+    requested_at TEXT NOT NULL,
+    FOREIGN KEY (source_id, video_id) REFERENCES youtube_videos(source_id, video_id),
+    UNIQUE (source_id, video_id, quarantine_generation)
+);
+
+CREATE TRIGGER IF NOT EXISTS youtube_quarantine_releases_reject_updates
+BEFORE UPDATE ON youtube_quarantine_releases
+BEGIN
+    SELECT RAISE(ABORT, 'youtube_quarantine_releases are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS youtube_quarantine_releases_reject_deletes
+BEFORE DELETE ON youtube_quarantine_releases
+BEGIN
+    SELECT RAISE(ABORT, 'youtube_quarantine_releases are immutable');
+END;
 
 CREATE TABLE IF NOT EXISTS youtube_model_receipts (
     request_id TEXT NOT NULL,
