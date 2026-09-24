@@ -173,6 +173,7 @@ def build_decision(root: Path = ROOT) -> dict[str, object]:
             "retry_unchanged_rejected_request": False,
             "telemetry": [
                 "paired Jev and incumbent verdicts",
+                "provider failures",
                 "immutable input identities",
                 "guard and fallback reason",
                 "latency and provider usage",

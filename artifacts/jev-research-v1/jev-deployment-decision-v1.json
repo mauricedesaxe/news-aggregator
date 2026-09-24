@@ -10,6 +10,7 @@
     "rollback": "configuration-only return to the incumbent, exercised before promotion",
     "telemetry": [
       "paired Jev and incumbent verdicts",
+      "provider failures",
       "immutable input identities",
       "guard and fallback reason",
       "latency and provider usage",
