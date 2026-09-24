@@ -8,6 +8,7 @@ from romanian_news.alerts import ping_heartbeat
 from romanian_news.config import IMPLEMENTATION_REF
 from romanian_news.current_report import build_and_publish_current_daily_report
 from romanian_news.daily import read_daily_report_reference
+from romanian_news.worker.assets import daily_reports
 
 BUCHAREST_TIMEZONE = "Europe/Bucharest"
 
@@ -16,6 +17,13 @@ BUCHAREST_TIMEZONE = "Europe/Bucharest"
 def morning_report_check_op(context: OpExecutionContext) -> str:
     day = _bucharest_today()
     current = build_and_publish_current_daily_report(day, IMPLEMENTATION_REF)
+    context.log_event(
+        dg.AssetMaterialization(
+            asset_key=daily_reports.key,
+            partition=day.isoformat(),
+            metadata={"report_version_id": current.head.version_id},
+        )
+    )
     read_daily_report_reference(_previous_day(day))
     ping_heartbeat("morning_report")
     metadata = {

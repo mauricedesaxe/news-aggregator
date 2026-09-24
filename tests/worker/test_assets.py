@@ -23,7 +23,7 @@ from romanian_news.worker.definitions import (
     morning_report_check,
     news_automation,
     scheduled_video_digest,
-    weekly_news_report,
+    weekly_freshness,
     weekly_report_job,
     youtube_approved_publication,
     youtube_publication_job,
@@ -63,16 +63,15 @@ def test_weekly_partitions_start_on_monday() -> None:
 def test_automation_starts_running_and_uses_bucharest_time() -> None:
     assert hourly_registered_feed_poll.default_status == dg.DefaultScheduleStatus.RUNNING
     assert daily_morning_report_check.default_status == dg.DefaultScheduleStatus.RUNNING
-    assert weekly_news_report.default_status == dg.DefaultScheduleStatus.RUNNING
+    assert weekly_freshness.default_status == dg.DefaultSensorStatus.RUNNING
+    assert weekly_freshness.minimum_interval_seconds == 3600
     assert scheduled_video_digest.default_status == dg.DefaultScheduleStatus.STOPPED
     assert news_automation.default_status == dg.DefaultSensorStatus.RUNNING
     assert article_batch_controller.default_status == dg.DefaultSensorStatus.RUNNING
     assert hourly_registered_feed_poll.cron_schedule == "0 * * * *"
     assert daily_morning_report_check.cron_schedule == "35 9 * * *"
-    assert weekly_news_report.cron_schedule == "0 * * * *"
     assert hourly_registered_feed_poll.execution_timezone == assets.BUCHAREST_TIMEZONE
     assert daily_morning_report_check.execution_timezone == assets.BUCHAREST_TIMEZONE
-    assert weekly_news_report.execution_timezone == assets.BUCHAREST_TIMEZONE
     schedules = defs.schedules
     assert schedules is not None
     assert {schedule.name for schedule in schedules} == {
@@ -82,11 +81,10 @@ def test_automation_starts_running_and_uses_bucharest_time() -> None:
         "youtube_approved_publication",
         "quarter_hourly_news_feedback_sync",
         "scheduled_video_digest",
-        "weekly_news_report",
     }
     assert defs.resolve_job_def("morning_report_check").name == morning_report_check.name
     assert defs.resolve_job_def("weekly_report").name == weekly_report_job.name
-    assert assets.weekly_reports.automation_conditions_by_key == {}
+    assert assets.weekly_reports.automation_conditions_by_key
 
 
 def test_youtube_automation_starts_running_and_uses_bucharest_time() -> None:
@@ -306,7 +304,6 @@ def test_each_automated_asset_has_one_owner() -> None:
             hourly_registered_feed_poll,
             youtube_source_poll,
             youtube_approved_publication,
-            weekly_news_report,
         )
     }
 
@@ -324,7 +321,6 @@ def test_each_automated_asset_has_one_owner() -> None:
         "hourly_registered_feed_poll": {"feed_intake"},
         "youtube_source_poll": {"youtube_source"},
         "youtube_approved_publication": {"youtube_publication"},
-        "weekly_news_report": {"weekly_reports"},
     }
     assert defs.resolve_job_def("youtube_source_job").name == youtube_source_job.name
     assert defs.resolve_job_def("youtube_publication_job").name == youtube_publication_job.name
@@ -334,6 +330,9 @@ def test_each_automated_asset_has_one_owner() -> None:
     }
     assert controller_keys == {"articles"}
     assert "articles" not in eager_keys
+    assert {key.path[-1] for key in weekly_freshness.asset_selection.resolve(asset_graph)} == {
+        "weekly_reports"
+    }
     assert (
         dg.AssetCheckKey(dg.AssetKey("articles"), "no_quarantined_inputs")
         in asset_graph.asset_check_keys
@@ -795,32 +794,6 @@ def test_past_uncovered_article_day_is_complete_once_entries_are_gone() -> None:
     assert result.is_complete(date(2026, 9, 22)) is False
     assert result.is_complete(date(2026, 9, 21)) is False
     assert result.is_complete(date(2026, 9, 23)) is True
-
-
-def test_weekly_news_report_requests_only_stale_complete_weeks(monkeypatch) -> None:
-    scheduled_at = datetime.fromisoformat("2026-09-21T08:00:00+03:00")
-    stale_weeks = (
-        datetime.fromisoformat("2026-08-31T00:00:00+03:00").date(),
-        datetime.fromisoformat("2026-09-07T00:00:00+03:00").date(),
-    )
-    monkeypatch.setattr(
-        definitions,
-        "stale_weekly_report_weeks",
-        lambda *_args: stale_weeks,
-    )
-
-    with dg.build_schedule_context(
-        scheduled_execution_time=scheduled_at, repository_def=defs.get_repository_def()
-    ) as context:
-        evaluation = weekly_news_report.evaluate_tick(context)
-        assert evaluation.run_requests
-        requests = evaluation.run_requests
-
-    assert [request.partition_key for request in requests] == [
-        "2026-08-31",
-        "2026-09-07",
-    ]
-    assert requests[0].run_key == ("weekly-report:2026-08-31:2026-09-21T08:00:00+03:00")
 
 
 def test_network_work_uses_independent_pools() -> None:

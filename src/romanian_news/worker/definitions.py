@@ -13,11 +13,9 @@ from romanian_news.articles.recovery import (
 from romanian_news.config import IMPLEMENTATION_REF
 from romanian_news.daily import bucharest_day_window, read_daily_article_references
 from romanian_news.feeds.registry import feed_registry
-from romanian_news.reports import stale_weekly_report_weeks
 from romanian_news.worker.assets import (
     BUCHAREST_TIMEZONE,
     DAILY_PARTITIONS,
-    WEEKLY_PARTITIONS,
     articles,
     articles_have_no_quarantined_inputs,
     daily_clusters,
@@ -56,11 +54,9 @@ from romanian_news.youtube.models import YOUTUBE_SOURCES
 
 WEEKLY_ASSETS = dg.AssetSelection.groups("romanian_news_weekly")
 _daily_start = DAILY_PARTITIONS.get_first_partition_key()
-_weekly_start = WEEKLY_PARTITIONS.get_first_partition_key()
-if _daily_start is None or _weekly_start is None:
+if _daily_start is None:
     raise ValueError("News partitions must define a start date")
 DAILY_ASSETS_START = date.fromisoformat(_daily_start)
-WEEKLY_ASSETS_START = date.fromisoformat(_weekly_start)
 feed_poll_job = dg.define_asset_job("feed_poll", selection=dg.AssetSelection.assets(feed_intake))
 youtube_source_job = dg.define_asset_job(
     "youtube_source_job", selection=dg.AssetSelection.assets(youtube_source)
@@ -157,28 +153,6 @@ def youtube_source_poll(
 def youtube_approved_publication(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
     scheduled_at = _scheduled_time(context)
     return dg.RunRequest(run_key=f"youtube-publication:{scheduled_at.isoformat()}")
-
-
-@dg.schedule(
-    job=weekly_report_job,
-    cron_schedule="0 * * * *",
-    execution_timezone=BUCHAREST_TIMEZONE,
-    default_status=dg.DefaultScheduleStatus.RUNNING,
-)
-def weekly_news_report(
-    context: dg.ScheduleEvaluationContext,
-) -> list[dg.RunRequest]:
-    scheduled_at = _scheduled_time(context)
-    return [
-        dg.RunRequest(
-            run_key=(f"weekly-report:{week_start.isoformat()}:{scheduled_at.isoformat()}"),
-            partition_key=week_start.isoformat(),
-            tags={"news/scheduled_at": scheduled_at.isoformat()},
-        )
-        for week_start in stale_weekly_report_weeks(
-            scheduled_at, IMPLEMENTATION_REF, WEEKLY_ASSETS_START
-        )
-    ]
 
 
 @dg.asset_sensor(
@@ -414,6 +388,13 @@ news_automation = dg.AutomationConditionSensorDefinition(
     default_status=dg.DefaultSensorStatus.RUNNING,
 )
 
+weekly_freshness = dg.AutomationConditionSensorDefinition(
+    "weekly_report_freshness",
+    target=dg.AssetSelection.assets(weekly_reports),
+    default_status=dg.DefaultSensorStatus.RUNNING,
+    minimum_interval_seconds=3600,
+)
+
 
 def _scheduled_time(context: dg.ScheduleEvaluationContext) -> datetime:
     if context.scheduled_execution_time is None:
@@ -468,8 +449,12 @@ defs = dg.Definitions(
         youtube_approved_publication,
         daily_morning_report_check,
         quarter_hourly_news_feedback_sync,
-        weekly_news_report,
         scheduled_video_digest,
     ],
-    sensors=[article_batch_controller, youtube_relevance_controller, news_automation],
+    sensors=[
+        article_batch_controller,
+        youtube_relevance_controller,
+        news_automation,
+        weekly_freshness,
+    ],
 )

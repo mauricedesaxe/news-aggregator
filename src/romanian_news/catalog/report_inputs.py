@@ -23,11 +23,6 @@ class ReportDayHead(NewsModel):
     current_run_id: str | None
 
 
-class WeeklyReportHead(NewsModel):
-    week_start: date
-    current_run_id: str | None
-
-
 class ReportArticleCatalogRecord(NewsModel):
     reference: ArtifactReference
     outlet_id: str
@@ -228,28 +223,6 @@ def read_report_day_heads(not_before: date, through: date) -> tuple[ReportDayHea
     return tuple(
         ReportDayHead(
             day=date.fromisoformat(str(row["day"])),
-            current_run_id=None if row["current_run_id"] is None else str(row["current_run_id"]),
-        )
-        for row in rows
-    )
-
-
-def read_current_daily_report_days() -> frozenset[date]:
-    rows = catalog_query(
-        "SELECT substr(id, length('news:daily:') + 1) AS day FROM artifacts "
-        "WHERE kind = 'news_daily_report' AND current_version_id IS NOT NULL"
-    )
-    return frozenset(date.fromisoformat(str(row["day"])) for row in rows)
-
-
-def read_weekly_report_heads() -> tuple[WeeklyReportHead, ...]:
-    rows = catalog_query(
-        "SELECT substr(id, length('news:weekly:') + 1) AS week_start, current_run_id "
-        "FROM artifacts WHERE kind = 'news_weekly_report'"
-    )
-    return tuple(
-        WeeklyReportHead(
-            week_start=date.fromisoformat(str(row["week_start"])),
             current_run_id=None if row["current_run_id"] is None else str(row["current_run_id"]),
         )
         for row in rows

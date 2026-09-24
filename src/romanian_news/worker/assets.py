@@ -53,6 +53,18 @@ WEEKLY_PARTITIONS = dg.WeeklyPartitionsDefinition(
     timezone=BUCHAREST_TIMEZONE,
 )
 EAGER = dg.AutomationCondition.eager()
+WEEKLY_FRESHNESS = (
+    (
+        dg.AutomationCondition.initial_evaluation()
+        | dg.AutomationCondition.missing()
+        | dg.AutomationCondition.any_deps_updated()
+        | dg.AutomationCondition.execution_failed()
+        | dg.AutomationCondition.code_version_changed()
+    )
+    & ~dg.AutomationCondition.any_deps_missing()
+    & ~dg.AutomationCondition.any_deps_in_progress()
+    & ~dg.AutomationCondition.in_progress()
+)
 
 
 @dg.asset(
@@ -275,6 +287,8 @@ def daily_research_triggers(context: dg.AssetExecutionContext) -> dg.Materialize
     partitions_def=WEEKLY_PARTITIONS,
     group_name="romanian_news_weekly",
     pool="news_catalog",
+    code_version=IMPLEMENTATION_REF,
+    automation_condition=WEEKLY_FRESHNESS,
 )
 def weekly_reports(context: dg.AssetExecutionContext) -> dg.MaterializeResult[object]:
     return _result(materialize_weekly_report(_partition_day(context), IMPLEMENTATION_REF))

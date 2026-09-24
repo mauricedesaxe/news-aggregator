@@ -598,43 +598,6 @@ def weekly_report_request_id(value: WeeklyReportInput) -> Sha256:
     )
 
 
-def stale_weekly_report_weeks(
-    scheduled_at: datetime,
-    implementation_ref: str,
-    not_before: date,
-) -> tuple[date, ...]:
-    """Find complete weeks whose current head does not match current daily reports."""
-    local_day = _bucharest_time(scheduled_at).date()
-    from romanian_news.catalog.report_inputs import (
-        read_current_daily_report_days,
-        read_weekly_report_heads,
-    )
-
-    daily_days = read_current_daily_report_days()
-    current_runs = {value.week_start: value.current_run_id for value in read_weekly_report_heads()}
-    week_starts = sorted(
-        {
-            day - timedelta(days=day.weekday())
-            for day in daily_days
-            if day - timedelta(days=day.weekday()) >= not_before
-        }
-    )
-    stale = []
-    for week_start in week_starts:
-        week_days = {week_start + timedelta(days=offset) for offset in range(7)}
-        if week_start + timedelta(days=6) >= local_day or not week_days <= daily_days:
-            continue
-        try:
-            request_id = report_run_id(
-                weekly_report_request_id(read_weekly_report_input(week_start)), implementation_ref
-            )
-        except ReportInputsUnavailable:
-            continue
-        if current_runs.get(week_start) != request_id:
-            stale.append(week_start)
-    return tuple(stale)
-
-
 def build_weekly_report(week_start: date) -> WeeklyReportOutput:
     """Build one weekly report for the legacy monolithic runner."""
     if week_start.weekday() != 0:

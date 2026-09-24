@@ -4,8 +4,9 @@ from datetime import date, datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+import dagster as dg
 import pytest
-from dagster._core.events import StepOutputData
+from dagster._core.events import StepMaterializationData, StepOutputData
 
 from romanian_news.worker import morning_report
 from tests.daily_report_catalog import daily_report, seed_daily_report
@@ -49,4 +50,13 @@ def test_morning_check_reports_the_day_and_pings_on_the_real_catalog(
     metadata = {name: value.value for name, value in event_data.metadata.items()}
     assert metadata["day"] == "2026-09-14"
     assert metadata["report_version_id"] == "9" * 64
+    materialization_event = next(
+        event
+        for event in execution.all_node_events
+        if event.event_type_value == "ASSET_MATERIALIZATION"
+    )
+    assert isinstance(materialization_event.event_specific_data, StepMaterializationData)
+    materialization = materialization_event.event_specific_data.materialization
+    assert materialization.asset_key == dg.AssetKey("daily_reports")
+    assert materialization.partition == "2026-09-14"
     assert pings == ["morning_report"]
