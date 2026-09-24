@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import re
 import time
@@ -25,6 +23,7 @@ from romanian_news.analysis.tracing import (
     trace_provider_call,
 )
 from romanian_news.artifacts import ArtifactReference
+from romanian_news.identity import canonical_json, sha256
 
 CONTEXT_OPERATION_KEY = "news.relevance.v3.context"
 IMPACT_OPERATION_KEY = "news.relevance.v3.impact"
@@ -412,7 +411,7 @@ def analyze_relevance_v3(
         impact.decision,
         policy.acceptance,
     )
-    payload = _canonical_json(
+    payload = canonical_json(
         {
             "accepted": accepted,
             "article_version_id": value.reference.version_id,
@@ -586,7 +585,7 @@ def relevance_v3_policy_payload(policy: RelevanceV3Policy) -> dict[str, object]:
 
 
 def relevance_v3_policy_digest(policy: RelevanceV3Policy = RELEVANCE_V3_POLICY) -> Sha256:
-    return _sha256(_canonical_json(relevance_v3_policy_payload(policy)))
+    return sha256(canonical_json(relevance_v3_policy_payload(policy)))
 
 
 def production_relevance_v3_request_id(
@@ -606,8 +605,8 @@ def relevance_v3_request_id(
 ) -> Sha256:
     if mode == "full_evaluation" and not execution_ref:
         raise ValueError("Full V3 evaluation requires an execution reference")
-    return _sha256(
-        _canonical_json(
+    return sha256(
+        canonical_json(
             {
                 "article_version_id": article.version_id,
                 "execution_mode": mode,
@@ -839,8 +838,8 @@ def _gate_request_id(
     operation_key: str,
     execution_ref: str | None,
 ) -> Sha256:
-    return _sha256(
-        _canonical_json(
+    return sha256(
+        canonical_json(
             {
                 "execution_ref": execution_ref,
                 "operation_key": operation_key,
@@ -929,11 +928,3 @@ def _response_cost(response: ChatCompletion) -> float:
     usage = payload.get("usage")
     cost = usage.get("cost") if isinstance(usage, Mapping) else None
     return _storage_cost(cost)
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

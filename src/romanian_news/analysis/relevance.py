@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 import time
 import unicodedata
@@ -20,6 +18,7 @@ from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_c
 from romanian_news.articles.models import ExtractedArticle
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import existing_current_artifact_ids
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import read_verified_r2_object
 
 RELEVANCE_PROMPT = (
@@ -347,7 +346,7 @@ def analyze_relevance(
         raise RuntimeError("Relevance correction loop did not return")
     call = _model_call(responses, round((time.monotonic() - started) * 1000))
     accepted = relevance_is_accepted(decision, policy)
-    payload = _canonical_json(
+    payload = canonical_json(
         {
             "accepted": accepted,
             "article_version_id": value.reference.version_id,
@@ -391,15 +390,15 @@ def relevance_policy_payload(policy: RelevancePolicy) -> dict[str, object]:
 
 
 def relevance_policy_digest(policy: RelevancePolicy) -> Sha256:
-    return _sha256(_canonical_json(relevance_policy_payload(policy)))
+    return sha256(canonical_json(relevance_policy_payload(policy)))
 
 
 def relevance_request_id(
     article: ArtifactReference,
     policy: RelevancePolicy = PRODUCTION_RELEVANCE_POLICY,
 ) -> Sha256:
-    return _sha256(
-        _canonical_json(
+    return sha256(
+        canonical_json(
             {
                 "article_version_id": article.version_id,
                 "policy": relevance_policy_payload(policy),
@@ -442,11 +441,3 @@ def _model_call(responses: list[ChatCompletion], latency_ms: int) -> ModelCall:
         output_tokens=sum(item.usage.completion_tokens if item.usage else 0 for item in responses),
         latency_ms=latency_ms,
     )
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()
