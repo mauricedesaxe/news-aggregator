@@ -31,6 +31,7 @@ from romanian_news.worker.assets import (
     group_sentiment,
     group_summaries,
     hourly_partition_key,
+    jev_relevance_shadow,
     relevance,
     weekly_report_exact_inputs,
     weekly_reports,
@@ -377,6 +378,7 @@ news_automation = dg.AutomationConditionSensorDefinition(
     "romanian_news_automation",
     target=dg.AssetSelection.assets(
         relevance,
+        jev_relevance_shadow,
         embeddings,
         daily_clusters,
         group_summaries,
@@ -409,6 +411,7 @@ defs = dg.Definitions(
         youtube_publication,
         articles,
         relevance,
+        jev_relevance_shadow,
         embeddings,
         daily_clusters,
         group_summaries,

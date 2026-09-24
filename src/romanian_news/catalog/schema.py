@@ -89,6 +89,11 @@ NEWS_CATALOG_MIGRATIONS = (
         "youtube_quarantine_releases",
         MIGRATIONS_PATH / "0013_youtube_quarantine_releases.sql",
     ),
+    NewsCatalogMigration(
+        14,
+        "jev_relevance_shadow",
+        MIGRATIONS_PATH / "0014_jev_relevance_shadow.sql",
+    ),
 )
 
 

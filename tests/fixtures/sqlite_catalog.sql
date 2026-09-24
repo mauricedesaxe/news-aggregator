@@ -1608,3 +1608,61 @@ CREATE INDEX IF NOT EXISTS youtube_videos_by_state_time
 
 CREATE INDEX IF NOT EXISTS youtube_model_receipts_by_request_status
     ON youtube_model_receipts(request_id, operation_key, status, attempt_index);
+
+CREATE TABLE IF NOT EXISTS news_jev_shadow_claims (
+    shadow_id TEXT PRIMARY KEY,
+    article_version_id TEXT NOT NULL REFERENCES artifact_versions(id),
+    incumbent_version_id TEXT NOT NULL REFERENCES artifact_versions(id),
+    article_content_digest TEXT NOT NULL,
+    incumbent_content_digest TEXT NOT NULL,
+    state_digest TEXT NOT NULL,
+    question_digest TEXT NOT NULL,
+    execution_policy_digest TEXT NOT NULL,
+    incumbent_request_id TEXT NOT NULL,
+    incumbent_policy_digest TEXT NOT NULL,
+    incumbent_accepted INTEGER NOT NULL,
+    state_length INTEGER NOT NULL CHECK (state_length > 0),
+    execution_ref TEXT NOT NULL CHECK (length(trim(execution_ref)) > 0),
+    claimed_at TEXT NOT NULL,
+    UNIQUE (incumbent_version_id, state_digest, question_digest, execution_policy_digest, execution_ref)
+);
+
+CREATE TABLE IF NOT EXISTS news_jev_shadow_receipts (
+    shadow_id TEXT PRIMARY KEY REFERENCES news_jev_shadow_claims(shadow_id),
+    fallback_reason TEXT NOT NULL CHECK (
+        fallback_reason IN ('none', 'over_guard', 'provider_rejected', 'provider_failed')
+    ),
+    jev_request_id TEXT,
+    provider_request_id TEXT,
+    model TEXT,
+    probability NUMERIC CHECK (probability BETWEEN 0 AND 1),
+    jev_accepted INTEGER,
+    attempts TEXT NOT NULL,
+    input_tokens INTEGER CHECK (input_tokens >= 0),
+    output_tokens INTEGER CHECK (output_tokens >= 0),
+    estimated_cost_usd NUMERIC CHECK (estimated_cost_usd >= 0),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    accounting_complete INTEGER NOT NULL,
+    completed_at TEXT NOT NULL,
+    CHECK (
+        (fallback_reason = 'none' AND jev_request_id IS NOT NULL AND jev_accepted IS NOT NULL
+            AND probability IS NOT NULL)
+        OR (fallback_reason != 'none' AND jev_accepted IS NULL AND probability IS NULL)
+    )
+);
+
+CREATE TRIGGER IF NOT EXISTS news_jev_shadow_claims_reject_updates
+BEFORE UPDATE ON news_jev_shadow_claims
+BEGIN SELECT RAISE(ABORT, 'news_jev_shadow_claims are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS news_jev_shadow_claims_reject_deletes
+BEFORE DELETE ON news_jev_shadow_claims
+BEGIN SELECT RAISE(ABORT, 'news_jev_shadow_claims are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS news_jev_shadow_receipts_reject_updates
+BEFORE UPDATE ON news_jev_shadow_receipts
+BEGIN SELECT RAISE(ABORT, 'news_jev_shadow_receipts are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS news_jev_shadow_receipts_reject_deletes
+BEFORE DELETE ON news_jev_shadow_receipts
+BEGIN SELECT RAISE(ABORT, 'news_jev_shadow_receipts are immutable'); END;

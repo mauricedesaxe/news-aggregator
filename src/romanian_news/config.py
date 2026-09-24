@@ -28,6 +28,9 @@ BETTERSTACK_RESEARCH_TRIGGER_HEARTBEAT_URL: str | None = os.getenv(
 )
 OPENROUTER_API_KEY: str | None = os.getenv("OPENROUTER_API_KEY")
 TYPESAFE_API_KEY: str | None = os.getenv("TYPESAFE_API_KEY")
+NEWS_JEV_RELEVANCE_SHADOW_ENABLED: bool = os.getenv(
+    "NEWS_JEV_RELEVANCE_SHADOW_ENABLED", ""
+).strip().lower() in ("1", "true", "yes")
 GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
 FAL_KEY: str | None = os.getenv("FAL_KEY") or os.getenv("FAL_AI_API_KEY")
 YOUTUBE_API_KEY: str | None = os.getenv("YOUTUBE_API_KEY")

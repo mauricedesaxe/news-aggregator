@@ -309,6 +309,7 @@ def test_each_automated_asset_has_one_owner() -> None:
 
     assert eager_keys == {
         "relevance",
+        "jev_relevance_shadow",
         "embeddings",
         "daily_clusters",
         "group_summaries",
