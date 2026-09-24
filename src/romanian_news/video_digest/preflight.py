@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Annotated, Literal, Protocol, TypeVar
 
@@ -206,6 +207,7 @@ def prepare_paid_generation(
     policy: PlanningPolicy = PRODUCTION_POLICY,
     *,
     provider: PlanningProvider | None = None,
+    renew_lease: Callable[[SlotLease], SlotLease] | None = None,
 ) -> PreparedPaidGeneration:
     if lease.edition_id != edition_id(report.version_id, policy.artifact.version_id):
         raise ValueError("Planning inputs do not match the claimed edition")
@@ -226,14 +228,24 @@ def prepare_paid_generation(
         )
 
     call = provider or _openrouter_completion
+    current_lease = lease
+
+    def guarded_call(request: ProviderChatRequest) -> ChatCompletion:
+        nonlocal current_lease
+        if renew_lease is not None:
+            current_lease = renew_lease(current_lease)
+        return call(request)
+
     attempts = list(recorded)
     for attempt_index in range(len(recorded), 3):
-        artifact = _run_attempt(lease, report, policy, attempt_index, tuple(attempts), call)
-        attempt_file = _attempt_file(lease, artifact)
+        artifact = _run_attempt(
+            current_lease, report, policy, attempt_index, tuple(attempts), guarded_call
+        )
+        attempt_file = _attempt_file(current_lease, artifact)
         if artifact.disposition == "rejected":
             publish_immutable_r2_objects(((attempt_file.r2_key, attempt_file.content),))
             checkpoint_planning_attempt(
-                lease,
+                current_lease,
                 attempt_index,
                 "rejected",
                 evidence_file=attempt_file,
@@ -241,7 +253,7 @@ def prepare_paid_generation(
             )
             attempts.append(artifact)
             continue
-        return _finish_new_accepted(lease, report, policy, artifact, attempt_file)
+        return _finish_new_accepted(current_lease, report, policy, artifact, attempt_file)
     raise PlanningExhaustedError(
         PlanningExhaustion(edition_id=lease.edition_id, attempts=tuple(attempts))
     )
