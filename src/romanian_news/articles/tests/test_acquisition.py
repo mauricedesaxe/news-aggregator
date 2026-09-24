@@ -19,6 +19,7 @@ from romanian_news.articles.acquisition import (
     acquire_articles,
     classify_article_request_failure,
     load_exact_article_work,
+    recover_quarantined_article_events,
 )
 from romanian_news.articles.models import (
     ArticleAcquisitionFailure,
@@ -27,7 +28,7 @@ from romanian_news.articles.models import (
     ArticleWorkLane,
     MaterializedArticleWorkItem,
 )
-from romanian_news.articles.recovery import ArticleAttemptState
+from romanian_news.articles.recovery import ArticleAttemptState, ArticleRecoveryView
 from romanian_news.catalog.articles import ArticleCatalogState
 from romanian_news.catalog_transport import ResearchCatalogError
 from romanian_news.feeds.models import (
@@ -176,7 +177,9 @@ def test_article_acquisition_materializes_only_selected_references(monkeypatch) 
 
 def test_exact_batch_skips_work_completed_before_retry(monkeypatch) -> None:
     source = _source(_entry("completed", "2026-09-02T08:00:00+03:00"))
-    work = ArticleWorkItem(source=source, lane=ArticleWorkLane.LIVE_UNSEEN)
+    work = ArticleWorkItem(
+        source=source, lane=ArticleWorkLane.LIVE_UNSEEN, work_generation="d" * 64
+    )
     monkeypatch.setattr(
         "romanian_news.articles.acquisition.article_work_is_complete",
         lambda *_args, **_kwargs: True,
@@ -200,8 +203,8 @@ def test_exact_batch_load_does_not_replan_or_replace_items(monkeypatch) -> None:
     )
     monkeypatch.setattr("romanian_news.articles.acquisition._article_states", lambda *_args: {})
     monkeypatch.setattr(
-        "romanian_news.articles.acquisition.read_article_attempt_states",
-        lambda *_args: {},
+        "romanian_news.articles.acquisition.read_article_recovery_view",
+        lambda generations: ArticleRecoveryView(generations, {}),
     )
     monkeypatch.setattr(
         "romanian_news.articles.acquisition._plan_article_work",
@@ -221,6 +224,99 @@ def test_exact_batch_load_does_not_replan_or_replace_items(monkeypatch) -> None:
     assert tuple(item.source.event_id for item in work) == (source.event_id,)
 
 
+def test_exact_batch_uses_released_generation(monkeypatch) -> None:
+    source = _source(_entry("released", "2026-09-02T08:00:00+03:00"))
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.read_cataloged_feed_entry_reference",
+        lambda _event_id: source,
+    )
+    monkeypatch.setattr("romanian_news.articles.acquisition._article_states", lambda *_args: {})
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.read_article_recovery_view",
+        lambda _generations: ArticleRecoveryView({source.event_id: "f" * 64}, {}),
+    )
+
+    work = load_exact_article_work(
+        (source.event_id,),
+        feed_registry(),
+        implementation_ref="git:test",
+        now=datetime.fromisoformat("2026-09-02T12:00:00+03:00"),
+        start_at=datetime.fromisoformat("2026-09-02T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-03T00:00:00+03:00"),
+        revalidate_before=None,
+    )
+
+    assert work[0].work_generation == "f" * 64
+
+
+def test_article_recovery_requires_current_generation_and_replays_once(monkeypatch) -> None:
+    source = _source(_entry("recover", "2026-09-02T08:00:00+03:00"))
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.read_cataloged_feed_entry_reference",
+        lambda _event_id: source,
+    )
+    monkeypatch.setattr("romanian_news.articles.acquisition._article_states", lambda *_args: {})
+    state = ArticleAttemptState(
+        event_id=source.event_id,
+        implementation_ref="git:test",
+        work_generation="d" * 64,
+        retry_at=datetime.fromisoformat("2026-09-02T12:00:00+00:00"),
+        deterministic_fingerprint="e" * 64,
+        unchanged_deterministic_attempts=3,
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.read_article_recovery_view",
+        lambda generations: ArticleRecoveryView(generations, {source.event_id: state}),
+    )
+    written = []
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.article_catalog.read_article_recovery_overrides",
+        lambda _ids: tuple(written),
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.article_catalog.write_article_recovery_overrides",
+        lambda overrides: written.extend(overrides),
+    )
+    generation = hashlib.sha256(f"{source.event_id}:unseen".encode()).hexdigest()
+    requested_at = datetime.fromisoformat("2026-09-02T13:00:00+00:00")
+
+    with pytest.raises(ValueError, match="generation changed"):
+        recover_quarantined_article_events(
+            (source.event_id,),
+            feed_registry(),
+            requested_by="operator",
+            reason="parser fixed",
+            requested_at=requested_at,
+            expected_work_generations={source.event_id: "f" * 64},
+        )
+    assert not written
+
+    first = recover_quarantined_article_events(
+        (source.event_id,),
+        feed_registry(),
+        requested_by="operator",
+        reason="parser fixed",
+        requested_at=requested_at,
+        expected_work_generations={source.event_id: generation},
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.read_cataloged_feed_entry_reference",
+        lambda _event_id: (_ for _ in ()).throw(AssertionError("replay read current state")),
+    )
+    second = recover_quarantined_article_events(
+        (source.event_id,),
+        feed_registry(),
+        requested_by="operator",
+        reason="parser fixed",
+        requested_at=requested_at,
+        expected_work_generations={source.event_id: generation},
+    )
+
+    assert first == second
+    assert len(written) == 1
+    assert written[0].base_work_generation == generation
+
+
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
@@ -236,7 +332,9 @@ def test_exact_batch_converts_snapshot_failures_to_typed_attempts(
     expected: str,
 ) -> None:
     source = _source(_entry("failed", "2026-09-02T08:00:00+03:00"))
-    work = ArticleWorkItem(source=source, lane=ArticleWorkLane.LIVE_UNSEEN)
+    work = ArticleWorkItem(
+        source=source, lane=ArticleWorkLane.LIVE_UNSEEN, work_generation="d" * 64
+    )
     monkeypatch.setattr(
         "romanian_news.articles.acquisition.article_work_is_complete",
         lambda *_args, **_kwargs: False,
@@ -255,7 +353,9 @@ def test_exact_batch_converts_snapshot_failures_to_typed_attempts(
 
 def test_exact_batch_does_not_hide_programming_errors(monkeypatch) -> None:
     source = _source(_entry("bug", "2026-09-02T08:00:00+03:00"))
-    work = ArticleWorkItem(source=source, lane=ArticleWorkLane.LIVE_UNSEEN)
+    work = ArticleWorkItem(
+        source=source, lane=ArticleWorkLane.LIVE_UNSEEN, work_generation="d" * 64
+    )
     monkeypatch.setattr(
         "romanian_news.articles.acquisition.article_work_is_complete",
         lambda *_args, **_kwargs: False,

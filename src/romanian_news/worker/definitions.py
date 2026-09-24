@@ -7,7 +7,6 @@ import dagster as dg
 from romanian_news import BUCHAREST
 from romanian_news.articles.acquisition import plan_article_work
 from romanian_news.articles.recovery import (
-    article_work_generation,
     read_article_attempt_states,
     read_article_candidate_days,
 )
@@ -338,13 +337,7 @@ def _article_batch_request(
     event_ids = tuple(work.source.event_id for work in plan.selected)
     references = read_daily_article_references(day)
     attempts = read_article_attempt_states(
-        {
-            work.source.event_id: article_work_generation(
-                work.source.event_id,
-                work.last_captured_at,
-            )
-            for work in plan.selected
-        },
+        {work.source.event_id: work.work_generation for work in plan.selected},
     )
     state = json.dumps(
         {

@@ -11,11 +11,14 @@ from romanian_news.articles.models import (
 )
 from romanian_news.catalog.articles import (
     ArticleFailureAttemptWrite,
+    ArticleRecoveryOverride,
     _article_catalog_statements,
     _resolve_article_identities,
     publish_articles,
     read_article_catalog_states,
+    read_article_recovery_overrides,
     write_article_failure_attempts,
+    write_article_recovery_overrides,
 )
 from romanian_news.feeds.models import CatalogedFeedEntry, FeedEntry
 from romanian_news.feeds.registry import feed_registry
@@ -154,6 +157,63 @@ def test_article_catalog_states_parse_typed_dates(monkeypatch) -> None:
 
     assert state.published_at == datetime.fromisoformat("2026-09-01T08:00:00+00:00")
     assert state.source_updated_at is None
+
+
+def test_article_recovery_override_read_and_write_preserve_utc(monkeypatch) -> None:
+    event_id = "a" * 64
+    recovery_id = "b" * 64
+    base_generation = "c" * 64
+    expected_generation = "d" * 64
+    queried = []
+    batches = []
+
+    def query(sql, parameters):
+        queried.append((sql, parameters))
+        return [
+            {
+                "recovery_id": recovery_id,
+                "recovery_sequence": 3,
+                "event_id": event_id,
+                "base_work_generation": base_generation,
+                "expected_work_generation": expected_generation,
+                "requested_by": "operator",
+                "reason": "Parser updated",
+                "requested_at": "2026-09-01T03:00:00+00:00",
+            }
+        ]
+
+    monkeypatch.setattr("romanian_news.catalog.articles.catalog_query", query)
+    monkeypatch.setattr(
+        "romanian_news.catalog.articles.catalog_batch",
+        lambda statements, **kwargs: batches.append((statements, kwargs)),
+    )
+
+    assert read_article_recovery_overrides(()) == ()
+    override = read_article_recovery_overrides((event_id,))[0]
+    assert queried[0][1] == [[event_id]]
+    assert override.requested_at == datetime(2026, 9, 1, 3, tzinfo=UTC)
+    assert override.recovery_sequence == 3
+    assert override.work_generation != override.base_work_generation
+
+    write_article_recovery_overrides(
+        (
+            override.model_copy(
+                update={"requested_at": datetime.fromisoformat("2026-09-01T06:00:00+03:00")}
+            ),
+        )
+    )
+    assert batches[0][0][0][1] == [
+        recovery_id,
+        event_id,
+        base_generation,
+        expected_generation,
+        "operator",
+        "Parser updated",
+        "2026-09-01T03:00:00+00:00",
+    ]
+    assert batches[0][1] == {"retry_transient_errors": True}
+    assert "ON CONFLICT" not in batches[0][0][0][0]
+    assert ArticleRecoveryOverride.model_validate(override.model_dump()) == override
 
 
 def test_article_failure_write_serializes_enum_and_utc_times(monkeypatch) -> None:

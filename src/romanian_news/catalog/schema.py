@@ -74,6 +74,11 @@ NEWS_CATALOG_MIGRATIONS = (
         "video_digest_feedback",
         MIGRATIONS_PATH / "0010_video_digest_feedback.sql",
     ),
+    NewsCatalogMigration(
+        11,
+        "article_recovery_overrides",
+        MIGRATIONS_PATH / "0011_article_recovery_overrides.sql",
+    ),
 )
 
 
@@ -144,21 +149,17 @@ def _apply_migrations(connection: psycopg.Connection[dict[str, Any]]) -> None:
 
 
 def _verify_schema(connection: psycopg.Connection[dict[str, Any]]) -> None:
-    expected_tables, expected_triggers = _expected_schema_objects()
-    missing_tables = {
-        name
-        for name in expected_tables - _current_schema_objects(connection, "tables")
-        if "video_digest" not in name
+    applied = {
+        int(row["version"])
+        for row in connection.execute("SELECT version FROM news_schema_migrations").fetchall()
     }
+    expected_tables, expected_triggers = _expected_schema_objects(applied)
+    missing_tables = expected_tables - _current_schema_objects(connection, "tables")
     if missing_tables:
         raise NewsCatalogSchemaError(
             "PostgreSQL news schema is missing tables: " + ", ".join(sorted(missing_tables))
         )
-    missing_triggers = {
-        name
-        for name in expected_triggers - _current_schema_objects(connection, "triggers")
-        if "video_digest" not in name
-    }
+    missing_triggers = expected_triggers - _current_schema_objects(connection, "triggers")
     if missing_triggers:
         raise NewsCatalogSchemaError(
             "PostgreSQL news schema is missing triggers: " + ", ".join(sorted(missing_triggers))
@@ -178,10 +179,14 @@ def _verify_schema(connection: psycopg.Connection[dict[str, Any]]) -> None:
         )
 
 
-def _expected_schema_objects() -> tuple[set[str], set[str]]:
+def _expected_schema_objects(
+    applied_versions: set[int] | None = None,
+) -> tuple[set[str], set[str]]:
     tables: set[str] = set()
     triggers: set[str] = set()
     for migration in NEWS_CATALOG_MIGRATIONS:
+        if applied_versions is not None and migration.version not in applied_versions:
+            continue
         migration_sql = migration.path.read_text()
         tables.update(re.findall(r"^CREATE TABLE (\w+)", migration_sql, re.MULTILINE))
         triggers.update(

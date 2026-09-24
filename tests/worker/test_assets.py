@@ -653,7 +653,7 @@ def test_article_batch_run_keys_recover_after_a_failed_tick(monkeypatch) -> None
     event_id = "a" * 64
     plan = SimpleNamespace(
         selected=(
-            SimpleNamespace(source=SimpleNamespace(event_id=event_id), last_captured_at=None),
+            SimpleNamespace(source=SimpleNamespace(event_id=event_id), work_generation="b" * 64),
         ),
         remaining_entries=0,
         deferred_event_ids=(),
@@ -741,7 +741,7 @@ def test_article_batch_identity_changes_with_implementation_ref(monkeypatch) -> 
     event_id = "a" * 64
     plan = SimpleNamespace(
         selected=(
-            SimpleNamespace(source=SimpleNamespace(event_id=event_id), last_captured_at=None),
+            SimpleNamespace(source=SimpleNamespace(event_id=event_id), work_generation="b" * 64),
         ),
         remaining_entries=0,
         deferred_event_ids=(),

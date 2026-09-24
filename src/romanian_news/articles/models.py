@@ -32,6 +32,7 @@ class ArticleWorkLane(StrEnum):
 class ArticleWorkItem(NewsModel):
     source: CatalogedFeedEntryReference
     lane: ArticleWorkLane
+    work_generation: Sha256
     last_captured_at: datetime | None = None
 
 

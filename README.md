@@ -41,6 +41,23 @@ GitHub deployment workflows read Dagster organization, URL, environment,
 deployment, GraphQL URL, location, API token, and PostgreSQL DSN from repository
 secrets so deployment configuration remains outside the public source tree.
 
+## Article quarantine recovery
+
+Inspect a quarantined event, then release its current generation after fixing
+the source or parser:
+
+```bash
+uv run python -m romanian_news.articles.recover status EVENT_ID
+uv run python -m romanian_news.articles.recover release EVENT_ID \
+  --expected-generation GENERATION_FROM_STATUS \
+  --requested-by OPERATOR --reason "Source parser fixed"
+```
+
+The release is recorded in PostgreSQL without deleting failure attempts. The
+article sensor schedules the retry on its next tick. Use the `requested_at`
+value printed by the release command with `--requested-at` to replay an
+uncertain command with the same identity.
+
 ## License
 
 MIT. See `LICENSE`. The bundled htmx notice is in `THIRD_PARTY_NOTICES.md`.

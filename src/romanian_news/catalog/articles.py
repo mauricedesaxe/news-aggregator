@@ -60,6 +60,21 @@ class ArticleFailureAttemptWrite(ArticleFailureAttempt):
     attempted_at: datetime
 
 
+class ArticleRecoveryOverride(NewsModel):
+    recovery_id: Sha256
+    event_id: Sha256
+    base_work_generation: Sha256
+    expected_work_generation: Sha256
+    requested_by: Annotated[str, Field(min_length=1)]
+    reason: Annotated[str, Field(min_length=1)]
+    requested_at: datetime
+    recovery_sequence: Annotated[int, Field(ge=0)] = 0
+
+    @property
+    def work_generation(self) -> Sha256:
+        return sha256(f"{self.base_work_generation}:recovery:{self.recovery_id}".encode())
+
+
 def read_article_catalog_states(
     alias_keys: tuple[str, ...],
 ) -> dict[str, ArticleCatalogState]:
@@ -156,6 +171,56 @@ def write_article_failure_attempts(attempts: tuple[ArticleFailureAttemptWrite, .
             ],
         )
         for attempt in attempts
+    ]
+    if statements:
+        catalog_batch(statements, retry_transient_errors=True)
+
+
+def read_article_recovery_overrides(
+    event_ids: tuple[Sha256, ...],
+) -> tuple[ArticleRecoveryOverride, ...]:
+    if not event_ids:
+        return ()
+    rows = catalog_query(
+        "SELECT recovery_id, recovery_sequence, event_id, base_work_generation, "
+        "expected_work_generation, requested_by, reason, requested_at "
+        "FROM news_article_recovery_overrides WHERE event_id = ANY(%s) "
+        "ORDER BY event_id, recovery_sequence",
+        [list(event_ids)],
+    )
+    return tuple(
+        ArticleRecoveryOverride(
+            recovery_id=str(row["recovery_id"]),
+            event_id=str(row["event_id"]),
+            base_work_generation=str(row["base_work_generation"]),
+            expected_work_generation=str(row["expected_work_generation"]),
+            requested_by=str(row["requested_by"]),
+            reason=str(row["reason"]),
+            requested_at=datetime.fromisoformat(str(row["requested_at"])),
+            recovery_sequence=int(row["recovery_sequence"]),
+        )
+        for row in rows
+    )
+
+
+def write_article_recovery_overrides(overrides: tuple[ArticleRecoveryOverride, ...]) -> None:
+    statements = [
+        (
+            "INSERT INTO news_article_recovery_overrides "
+            "(recovery_id, event_id, base_work_generation, expected_work_generation, "
+            "requested_by, reason, requested_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            [
+                override.recovery_id,
+                override.event_id,
+                override.base_work_generation,
+                override.expected_work_generation,
+                override.requested_by,
+                override.reason,
+                override.requested_at.astimezone(UTC).isoformat(),
+            ],
+        )
+        for override in overrides
     ]
     if statements:
         catalog_batch(statements, retry_transient_errors=True)
