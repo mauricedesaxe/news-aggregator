@@ -4,7 +4,7 @@ import re
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.attempts import ModelCall
@@ -27,8 +27,6 @@ class GroupAnalysisInput(NewsModel):
     cluster_set: ArtifactReference
     group: NewsGroup
     articles: tuple[tuple[ArtifactReference, ExtractedArticle], ...]
-    summary_needed: bool
-    sentiment_needed: bool
 
 
 class GroupSummary(NewsModel):
@@ -94,15 +92,3 @@ class GroupSentimentOutput(NewsModel):
     sentiment: GroupSentiment
     call: ModelCall
     content: bytes
-
-
-class GroupAnalysisOutput(NewsModel):
-    summary: GroupSummaryOutput | None
-    sentiment: GroupSentimentOutput | None
-    errors: tuple[str, ...] = ()
-
-    @model_validator(mode="after")
-    def validate_output(self) -> GroupAnalysisOutput:
-        if self.summary is None and self.sentiment is None and not self.errors:
-            raise ValueError("A group analysis must produce output or an explicit error")
-        return self

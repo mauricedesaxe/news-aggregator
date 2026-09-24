@@ -70,7 +70,7 @@ def _accept_summary(
     return summary
 
 
-def summarize_group(value: GroupAnalysisInput, article_context: str) -> GroupSummaryOutput:
+def summarize_group(value: GroupAnalysisInput) -> GroupSummaryOutput:
     request_id = summary_request_id(value.group)
     started = time.monotonic()
     valid_ids = {reference.version_id for reference, _ in value.articles}
@@ -87,7 +87,7 @@ def summarize_group(value: GroupAnalysisInput, article_context: str) -> GroupSum
     }
     messages: list[ChatCompletionMessageParam] = [
         {"role": "system", "content": SUMMARY_PROMPT},
-        {"role": "user", "content": article_context},
+        {"role": "user", "content": _article_context(value)},
     ]
     responses: list[ChatCompletion] = []
     for attempt in range(2):
@@ -193,6 +193,16 @@ def summarize_group(value: GroupAnalysisInput, article_context: str) -> GroupSum
         summary=summary,
         call=call,
         content=payload,
+    )
+
+
+def _article_context(value: GroupAnalysisInput) -> str:
+    return "\n\n".join(
+        f"ARTICLE_ID: a{index}\n"
+        f"OUTLET_ID: {article.outlet_id}\n"
+        f"PUBLISHED_AT: {article.published_at.isoformat()}\n"
+        f"TITLE: {article.title}\nTEXT:\n{article.body[:12000]}"
+        for index, (_reference, article) in enumerate(value.articles, start=1)
     )
 
 

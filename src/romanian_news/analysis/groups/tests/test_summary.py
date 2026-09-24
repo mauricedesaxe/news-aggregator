@@ -92,6 +92,7 @@ def test_generated_title_keeps_words_that_start_like_news_labels(title: str) -> 
 
 def test_single_outlet_summary_clears_provider_differences_in_artifact(monkeypatch) -> None:
     value = _group_input(("same-outlet", "same-outlet"))
+    provider_inputs = []
     response = SimpleNamespace(
         id="summary-response",
         model="test/model",
@@ -113,19 +114,28 @@ def test_single_outlet_summary_clears_provider_differences_in_artifact(monkeypat
         ],
         model_dump=lambda **_kwargs: {"id": "summary-response"},
     )
-    monkeypatch.setattr(
-        summary_module,
-        "trace_provider_call",
-        lambda *_args: SimpleNamespace(response=response, call_id="call", trace=None),
-    )
+
+    def trace_provider_call(_operation, _request_id, inputs, _call):
+        provider_inputs.append(inputs)
+        return SimpleNamespace(response=response, call_id="call", trace=None)
+
+    monkeypatch.setattr(summary_module, "trace_provider_call", trace_provider_call)
     monkeypatch.setattr(summary_module, "record_model_attempt", lambda *_args, **_kwargs: None)
 
-    output = summarize_group(value, "article context")
+    output = summarize_group(value)
     payload = json.loads(output.content)
 
     assert output.summary.disagreements_ro == ()
     assert payload["summary"]["disagreements_ro"] == []
     assert payload["comparison_policy"] == SUMMARY_COMPARISON_POLICY
+    assert provider_inputs[0]["messages"][1]["content"] == (
+        "ARTICLE_ID: a1\nOUTLET_ID: same-outlet\n"
+        "PUBLISHED_AT: 2026-08-31T00:00:00+00:00\n"
+        "TITLE: Title 0\nTEXT:\nBody 0\n\n"
+        "ARTICLE_ID: a2\nOUTLET_ID: same-outlet\n"
+        "PUBLISHED_AT: 2026-08-31T01:00:00+00:00\n"
+        "TITLE: Title 1\nTEXT:\nBody 1"
+    )
 
 
 def test_summary_corrects_truncated_json_once(monkeypatch) -> None:
@@ -149,7 +159,7 @@ def test_summary_corrects_truncated_json_once(monkeypatch) -> None:
         lambda *_args, **kwargs: attempts.append(kwargs),
     )
 
-    output = summarize_group(value, "article context")
+    output = summarize_group(value)
 
     assert [attempt["status"] for attempt in attempts] == ["rejected", "accepted"]
     assert len(json.loads(output.content)["provider_responses"]) == 2
@@ -173,7 +183,7 @@ def test_summary_correction_exhaustion_raises_after_repeated_invalid_responses(
     )
 
     with pytest.raises(ValueError, match="Group summary remained invalid after correction"):
-        summarize_group(value, "article context")
+        summarize_group(value)
 
     assert [attempt["status"] for attempt in attempts] == ["rejected", "rejected"]
 
@@ -203,8 +213,6 @@ def _group_input(outlets: tuple[str, ...]) -> GroupAnalysisInput:
             )
             for index, (version_id, outlet) in enumerate(zip(article_ids, outlets, strict=True))
         ),
-        summary_needed=True,
-        sentiment_needed=False,
     )
 
 
