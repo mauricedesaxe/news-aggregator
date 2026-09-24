@@ -85,7 +85,7 @@ jobs:
           uv sync --frozen --group test
 
       - name: Run PostgreSQL-backed tests
-        run: uv run --no-sync pytest tests/contracts/postgres_*.py tests/worker/postgres_operations_contract.py tests/reader/postgres_reader_app_e2e.py
+        run: uv run --no-sync pytest tests/contracts/postgres_*.py tests/worker/postgres_operations_contract.py tests/worker/test_morning_report.py tests/worker/test_video_digest_worker.py tests/reader/postgres_reader_app_e2e.py
 
   reader-image:
     name: Build and start reader image

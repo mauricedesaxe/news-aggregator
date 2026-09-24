@@ -1,4 +1,6 @@
+import ast
 import hashlib
+import inspect
 import json
 from decimal import Decimal
 from types import SimpleNamespace
@@ -266,6 +268,24 @@ def test_gemini_binary_rejects_invalid_latency(monkeypatch, clocks) -> None:
 
     with pytest.raises(ValueError, match="latency"):
         evaluate_gemini_binary(_request(), execution_ref="trial-1", clock=iter(clocks).__next__)
+
+
+def test_gemini_binary_does_not_import_production_relevance_prompts() -> None:
+    direct_imports = {
+        alias.name
+        for node in ast.walk(ast.parse(inspect.getsource(gemini_binary)))
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    from_imports = {
+        node.module
+        for node in ast.walk(ast.parse(inspect.getsource(gemini_binary)))
+        if isinstance(node, ast.ImportFrom) and node.module is not None
+    }
+    imports = direct_imports | from_imports
+
+    assert "romanian_news.analysis.relevance" not in imports
+    assert "romanian_news.analysis.relevance_v3" not in imports
 
 
 def _request() -> BinaryRequest:
