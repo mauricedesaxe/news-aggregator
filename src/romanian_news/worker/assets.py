@@ -92,7 +92,7 @@ def articles(
         retry_number=context.retry_number,
     )
     metadata = _article_batch_metadata(result)
-    if not result.complete or result.has_infrastructure_failures:
+    if not result.complete or result.has_infrastructure_failures or result.quarantined_event_ids:
         yield dg.AssetObservation(
             asset_key="articles",
             partition=context.partition_key,
@@ -103,6 +103,11 @@ def articles(
             failure.message for failure in result.failures if failure.kind.value == "infrastructure"
         ]
         raise RuntimeError("; ".join(failures))
+    if result.quarantined_event_ids:
+        raise dg.Failure(
+            f"Article batch has {len(result.quarantined_event_ids)} quarantined input(s)",
+            allow_retries=False,
+        )
     if result.complete:
         yield _result(result.references.values, metadata)
 
