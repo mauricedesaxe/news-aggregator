@@ -102,7 +102,11 @@ def test_publication_port_from_environment_builds_from_a_safe_boundary(
 
     port = publication.R2PublicationPort.from_environment()
 
-    assert isinstance(port, publication.R2PublicationPort)
+    assert port._configuration == publication.PublicMediaConfiguration(
+        private_bucket="private-environment",
+        public_bucket="public-environment",
+        base_url="https://media.environment",
+    )
 
 
 @pytest.mark.parametrize(
