@@ -695,6 +695,47 @@ def test_article_batch_run_keys_recover_after_a_failed_tick(monkeypatch) -> None
     }
 
 
+def test_article_controller_reports_unchanged_quarantine_once(monkeypatch) -> None:
+    day = datetime.fromisoformat(DAY).date()
+    plan = SimpleNamespace(
+        selected=(),
+        remaining_entries=0,
+        deferred_event_ids=(),
+        quarantined_event_ids=("a" * 64,),
+        source_covered_days=(day,),
+    )
+    monkeypatch.setattr(definitions, "plan_article_work", lambda *_args, **_kwargs: plan)
+    monkeypatch.setattr(definitions, "read_article_attempt_states", lambda _event_ids: {})
+    monkeypatch.setattr(definitions, "feed_registry", SimpleNamespace)
+    monkeypatch.setattr(
+        definitions,
+        "read_daily_article_references",
+        lambda _day: DailyArtifactReferences(day=day, values=()),
+    )
+    with dg.instance_for_test() as instance:
+        context = dg.build_sensor_context(
+            instance=instance,
+            repository_def=defs.get_repository_def(),
+        )
+        first = definitions._article_batch_request(
+            context, day, datetime.fromisoformat("2026-09-09T09:00:00+00:00")
+        )
+        assert first is not None
+        instance.add_run(
+            dg.DagsterRun(
+                job_name="article_batch",
+                run_id="quarantine-reported",
+                status=dg.DagsterRunStatus.FAILURE,
+                tags=first.tags,
+            )
+        )
+        second = definitions._article_batch_request(
+            context, day, datetime.fromisoformat("2026-09-09T09:01:00+00:00")
+        )
+
+    assert second is None
+
+
 def test_article_batch_identity_changes_with_implementation_ref(monkeypatch) -> None:
     day = datetime.fromisoformat(DAY).date()
     event_id = "a" * 64
@@ -864,7 +905,7 @@ def test_past_uncovered_empty_batch_materializes_articles(monkeypatch) -> None:
     assert result.asset_materializations_for_node("articles")
 
 
-def test_quarantined_inputs_permit_completion_with_visible_metadata(monkeypatch) -> None:
+def test_quarantined_inputs_fail_without_materializing_articles(monkeypatch) -> None:
     day = datetime.fromisoformat(DAY).date()
     quarantined = "a" * 64
     references = DailyArtifactReferences(day=day, values=())
@@ -888,16 +929,22 @@ def test_quarantined_inputs_permit_completion_with_visible_metadata(monkeypatch)
     result = dg.materialize(
         [assets.feed_intake, assets.articles],
         partition_key=DAY,
+        raise_on_error=False,
         tags={
             "news/scheduled_at": "2026-09-02T12:00:00+03:00",
             "news/article_event_ids": "[]",
         },
     )
 
-    assert result.success
-    materialization = result.asset_materializations_for_node("articles")[0]
-    assert materialization.metadata["quarantined_count"].value == 1
-    quarantined_metadata = materialization.metadata["quarantined_event_ids"]
+    assert not result.success
+    assert result.asset_materializations_for_node("articles") == []
+    observations = [
+        event for event in result.all_events if event.event_type_value == "ASSET_OBSERVATION"
+    ]
+    assert len(observations) == 1
+    metadata = observations[0].asset_observation_data.asset_observation.metadata
+    assert metadata["quarantined_count"].value == 1
+    quarantined_metadata = metadata["quarantined_event_ids"]
     assert isinstance(quarantined_metadata, JsonMetadataValue)
     assert quarantined_metadata.data == [quarantined]
 

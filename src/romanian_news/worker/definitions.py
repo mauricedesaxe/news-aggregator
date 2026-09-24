@@ -368,17 +368,20 @@ def _article_batch_request(
         separators=(",", ":"),
     )
     batch_key = hashlib.sha256(state.encode()).hexdigest()
-    succeeded = context.instance.get_runs(
+    reported_statuses = [dg.DagsterRunStatus.SUCCESS]
+    if not event_ids and plan.quarantined_event_ids:
+        reported_statuses.append(dg.DagsterRunStatus.FAILURE)
+    reported = context.instance.get_runs(
         filters=dg.RunsFilter(
             job_name="article_batch",
-            statuses=[dg.DagsterRunStatus.SUCCESS],
+            statuses=reported_statuses,
             tags={"news/article_batch_key": batch_key},
         ),
         limit=1,
     )
     today = now.astimezone(BUCHAREST).date()
     waiting_for_coverage = day not in plan.source_covered_days and day >= today
-    if succeeded or (not event_ids and (plan.remaining_entries or waiting_for_coverage)):
+    if reported or (not event_ids and (plan.remaining_entries or waiting_for_coverage)):
         return None
     recovery_slot = now.replace(second=0, microsecond=0).isoformat()
     return dg.RunRequest(
