@@ -2,7 +2,8 @@
   "accepted_rollout": {
     "clip_or_chunk_state": false,
     "fallback": "use incumbent with unchanged full state on guard breach or provider rejection",
-    "implementation_ticket": "news-aggregator-vt6.8",
+    "implementation_ticket": "news-gh9",
+    "implementation_ticket_external_ref": "gh-9",
     "mode": "shadow_only_incumbent_authoritative",
     "preflight": "send to Jev only when len(state) <= 70000",
     "promotion_gate": "A separately reviewed immutable sample preserves every positive control, has recall 1.0 and precision >= 0.80, with no unresolved accounting gaps.",
@@ -28,7 +29,8 @@
       "aspect": "relevance",
       "basis": "Jev alone passed the registered News relevance quality gate; production relevance states were below the local guard, but reviewed context headroom and affected-production quality remain unavailable.",
       "disposition": "guarded_shadow_candidate",
-      "implementation_ticket": "news-aggregator-vt6.8",
+      "implementation_ticket": "news-gh9",
+      "implementation_ticket_external_ref": "gh-9",
       "product": "news",
       "prompt_class": "direct_binary_classification"
     },
@@ -105,7 +107,8 @@
       "prompt_class": "prose_generation"
     }
   ],
-  "issue_id": "news-aggregator-vt6.3",
+  "external_ref": "gh-9",
+  "issue_id": "news-gh9",
   "schema_version": "jev-deployment-decision/v1",
   "source": {
     "path": "artifacts/jev-research-v1/jev-research-snapshot-v1.json",

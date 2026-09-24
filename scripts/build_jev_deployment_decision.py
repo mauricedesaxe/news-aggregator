@@ -75,7 +75,8 @@ def build_decision(root: Path = ROOT) -> dict[str, object]:
     source_path = root / "artifacts/jev-research-v1/jev-research-snapshot-v1.json"
     return {
         "schema_version": "jev-deployment-decision/v1",
-        "issue_id": "news-aggregator-vt6.3",
+        "issue_id": "news-gh9",
+        "external_ref": "gh-9",
         "decision_scope": "prompt-class deployment disposition; no production behavior change",
         "default": "retain_incumbent_when_evidence_is_not_directly_comparable",
         "dispositions": [
@@ -84,7 +85,8 @@ def build_decision(root: Path = ROOT) -> dict[str, object]:
                 "aspect": "relevance",
                 "prompt_class": "direct_binary_classification",
                 "disposition": "guarded_shadow_candidate",
-                "implementation_ticket": "news-aggregator-vt6.8",
+                "implementation_ticket": "news-gh9",
+                "implementation_ticket_external_ref": "gh-9",
                 "basis": (
                     "Jev alone passed the registered News relevance quality gate; "
                     "production relevance states were below the local guard, but reviewed "
@@ -165,7 +167,8 @@ def build_decision(root: Path = ROOT) -> dict[str, object]:
             },
         ],
         "accepted_rollout": {
-            "implementation_ticket": "news-aggregator-vt6.8",
+            "implementation_ticket": "news-gh9",
+            "implementation_ticket_external_ref": "gh-9",
             "mode": "shadow_only_incumbent_authoritative",
             "preflight": "send to Jev only when len(state) <= 70000",
             "fallback": "use incumbent with unchanged full state on guard breach or provider rejection",
@@ -228,7 +231,10 @@ def _markdown(decision: dict[str, object]) -> str:
             "",
             "## Guarded rollout",
             "",
-            f'- Ticket: `{rollout["implementation_ticket"]}`',
+            (
+                f'- Ticket: `{rollout["implementation_ticket"]}` '
+                f'(`{rollout["implementation_ticket_external_ref"]}`)'
+            ),
             f'- Mode: `{rollout["mode"]}`',
             f'- Preflight: {rollout["preflight"]}',
             f'- Fallback: {rollout["fallback"]}',
