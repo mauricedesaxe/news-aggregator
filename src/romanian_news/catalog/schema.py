@@ -79,6 +79,11 @@ NEWS_CATALOG_MIGRATIONS = (
         "article_recovery_overrides",
         MIGRATIONS_PATH / "0011_article_recovery_overrides.sql",
     ),
+    NewsCatalogMigration(
+        12,
+        "daily_report_repair_requests",
+        MIGRATIONS_PATH / "0012_daily_report_repair_requests.sql",
+    ),
 )
 
 

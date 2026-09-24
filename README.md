@@ -58,6 +58,12 @@ article sensor schedules the retry on its next tick. Use the `requested_at`
 value printed by the release command with `--requested-at` to replay an
 uncertain command with the same identity.
 
+Reader-triggered daily report repairs use a PostgreSQL reservation and a
+`news/daily_report_repair_request` Dagster run tag. If a launch reply is lost,
+the reader looks up that tag before returning the run. A reservation marked
+`launch_started` with no visible run stays pending; check Dagster for its
+request ID before clearing it for a new launch.
+
 ## License
 
 MIT. See `LICENSE`. The bundled htmx notice is in `THIRD_PARTY_NOTICES.md`.

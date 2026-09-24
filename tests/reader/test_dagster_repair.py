@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any
+from uuid import UUID
 
 import pytest
+import requests
 
 from romanian_news.reader import dagster_repair
+from romanian_news.reader.repair_requests import RepairReservation
 
 DAY = date(2026, 9, 15)
 RUN_ID = "repair-run"
@@ -70,6 +73,15 @@ def _configure(monkeypatch: pytest.MonkeyPatch) -> None:
         dagster_repair, "DAGSTER_CLOUD_GRAPHQL_URL", "https://example.test/prod/graphql"
     )
     monkeypatch.setattr(dagster_repair, "DAGSTER_CLOUD_API_TOKEN", "secret")
+    monkeypatch.setattr(
+        dagster_repair,
+        "reserve_repair",
+        lambda day: RepairReservation(day, UUID(int=1), None, True),
+    )
+    monkeypatch.setattr(dagster_repair, "bind_repair_run", lambda *_args: None)
+    monkeypatch.setattr(dagster_repair, "mark_repair_launch_started", lambda *_args: True)
+    monkeypatch.setattr(dagster_repair, "release_unlaunched_repair", lambda *_args: None)
+    monkeypatch.setattr(dagster_repair, "release_rejected_repair", lambda *_args: None)
 
 
 def test_repeated_repair_requests_reuse_the_active_partition_run(monkeypatch) -> None:
@@ -154,6 +166,178 @@ def test_repair_request_launches_with_resolved_partition_config_and_tags(monkeyp
         "key": "dagster/partition",
         "value": DAY.isoformat(),
     }
+    assert launch["executionMetadata"]["tags"][-1] == {
+        "key": dagster_repair.REPAIR_REQUEST_TAG,
+        "value": str(UUID(int=1)),
+    }
+
+
+def test_pending_reservation_does_not_launch_again(monkeypatch) -> None:
+    _configure(monkeypatch)
+    monkeypatch.setattr(
+        dagster_repair,
+        "reserve_repair",
+        lambda day: RepairReservation(day, UUID(int=1), None, False),
+    )
+    queries = []
+
+    def post(_url: str, **kwargs: Any) -> Response:
+        query = kwargs["json"]["query"]
+        queries.append(query)
+        if "ActiveDailyReportRepairs" in query:
+            return Response(_payload({"runsOrError": {"__typename": "Runs", "results": []}}))
+        raise AssertionError("Pending repair must not launch or query partition config")
+
+    monkeypatch.setattr(dagster_repair.requests, "post", post)
+
+    with pytest.raises(dagster_repair.DagsterRepairError, match="outcome is pending"):
+        dagster_repair.request_daily_report_repair(DAY)
+
+    assert len(queries) == 2
+    assert all("LaunchDailyReportRepair" not in query for query in queries)
+
+
+def test_timeout_after_launch_reconciles_by_request_tag(monkeypatch) -> None:
+    _configure(monkeypatch)
+    bound = []
+    monkeypatch.setattr(
+        dagster_repair, "bind_repair_run", lambda reservation, run: bound.append(run)
+    )
+    queries = []
+
+    def post(_url: str, **kwargs: Any) -> Response:
+        body = kwargs["json"]
+        query = body["query"]
+        queries.append(query)
+        if "ActiveDailyReportRepairs" in query and "statuses" in body["variables"]["filter"]:
+            return Response(_payload({"runsOrError": {"__typename": "Runs", "results": []}}))
+        if "RepairRepositories" in query:
+            return Response(_repository())
+        if "RepairPartition" in query:
+            return Response(_partition())
+        if "LaunchDailyReportRepair" in query:
+            raise requests.Timeout("accepted but reply lost")
+        if "ActiveDailyReportRepairs" in query:
+            assert body["variables"]["filter"]["tags"][0] == {
+                "key": dagster_repair.REPAIR_REQUEST_TAG,
+                "value": str(UUID(int=1)),
+            }
+            return Response(
+                _payload(
+                    {
+                        "runsOrError": {
+                            "__typename": "Runs",
+                            "results": [{"__typename": "Run", "runId": RUN_ID, "status": "QUEUED"}],
+                        }
+                    }
+                )
+            )
+        raise AssertionError(query)
+
+    monkeypatch.setattr(dagster_repair.requests, "post", post)
+
+    result = dagster_repair.request_daily_report_repair(DAY)
+
+    assert result.kind == "queued"
+    assert bound == [RUN_ID]
+    assert len([query for query in queries if "LaunchDailyReportRepair" in query]) == 1
+
+
+def test_terminal_repair_rotates_reservation_before_launch(monkeypatch) -> None:
+    _configure(monkeypatch)
+    monkeypatch.setattr(
+        dagster_repair,
+        "reserve_repair",
+        lambda day: RepairReservation(day, UUID(int=1), "prior-run", False),
+    )
+    rotated = []
+
+    def replace(reservation: RepairReservation) -> RepairReservation:
+        rotated.append(reservation.request_id)
+        return RepairReservation(reservation.day, UUID(int=2), None, True)
+
+    monkeypatch.setattr(dagster_repair, "replace_terminal_repair", replace)
+    launch_tags = []
+
+    def post(_url: str, **kwargs: Any) -> Response:
+        body = kwargs["json"]
+        query = body["query"]
+        if "ActiveDailyReportRepairs" in query:
+            return Response(_payload({"runsOrError": {"__typename": "Runs", "results": []}}))
+        if "DailyReportRepairRun" in query:
+            return Response(
+                _payload(
+                    {
+                        "runOrError": {
+                            "__typename": "Run",
+                            "runId": "prior-run",
+                            "status": "SUCCESS",
+                        }
+                    }
+                )
+            )
+        if "RepairRepositories" in query:
+            return Response(_repository())
+        if "RepairPartition" in query:
+            return Response(_partition())
+        if "LaunchDailyReportRepair" in query:
+            launch_tags.extend(body["variables"]["executionParams"]["executionMetadata"]["tags"])
+            return Response(
+                _payload(
+                    {
+                        "launchRun": {
+                            "__typename": "LaunchRunSuccess",
+                            "run": {"__typename": "Run", "runId": RUN_ID, "status": "QUEUED"},
+                        }
+                    }
+                )
+            )
+        raise AssertionError(query)
+
+    monkeypatch.setattr(dagster_repair.requests, "post", post)
+
+    result = dagster_repair.request_daily_report_repair(DAY)
+
+    assert result.run_id == RUN_ID
+    assert rotated == [UUID(int=1)]
+    assert launch_tags[-1] == {
+        "key": dagster_repair.REPAIR_REQUEST_TAG,
+        "value": str(UUID(int=2)),
+    }
+
+
+def test_definitive_launch_rejection_releases_reservation(monkeypatch) -> None:
+    _configure(monkeypatch)
+    released = []
+    monkeypatch.setattr(dagster_repair, "release_rejected_repair", released.append)
+
+    def post(_url: str, **kwargs: Any) -> Response:
+        query = kwargs["json"]["query"]
+        if "ActiveDailyReportRepairs" in query:
+            return Response(_payload({"runsOrError": {"__typename": "Runs", "results": []}}))
+        if "RepairRepositories" in query:
+            return Response(_repository())
+        if "RepairPartition" in query:
+            return Response(_partition())
+        if "LaunchDailyReportRepair" in query:
+            return Response(
+                _payload(
+                    {
+                        "launchRun": {
+                            "__typename": "RunConfigValidationInvalid",
+                            "errors": [{"message": "Invalid config"}],
+                        }
+                    }
+                )
+            )
+        raise AssertionError(query)
+
+    monkeypatch.setattr(dagster_repair.requests, "post", post)
+
+    with pytest.raises(dagster_repair.DagsterRepairRejected, match="rejected"):
+        dagster_repair.request_daily_report_repair(DAY)
+
+    assert len(released) == 1
 
 
 @pytest.mark.parametrize(
