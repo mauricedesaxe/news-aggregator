@@ -846,7 +846,7 @@ def test_morning_report_check_requires_yesterdays_catalog_edition_before_pinging
     assert pings == ["morning_report"]
 
 
-def _seed_one_feed_observation(harness, fake_http, fake_r2, observed_at: datetime) -> None:
+def _seed_one_feed_observation(harness, fake_http, observed_at: datetime) -> None:
     registry = feed_registry()
     harness.seed(fake_http, registry, registry.feeds[0], (), observed_at)
 
@@ -858,7 +858,7 @@ def test_article_controller_closes_a_past_day_without_full_feed_coverage(
     fake_http,
     monkeypatch,
 ) -> None:
-    _seed_one_feed_observation(harness, fake_http, fake_r2, datetime(2026, 9, 22, 10, tzinfo=UTC))
+    _seed_one_feed_observation(harness, fake_http, datetime(2026, 9, 22, 10, tzinfo=UTC))
     now = datetime(2026, 9, 24, 10, tzinfo=UTC)
     monkeypatch.setattr(definitions, "_controller_time", lambda: now)
 
@@ -882,7 +882,7 @@ def test_article_controller_waits_for_full_coverage_on_the_current_day(
     fake_http,
     monkeypatch,
 ) -> None:
-    _seed_one_feed_observation(harness, fake_http, fake_r2, datetime(2026, 9, 24, 10, tzinfo=UTC))
+    _seed_one_feed_observation(harness, fake_http, datetime(2026, 9, 24, 10, tzinfo=UTC))
     now = datetime(2026, 9, 24, 15, tzinfo=UTC)
     monkeypatch.setattr(definitions, "_controller_time", lambda: now)
 
@@ -905,7 +905,7 @@ def test_print_catalog_status_reports_each_day_from_the_real_catalog(
     fake_http,
 ) -> None:
     expected = len(feed_registry().feeds)
-    _seed_one_feed_observation(harness, fake_http, fake_r2, datetime(2026, 9, 22, 10, tzinfo=UTC))
+    _seed_one_feed_observation(harness, fake_http, datetime(2026, 9, 22, 10, tzinfo=UTC))
     seed_daily_report(postgres_catalog, daily_report(date(2026, 9, 22)))
 
     print_catalog_status(days=(date(2026, 9, 21), date(2026, 9, 22)))
