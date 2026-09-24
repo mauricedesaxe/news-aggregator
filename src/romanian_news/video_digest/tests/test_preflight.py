@@ -350,6 +350,38 @@ def test_preflight_preserves_report_order_isolates_verifiers_and_replays_without
     assert provider_calls == 3
 
 
+def test_preflight_renews_lease_before_every_provider_call_and_checkpoints_latest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _Harness(monkeypatch)
+    original = _lease()
+    renewals: list[SlotLease] = []
+    checkpoint_leases: list[SlotLease] = []
+    checkpoint_attempt = harness.checkpoint_attempt
+
+    def renew(lease: SlotLease) -> SlotLease:
+        updated = lease.model_copy(update={"expires_at": lease.expires_at + timedelta(minutes=1)})
+        renewals.append(updated)
+        return updated
+
+    def checkpoint(lease: SlotLease, *args, **kwargs):
+        checkpoint_leases.append(lease)
+        return checkpoint_attempt(lease, *args, **kwargs)
+
+    monkeypatch.setattr(preflight, "checkpoint_planning_attempt", checkpoint)
+
+    def provider(request: ProviderChatRequest) -> ChatCompletion:
+        if _system_prompt(request) == preflight.PLANNING_PROMPT:
+            return _response("plan", _plan_content(), request["model"])
+        return _response("verify", '{"status":"accepted","failures":[]}', request["model"])
+
+    preflight.prepare_paid_generation(original, _report(), provider=provider, renew_lease=renew)
+
+    assert len(renewals) == 3
+    assert checkpoint_leases == [renewals[-1]]
+    assert checkpoint_leases[0].expires_at > original.expires_at
+
+
 def test_preflight_bounds_whole_plan_rewrites_and_returns_structured_exhaustion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
