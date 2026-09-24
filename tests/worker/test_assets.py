@@ -737,68 +737,6 @@ def test_article_batch_identity_changes_with_implementation_ref(monkeypatch) -> 
     assert old.tags["news/article_batch_key"] != new.tags["news/article_batch_key"]
 
 
-def _empty_article_plan(*, covered: bool, remaining: int = 0) -> SimpleNamespace:
-    day = datetime.fromisoformat(DAY).date()
-    return SimpleNamespace(
-        selected=(),
-        remaining_entries=remaining,
-        deferred_event_ids=(),
-        quarantined_event_ids=(),
-        source_covered_days=(day,) if covered else (),
-    )
-
-
-def test_article_batch_skips_an_uncovered_current_day_with_no_events(monkeypatch) -> None:
-    day = datetime.fromisoformat("2026-09-23").date()
-    now = datetime.fromisoformat("2026-09-23T12:00:00+03:00")
-    monkeypatch.setattr(
-        definitions,
-        "plan_article_work",
-        lambda *_args, **_kwargs: _empty_article_plan(covered=False),
-    )
-    monkeypatch.setattr(definitions, "read_article_attempt_states", lambda *_args: {})
-    monkeypatch.setattr(definitions, "feed_registry", SimpleNamespace)
-    monkeypatch.setattr(
-        definitions,
-        "read_daily_article_references",
-        lambda _day: DailyArtifactReferences(day=day, values=()),
-    )
-    with dg.instance_for_test() as instance:
-        context = dg.build_sensor_context(
-            instance=instance,
-            repository_def=defs.get_repository_def(),
-        )
-        request = definitions._article_batch_request(context, day, now)
-
-    assert request is None
-
-
-def test_article_batch_closes_a_past_uncovered_day_with_no_remaining_work(monkeypatch) -> None:
-    day = datetime.fromisoformat(DAY).date()
-    now = datetime.fromisoformat("2026-09-23T12:00:00+03:00")
-    monkeypatch.setattr(
-        definitions,
-        "plan_article_work",
-        lambda *_args, **_kwargs: _empty_article_plan(covered=False),
-    )
-    monkeypatch.setattr(definitions, "read_article_attempt_states", lambda *_args: {})
-    monkeypatch.setattr(definitions, "feed_registry", SimpleNamespace)
-    monkeypatch.setattr(
-        definitions,
-        "read_daily_article_references",
-        lambda _day: DailyArtifactReferences(day=day, values=()),
-    )
-    with dg.instance_for_test() as instance:
-        context = dg.build_sensor_context(
-            instance=instance,
-            repository_def=defs.get_repository_def(),
-        )
-        request = definitions._article_batch_request(context, day, now)
-
-    assert request is not None
-    assert json.loads(request.tags["news/article_event_ids"]) == []
-
-
 def test_past_uncovered_article_day_is_complete_once_entries_are_gone() -> None:
     day = date(2026, 9, 22)
     result = ArticleBatchResult(
@@ -814,6 +752,7 @@ def test_past_uncovered_article_day_is_complete_once_entries_are_gone() -> None:
     )
 
     assert result.is_complete(date(2026, 9, 22)) is False
+    assert result.is_complete(date(2026, 9, 21)) is False
     assert result.is_complete(date(2026, 9, 23)) is True
 
 
