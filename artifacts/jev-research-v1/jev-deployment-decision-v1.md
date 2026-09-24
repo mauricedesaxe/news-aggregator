@@ -4,7 +4,7 @@ This artifact records prompt-class dispositions. It does not change production b
 
 | Product | Aspect | Prompt class | Disposition | Implementation | Basis |
 | --- | --- | --- | --- | --- | --- |
-| news | relevance | direct_binary_classification | guarded_shadow_candidate | news-aggregator-vt6.8 | Jev alone passed the registered News relevance quality gate; production relevance states were below the local guard, but reviewed context headroom and affected-production quality remain unavailable. |
+| news | relevance | direct_binary_classification | guarded_shadow_candidate | news-gh9 | Jev alone passed the registered News relevance quality gate; production relevance states were below the local guard, but reviewed context headroom and affected-production quality remain unavailable. |
 | job_finder | relevance | multi_criterion_binary_classification | retain_incumbent | N/A | Every tested target failed the registered direct-suite gate; the proposed atomic architecture is untested. |
 | news | grouping | pairwise_relation_judgment | research_only | N/A | Pair judgments do not establish a complete partition. |
 | news | ranking | pairwise_relation_judgment | research_only | N/A | Pair precedence does not establish a coherent global order, and 190 production requests exceed the guard. |
@@ -17,7 +17,7 @@ This artifact records prompt-class dispositions. It does not change production b
 
 ## Guarded rollout
 
-- Ticket: `news-aggregator-vt6.8`
+- Ticket: `news-gh9` (`gh-9`)
 - Mode: `shadow_only_incumbent_authoritative`
 - Preflight: send to Jev only when len(state) <= 70000
 - Fallback: use incumbent with unchanged full state on guard breach or provider rejection

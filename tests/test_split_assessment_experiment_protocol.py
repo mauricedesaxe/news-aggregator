@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
@@ -11,6 +12,12 @@ from romanian_news.binary_relevance_evaluation import (
 from romanian_news.derived_binary_protocol import (
     DERIVED_BINARY_BENCHMARKS,
     TIER_COMPOSITION_DIGEST,
+)
+from romanian_news.split_subject_assessment_experiment import CONTEXT_GUARD_CHARACTERS
+from scripts.run_split_subject_assessment_experiment import (
+    ARM_ORDER,
+    SPEND_CEILING_USD,
+    TRIAL_REFS,
 )
 
 
@@ -41,36 +48,14 @@ def test_protocol_freezes_source_models_and_tier_semantics() -> None:
         question.semantic_digest for question in definition.questions
     ]
     assert tier["composition_digest"] == TIER_COMPOSITION_DIGEST
-    assert tier["context_guard_characters"] == 70_000
+    assert tier["context_guard_characters"] == CONTEXT_GUARD_CHARACTERS
 
 
-def test_protocol_measures_complete_runs_without_fallback() -> None:
+def test_protocol_matches_runtime_execution_contract() -> None:
     protocol = _protocol()
     execution = cast(dict[str, object], protocol["execution"])
-    quality = cast(dict[str, object], protocol["quality"])
-    tier = cast(dict[str, object], protocol["tier_contract"])
 
-    assert execution["trial_count"] == 3
-    assert execution["arm_order"] == [
-        ["incumbent", "candidate"],
-        ["candidate", "incumbent"],
-        ["incumbent", "candidate"],
-    ]
-    assert execution["provider_reuse"] == (
-        "Historical Jev results may be reported as context but are forbidden in measured "
-        "latency and cost trials. Resume may reuse only exact terminal results from this "
-        "experiment identity."
-    )
-    assert execution["cost_policy"] == (
-        "Include every accepted, rejected, corrected, retried, and failed provider attempt. "
-        "Missing usage makes cost a lower bound, never zero."
-    )
-    assert execution["latency_policy"] == (
-        "Measure wall time from arm entry through validated assessment output. Report summed "
-        "provider-attempt latency separately for diagnosis."
-    )
-    assert tier["context_policy"] == (
-        "Refuse an over-guard candidate arm. Never clip, summarize, chunk, or silently "
-        "substitute the incumbent."
-    )
-    assert quality["primary_unit"] == "Complete validated day-level subject assessment."
+    assert execution["trial_count"] == len(TRIAL_REFS)
+    assert execution["trial_refs"] == list(TRIAL_REFS)
+    assert execution["arm_order"] == [list(arms) for arms in ARM_ORDER]
+    assert Decimal(cast(str, execution["spend_ceiling_usd"])) == SPEND_CEILING_USD

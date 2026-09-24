@@ -24,10 +24,14 @@ def test_relevance_rollout_preserves_issue_9_safety_contract() -> None:
         if item["product"] == "news" and item["aspect"] == "relevance"
     )
 
+    assert decision["issue_id"] == "news-gh9"
+    assert decision["external_ref"] == "gh-9"
     assert relevance["disposition"] == "guarded_shadow_candidate"
-    assert relevance["implementation_ticket"] == "news-aggregator-vt6.8"
+    assert relevance["implementation_ticket"] == "news-gh9"
+    assert relevance["implementation_ticket_external_ref"] == "gh-9"
     assert decision["accepted_rollout"] == {
-        "implementation_ticket": "news-aggregator-vt6.8",
+        "implementation_ticket": "news-gh9",
+        "implementation_ticket_external_ref": "gh-9",
         "mode": "shadow_only_incumbent_authoritative",
         "preflight": "send to Jev only when len(state) <= 70000",
         "fallback": "use incumbent with unchanged full state on guard breach or provider rejection",
@@ -76,6 +80,8 @@ def test_registered_decision_hashes_match_files() -> None:
         item for item in manifest["artifacts"] if item["concern"] == "deployment_decision"
     )
 
+    assert registration["implementation_ticket"] == "news-gh9"
+    assert registration["implementation_ticket_external_ref"] == "gh-9"
     assert (
         registration["sha256"]
         == hashlib.sha256(
