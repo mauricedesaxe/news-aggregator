@@ -16,6 +16,38 @@ sys.modules[SPEC.name] = builder
 SPEC.loader.exec_module(builder)
 
 
+def test_relevance_rollout_preserves_issue_9_safety_contract() -> None:
+    decision = builder.build_decision()
+    relevance = next(
+        item
+        for item in decision["dispositions"]
+        if item["product"] == "news" and item["aspect"] == "relevance"
+    )
+
+    assert relevance["disposition"] == "guarded_shadow_candidate"
+    assert relevance["implementation_ticket"] == "news-aggregator-vt6.8"
+    assert decision["accepted_rollout"] == {
+        "implementation_ticket": "news-aggregator-vt6.8",
+        "mode": "shadow_only_incumbent_authoritative",
+        "preflight": "send to Jev only when len(state) <= 70000",
+        "fallback": "use incumbent with unchanged full state on guard breach or provider rejection",
+        "clip_or_chunk_state": False,
+        "retry_unchanged_rejected_request": False,
+        "telemetry": [
+            "paired Jev and incumbent verdicts",
+            "immutable input identities",
+            "guard and fallback reason",
+            "latency and provider usage",
+            "estimated Jev cost",
+        ],
+        "promotion_gate": (
+            "A separately reviewed immutable sample preserves every positive control, "
+            "has recall 1.0 and precision >= 0.80, with no unresolved accounting gaps."
+        ),
+        "rollback": "configuration-only return to the incumbent, exercised before promotion",
+    }
+
+
 def test_decision_is_deterministic_and_contains_no_sensitive_text(tmp_path: Path) -> None:
     decision = builder.build_decision()
     json_path = tmp_path / "decision.json"
