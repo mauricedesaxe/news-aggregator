@@ -272,7 +272,7 @@ def reject_youtube_video(
         else now.astimezone(UTC) + timedelta(minutes=min(15 * 2 ** (unchanged - 1), 360))
     )
     _fenced_update(
-        "UPDATE youtube_videos SET state = %s, owner_token = NULL, lease_expires_at = NULL, retry_at = %s, deterministic_failure_fingerprint = %s, unchanged_deterministic_failures = %s, last_error = %s "
+        "UPDATE youtube_videos SET state = %s, owner_token = NULL, lease_expires_at = NULL, retry_at = %s, deterministic_failure_fingerprint = %s, unchanged_deterministic_failures = %s, last_error = %s, quarantine_generation = quarantine_generation + %s "
         "WHERE source_id = %s AND video_id = %s AND state = 'running' AND owner_token = %s RETURNING video_id",
         [
             state,
@@ -280,6 +280,7 @@ def reject_youtube_video(
             fingerprint,
             unchanged,
             _error_text(error),
+            1 if state == YouTubeVideoState.QUARANTINED else 0,
             lease.source.source_id,
             lease.video_id,
             lease.owner_token,

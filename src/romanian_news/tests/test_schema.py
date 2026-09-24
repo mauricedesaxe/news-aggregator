@@ -13,6 +13,9 @@ RECOVERY_MIGRATION_PATH = (
 REPAIR_MIGRATION_PATH = (
     Path(__file__).parents[1] / "catalog" / "migrations" / "0012_daily_report_repair_requests.sql"
 )
+YOUTUBE_RECOVERY_MIGRATION_PATH = (
+    Path(__file__).parents[1] / "catalog" / "migrations" / "0013_youtube_quarantine_releases.sql"
+)
 
 
 def test_sqlite_catalog_covers_the_production_catalog_tables() -> None:
@@ -21,7 +24,8 @@ def test_sqlite_catalog_covers_the_production_catalog_tables() -> None:
             r"CREATE TABLE\s+(\w+)",
             MIGRATION_PATH.read_text()
             + RECOVERY_MIGRATION_PATH.read_text()
-            + REPAIR_MIGRATION_PATH.read_text(),
+            + REPAIR_MIGRATION_PATH.read_text()
+            + YOUTUBE_RECOVERY_MIGRATION_PATH.read_text(),
             flags=re.IGNORECASE,
         )
     ) - {"news_schema_migrations"}
