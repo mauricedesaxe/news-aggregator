@@ -7,10 +7,21 @@ from urllib.parse import urlsplit, urlunsplit
 import requests
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
+from romanian_news.catalog_transport import ResearchCatalogError
 from romanian_news.config import DAGSTER_CLOUD_API_TOKEN, DAGSTER_CLOUD_GRAPHQL_URL
+from romanian_news.reader.repair_requests import (
+    RepairReservation,
+    bind_repair_run,
+    mark_repair_launch_started,
+    release_rejected_repair,
+    release_unlaunched_repair,
+    replace_terminal_repair,
+    reserve_repair,
+)
 
 LOCATION_NAME = "romanian-news"
 JOB_NAME = "daily_report_repair"
+REPAIR_REQUEST_TAG = "news/daily_report_repair_request"
 _ACTIVE_STATUSES = ("QUEUED", "NOT_STARTED", "MANAGED", "STARTING", "STARTED", "CANCELING")
 
 
@@ -20,6 +31,10 @@ class DagsterRepairError(RuntimeError):
 
 class DagsterRepairUnavailable(DagsterRepairError):
     """Dagster repair configuration is unavailable to the reader."""
+
+
+class DagsterRepairRejected(DagsterRepairError):
+    """Dagster definitively rejected a repair run before creating it."""
 
 
 class RepairRun(BaseModel):
@@ -215,42 +230,98 @@ def request_daily_report_repair(day: date) -> RepairRun:
     active = _active_run(day)
     if active is not None:
         return _repair_lifecycle(active)
-    repository = _repository_name()
-    selector = {
-        "repositoryLocationName": LOCATION_NAME,
-        "repositoryName": repository,
-        "pipelineName": JOB_NAME,
-    }
-    partition_data = _graphql(
-        _PARTITION_QUERY,
-        {"selector": selector, "partitionName": day.isoformat()},
-        _PartitionData,
-    )
-    pipeline = _parse_variant(partition_data.pipelineOrError, _Pipeline, "pipeline")
-    if pipeline.partition is None:
-        raise DagsterRepairError(f"Dagster partition is unavailable: {day.isoformat()}")
-    partition = pipeline.partition
-    run_config = _parse_variant(partition.run_config, _PartitionRunConfig, "partition config")
-    tags = _parse_variant(partition.tags, _PartitionTags, "partition tags")
-    launch_data = _graphql(
-        _LAUNCH_MUTATION,
+    try:
+        reservation = reserve_repair(day)
+        if reservation.run_id is not None:
+            prior = read_daily_report_repair(reservation.run_id)
+            if prior.kind in ("queued", "running"):
+                return prior
+            reservation = replace_terminal_repair(reservation)
+        if not reservation.owns_launch:
+            return _reconcile_reserved_repair(reservation)
+        return _launch_reserved_repair(reservation)
+    except DagsterRepairError:
+        raise
+    except (ResearchCatalogError, RuntimeError) as error:
+        raise DagsterRepairError("Daily report repair reservation failed") from error
+
+
+def _launch_reserved_repair(reservation: RepairReservation) -> RepairRun:
+    day = reservation.day
+    try:
+        repository = _repository_name()
+        selector = {
+            "repositoryLocationName": LOCATION_NAME,
+            "repositoryName": repository,
+            "pipelineName": JOB_NAME,
+        }
+        partition_data = _graphql(
+            _PARTITION_QUERY,
+            {"selector": selector, "partitionName": day.isoformat()},
+            _PartitionData,
+        )
+        pipeline = _parse_variant(partition_data.pipelineOrError, _Pipeline, "pipeline")
+        if pipeline.partition is None:
+            raise DagsterRepairError(f"Dagster partition is unavailable: {day.isoformat()}")
+        partition = pipeline.partition
+        run_config = _parse_variant(partition.run_config, _PartitionRunConfig, "partition config")
+        tags = _parse_variant(partition.tags, _PartitionTags, "partition tags")
+    except DagsterRepairError:
+        release_unlaunched_repair(reservation)
+        raise
+    if not mark_repair_launch_started(reservation):
+        return _reconcile_reserved_repair(reservation)
+    try:
+        launch_data = _graphql(
+            _LAUNCH_MUTATION,
+            {
+                "executionParams": {
+                    "selector": {
+                        "repositoryLocationName": LOCATION_NAME,
+                        "repositoryName": repository,
+                        "jobName": partition.job_name,
+                    },
+                    "runConfigData": run_config.yaml,
+                    "executionMetadata": {
+                        "tags": [
+                            *(tag.model_dump() for tag in tags.results),
+                            {"key": REPAIR_REQUEST_TAG, "value": str(reservation.request_id)},
+                        ],
+                    },
+                }
+            },
+            _LaunchData,
+        )
+        launch = _parse_variant(launch_data.launchRun, _LaunchSuccess, "run launch")
+    except DagsterRepairRejected:
+        release_rejected_repair(reservation)
+        raise
+    except DagsterRepairError:
+        return _reconcile_reserved_repair(reservation)
+    bind_repair_run(reservation, launch.run.run_id)
+    return _repair_lifecycle(launch.run)
+
+
+def _reconcile_reserved_repair(reservation: RepairReservation) -> RepairRun:
+    data = _graphql(
+        _RUNS_QUERY,
         {
-            "executionParams": {
-                "selector": {
-                    "repositoryLocationName": LOCATION_NAME,
-                    "repositoryName": repository,
-                    "jobName": partition.job_name,
-                },
-                "runConfigData": run_config.yaml,
-                "executionMetadata": {
-                    "tags": [tag.model_dump() for tag in tags.results],
-                },
+            "filter": {
+                "pipelineName": JOB_NAME,
+                "tags": [
+                    {"key": REPAIR_REQUEST_TAG, "value": str(reservation.request_id)},
+                    {"key": "dagster/partition", "value": reservation.day.isoformat()},
+                ],
             }
         },
-        _LaunchData,
+        _RunsData,
     )
-    launch = _parse_variant(launch_data.launchRun, _LaunchSuccess, "run launch")
-    return _repair_lifecycle(launch.run)
+    runs = _parse_variant(data.runsOrError, _Runs, "runs")
+    if not runs.results:
+        raise DagsterRepairError("Daily report repair launch outcome is pending")
+    run = runs.results[0]
+    bind_repair_run(reservation, run.run_id)
+    return _repair_lifecycle(run)
 
 
 def read_daily_report_repair(run_id: str) -> RepairRun:
@@ -335,6 +406,8 @@ def _parse_variant(value: dict[str, object], model: type[_DataT], label: str) ->
             return model.model_validate(value)
         except ValidationError as error:
             raise DagsterRepairError(f"Dagster {label} response is invalid") from error
+    if typename == "RunConfigValidationInvalid":
+        raise DagsterRepairRejected("Dagster rejected the repair run config")
     failure = TypeAdapter(_Failure).validate_python(value)
     raise DagsterRepairError(failure.message or f"Dagster {label} failed with {failure.typename}")
 

@@ -10,13 +10,18 @@ MIGRATION_PATH = Path(__file__).parents[1] / "catalog" / "migrations" / "0001_in
 RECOVERY_MIGRATION_PATH = (
     Path(__file__).parents[1] / "catalog" / "migrations" / "0011_article_recovery_overrides.sql"
 )
+REPAIR_MIGRATION_PATH = (
+    Path(__file__).parents[1] / "catalog" / "migrations" / "0012_daily_report_repair_requests.sql"
+)
 
 
 def test_sqlite_catalog_covers_the_production_catalog_tables() -> None:
     production_tables = set(
         re.findall(
             r"CREATE TABLE\s+(\w+)",
-            MIGRATION_PATH.read_text() + RECOVERY_MIGRATION_PATH.read_text(),
+            MIGRATION_PATH.read_text()
+            + RECOVERY_MIGRATION_PATH.read_text()
+            + REPAIR_MIGRATION_PATH.read_text(),
             flags=re.IGNORECASE,
         )
     ) - {"news_schema_migrations"}

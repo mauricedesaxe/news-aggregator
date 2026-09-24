@@ -143,6 +143,14 @@ CREATE TABLE IF NOT EXISTS news_article_recovery_overrides (
     UNIQUE (event_id, base_work_generation, expected_work_generation)
 );
 
+CREATE TABLE IF NOT EXISTS daily_report_repair_requests (
+    day TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL UNIQUE,
+    run_id TEXT UNIQUE,
+    launch_state TEXT NOT NULL DEFAULT 'reserved'
+        CHECK (launch_state IN ('reserved', 'launch_started'))
+);
+
 CREATE TABLE IF NOT EXISTS news_relevance_versions (
     artifact_version_id TEXT PRIMARY KEY REFERENCES artifact_versions(id),
     accepted INTEGER NOT NULL CHECK (accepted IN (0, 1))
