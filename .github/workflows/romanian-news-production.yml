@@ -148,7 +148,6 @@ jobs:
               "youtube_approved_publication",
               "daily_morning_report_check",
               "quarter_hourly_news_feedback_sync",
-              "weekly_news_report",
           ):
               result = execute(
                   """
@@ -171,6 +170,7 @@ jobs:
               "article_batch_controller",
               "romanian_news_automation",
               "youtube_relevance_controller",
+              "weekly_report_freshness",
           ):
               sensor = execute(
                   """

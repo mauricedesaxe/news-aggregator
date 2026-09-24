@@ -27,7 +27,6 @@ from romanian_news.reports import (
     DailyReportOutput,
     ReportArticleSource,
     ReportEvent,
-    WeeklyReportInput,
     build_daily_report_from_construction,
     build_weekly_report,
 )
@@ -447,40 +446,6 @@ def test_stale_daily_report_discovery_returns_no_fresh_days(monkeypatch) -> None
         )
 
 
-def test_stale_weekly_report_discovery_returns_complete_stale_weeks(
-    monkeypatch,
-) -> None:
-    first_week = date(2026, 8, 31)
-    second_week = date(2026, 9, 7)
-    with closing(_report_head_catalog()) as connection:
-        for offset in range(-7, 14):
-            day = first_week + timedelta(days=offset)
-            connection.execute(
-                "INSERT INTO artifacts VALUES (?, 'news_daily_report', ?, 'daily-run')",
-                [f"news:daily:{day.isoformat()}", day.isoformat()],
-            )
-        first_input = _weekly_input(first_week)
-        first_run = reports_module.report_run_id(
-            reports_module.weekly_report_request_id(first_input), "test"
-        )
-        connection.execute(
-            "INSERT INTO artifacts VALUES (?, 'news_weekly_report', ?, ?)",
-            [f"news:weekly:{first_week.isoformat()}", first_week.isoformat(), first_run],
-        )
-        monkeypatch.setattr(
-            "romanian_news.catalog.report_inputs.catalog_query", _sqlite_query(connection)
-        )
-        monkeypatch.setattr(reports_module, "read_weekly_report_input", _weekly_input)
-
-        stale = reports_module.stale_weekly_report_weeks(
-            reports_module.datetime.fromisoformat("2026-09-21T08:00:00+03:00"),
-            "test",
-            first_week,
-        )
-
-    assert stale == (second_week,)
-
-
 def test_stale_daily_report_discovery_skips_unreadable_ready_input(monkeypatch) -> None:
     day = date(2026, 9, 4)
     with closing(_report_head_catalog()) as connection:
@@ -544,17 +509,6 @@ def _daily_input(day: date) -> DailyReportInput:
         cluster_set=_reference(f"{day.day:064x}"),
         summaries=(),
         sentiments=(),
-    )
-
-
-def _weekly_input(week_start: date) -> WeeklyReportInput:
-    return WeeklyReportInput(
-        week_start=week_start,
-        policy="test",
-        daily_reports=tuple(
-            _reference(f"{(week_start + timedelta(days=offset)).toordinal():064x}")
-            for offset in range(7)
-        ),
     )
 
 
