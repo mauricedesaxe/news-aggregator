@@ -621,10 +621,8 @@ def test_media_tool_timeout_fails_the_attempt_for_a_retry(
         ),
     )
 
-    def timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise subprocess.TimeoutExpired("ffprobe", 0)
-
-    monkeypatch.setattr(media, "_run", timeout)
+    monkeypatch.setattr(media, "ffprobe_command", lambda _path: ("sleep", "30"))
+    monkeypatch.setattr(media, "MEDIA_PROCESS_TIMEOUT_SECONDS", 1)
 
     outcome = media.accept_candidate(_lease(edition), candidate, story)
 

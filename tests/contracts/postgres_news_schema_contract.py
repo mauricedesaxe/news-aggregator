@@ -5,9 +5,12 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from threading import Barrier
 from typing import Any, LiteralString, cast
+from uuid import uuid4
 
 import psycopg
 import pytest
+from psycopg import sql
+from psycopg.conninfo import make_conninfo
 
 import romanian_news.catalog.schema as news_schema
 import romanian_news.catalog.video_digest as video_digest_catalog
@@ -47,6 +50,7 @@ from romanian_news.video_digest.models import (
     scheduled_slot_id,
 )
 from tests.contracts.video_digest_planning_fixtures import accepted_planning_files
+from tests.postgres_catalog import TEST_POSTGRES_DSN
 
 
 def _sha256_id(value: int) -> str:
@@ -1652,3 +1656,94 @@ def test_video_digest_generation_checkpoints_complete_atomically(
                 (receipt_id, _sha256_id(504)),
             )
     assert row == ("published", "accepted", "accepted", clip_file.version_id)
+
+
+def test_schema_check_skips_migrations_denied_to_the_news_role(
+    postgres_news_schema: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin_dsn = news_schema.NEWS_POSTGRES_DSN
+    assert admin_dsn is not None
+    assert TEST_POSTGRES_DSN is not None
+    base_dsn: str = TEST_POSTGRES_DSN
+    limited_role = f"news_role_{uuid4().hex[:8]}"
+    schema_identifier = sql.Identifier(postgres_news_schema)
+    role_identifier = sql.Identifier(limited_role)
+
+    def drop_role() -> None:
+        with psycopg.connect(base_dsn, autocommit=True) as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM pg_roles WHERE rolname = %s", (limited_role,)
+            ).fetchone()
+            if exists is None:
+                return
+            connection.execute(
+                sql.SQL("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA {} FROM {}").format(
+                    schema_identifier, role_identifier
+                )
+            )
+            connection.execute(
+                sql.SQL("REVOKE ALL PRIVILEGES ON SCHEMA {} FROM {}").format(
+                    schema_identifier, role_identifier
+                )
+            )
+            connection.execute(sql.SQL("DROP ROLE {}").format(role_identifier))
+
+    drop_role()
+    try:
+        with psycopg.connect(admin_dsn, autocommit=True) as connection:
+            for migration in news_schema.NEWS_CATALOG_MIGRATIONS[:6]:
+                connection.execute(cast(LiteralString, migration.path.read_text()), prepare=False)
+                connection.execute(
+                    "INSERT INTO news_schema_migrations (version, name, sha256)"
+                    " VALUES (%s, %s, %s)",
+                    (migration.version, migration.name, migration.sha256),
+                )
+            connection.execute(
+                sql.SQL("CREATE ROLE {} LOGIN PASSWORD 'news-denied'").format(role_identifier)
+            )
+            connection.execute(
+                sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(schema_identifier, role_identifier)
+            )
+            connection.execute(
+                sql.SQL(
+                    "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {} TO {}"
+                ).format(schema_identifier, role_identifier)
+            )
+        limited_dsn = make_conninfo(
+            base_dsn,
+            user=limited_role,
+            password="news-denied",
+            options=f"-csearch_path={postgres_news_schema}",
+        )
+        monkeypatch.setattr(news_schema, "NEWS_POSTGRES_DSN", limited_dsn)
+
+        ensure_news_catalog_schema()
+
+        with psycopg.connect(limited_dsn, autocommit=True) as connection:
+            applied = [
+                int(row[0])
+                for row in connection.execute(
+                    "SELECT version FROM news_schema_migrations ORDER BY version"
+                ).fetchall()
+            ]
+            denied_row = connection.execute(
+                "SELECT count(*) FROM information_schema.tables "
+                "WHERE table_schema = current_schema() "
+                "AND table_name IN ('video_digest_assembly_attempts', "
+                "'video_digest_publication_attempts', 'video_digest_feedback')"
+            ).fetchone()
+            assert denied_row is not None
+            denied_tables = int(denied_row[0])
+        assert applied == [1, 2, 3, 4, 5, 6]
+        assert denied_tables == 0
+
+        ensure_news_catalog_schema()
+
+        with psycopg.connect(admin_dsn, autocommit=True) as connection:
+            connection.execute("DROP TABLE news_feed_observations CASCADE")
+
+        with pytest.raises(NewsCatalogSchemaError, match="missing tables"):
+            ensure_news_catalog_schema()
+    finally:
+        drop_role()
