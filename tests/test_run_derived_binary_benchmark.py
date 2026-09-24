@@ -62,6 +62,10 @@ sys.modules[_SPEC.name] = runner
 _SPEC.loader.exec_module(runner)
 
 
+def test_dispatch_covers_every_protocol_concern() -> None:
+    assert set(DERIVED_BINARY_DISPATCH) == set(DERIVED_BINARY_BENCHMARKS)
+
+
 @pytest.mark.parametrize("concern", tuple(DERIVED_BINARY_DISPATCH))
 def test_every_registration_adapts_its_concern_source(concern: BenchmarkId) -> None:
     source = _concern_source(concern)

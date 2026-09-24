@@ -35,6 +35,7 @@ def test_relevance_rollout_preserves_issue_9_safety_contract() -> None:
         "retry_unchanged_rejected_request": False,
         "telemetry": [
             "paired Jev and incumbent verdicts",
+            "provider failures",
             "immutable input identities",
             "guard and fallback reason",
             "latency and provider usage",

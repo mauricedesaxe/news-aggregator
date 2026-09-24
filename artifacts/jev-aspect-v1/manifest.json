@@ -238,11 +238,11 @@
       "concern": "deployment_decision",
       "mode": "prompt_class_v1",
       "path": "../jev-research-v1/jev-deployment-decision-v1.json",
-      "sha256": "b0a75ccfe16a7b52b23ea52ac3972f23fd6a821a81a88eb9e9dc071d6cc960f3",
+      "sha256": "7bac4175bc3233879984dd76ea80eb6aa3972fff3d526330377c8c15752777f3",
       "report_markdown": "../jev-research-v1/jev-deployment-decision-v1.md",
       "report_markdown_sha256": "375d82f6b6b94d8440fecda7c5c8c3f3f714721f49b02abe6630236d0d98ba91",
       "generator": "../../scripts/build_jev_deployment_decision.py",
-      "generator_sha256": "ee69aa52d8305bde271347dba178772b4229528accd6e66a870b5f8d6e042ef7",
+      "generator_sha256": "076f010acb80aabb30ee05531d9c718ffcf310d2cd20a0c038947c82ecfe7100",
       "implementation_ticket": "news-aggregator-vt6.8",
       "changes_production_behavior": false
     }

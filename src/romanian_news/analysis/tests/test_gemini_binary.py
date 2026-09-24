@@ -271,21 +271,31 @@ def test_gemini_binary_rejects_invalid_latency(monkeypatch, clocks) -> None:
 
 
 def test_gemini_binary_does_not_import_production_relevance_prompts() -> None:
+    source = ast.parse(inspect.getsource(gemini_binary))
     direct_imports = {
         alias.name
-        for node in ast.walk(ast.parse(inspect.getsource(gemini_binary)))
+        for node in ast.walk(source)
         if isinstance(node, ast.Import)
         for alias in node.names
     }
-    from_imports = {
-        node.module
-        for node in ast.walk(ast.parse(inspect.getsource(gemini_binary)))
-        if isinstance(node, ast.ImportFrom) and node.module is not None
-    }
+    from_imports = set()
+    for node in ast.walk(source):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if node.module is not None:
+            from_imports.add(node.module)
+            from_imports.update(f"{node.module}.{alias.name}" for alias in node.names)
+        else:
+            from_imports.update(alias.name for alias in node.names)
     imports = direct_imports | from_imports
 
-    assert "romanian_news.analysis.relevance" not in imports
-    assert "romanian_news.analysis.relevance_v3" not in imports
+    forbidden = {
+        "relevance",
+        "relevance_v3",
+        "romanian_news.analysis.relevance",
+        "romanian_news.analysis.relevance_v3",
+    }
+    assert imports.isdisjoint(forbidden)
 
 
 def _request() -> BinaryRequest:
