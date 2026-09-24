@@ -646,6 +646,13 @@ def test_policy_and_request_identity_cover_schemas_acceptance_and_mode() -> None
     payload = relevance_v3_policy_payload(RELEVANCE_V3_POLICY)
     reference = _reference()
 
+    assert relevance_v3_policy_digest() == (
+        "5d822f268202f8eb65b02998c68075abe1779bf13107bbea016ed9069ab407aa"
+    )
+    assert production_relevance_v3_request_id(reference) == (
+        "bb6068578e2746a7ae0640eefff3bc2e4baa2f4111607575e78e29068c1709bc"
+    )
+
     assert payload["acceptance"] == RELEVANCE_V3_POLICY.acceptance.model_dump(mode="json")
     assert RELEVANCE_V3_POLICY.acceptance.acceptance_algorithm_id == (
         "recall-first-combined-v3-attempt-3-material-v3"

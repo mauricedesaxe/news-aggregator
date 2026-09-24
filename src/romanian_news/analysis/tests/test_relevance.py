@@ -161,6 +161,9 @@ def test_relevance_request_identity_stays_stable() -> None:
 
     assert request_id == relevance_request_id(_reference(_A))
     assert request_id == "1552b3d39663e37142343cbd8f3e69f475a06b55849b8eaad43d16397f68c750"
+    assert relevance_policy_digest(PRODUCTION_RELEVANCE_POLICY) == (
+        "b9f82e512a0eaf49e3f7ad867f24405067d0ee9fed5649f518b0fcb6c19500ac"
+    )
     assert PRODUCTION_RELEVANCE_POLICY is RELEVANCE_POLICY_V2
 
 
