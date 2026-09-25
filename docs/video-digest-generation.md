@@ -23,8 +23,10 @@ uv run python -m romanian_news.video_digest.references import \
 
 The command prints a content-derived pack ID. It stores media in private R2, records each exact
 artifact version and ordered role in PostgreSQL, and stores an immutable manifest containing the
-approval reference. `verify <pack-id>` re-reads and hashes every object. Runtime generation must
-read the exact pack ID through `read_h3_reference_pack()`; it must not choose media implicitly.
+approval reference. `verify <pack-id>` re-reads and hashes every object. Set
+`NEWS_H3_REFERENCE_PACK_ID` to that exact ID in the worker environment. The production generation
+port verifies the pack and Fal credentials before request admission, and rejects a pack whose media
+references differ from an earlier request in the same edition.
 The approved feasibility video is provenance for this workflow, not itself a reference pack.
 
 The workflow uses the existing request checkpoints. A new catalog read projection exposes the
