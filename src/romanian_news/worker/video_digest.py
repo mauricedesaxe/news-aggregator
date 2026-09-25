@@ -7,8 +7,10 @@ import dagster as dg
 from dagster import OpExecutionContext
 
 from romanian_news import BUCHAREST
+from romanian_news.alerts import ping_heartbeat
 from romanian_news.catalog.video_digest import schedule_slot, skip_slot
 from romanian_news.video_digest.generation_port import ProductionH3GenerationPort
+from romanian_news.video_digest.incidents import send_slot_failure_alert
 from romanian_news.video_digest.models import (
     ScheduledSlot,
     SlotId,
@@ -18,8 +20,10 @@ from romanian_news.video_digest.models import (
 )
 from romanian_news.video_digest.orchestration import (
     AlertDisposition,
+    IncidentAlert,
     RunDeferred,
     RunFailed,
+    RunPublished,
     VideoDigestRunOutcome,
 )
 from romanian_news.worker.assets import BUCHAREST_TIMEZONE
@@ -83,6 +87,10 @@ def orchestrate_video_digest(context: OpExecutionContext) -> None:
         )
     outcome, alert = runtime_factory().run(slot_id, owner_token=context.run_id)
     context.add_output_metadata({"alert": alert.kind, "outcome": outcome.kind, "slot_id": slot_id})
+    if isinstance(alert, IncidentAlert):
+        send_slot_failure_alert(alert)
+    if isinstance(outcome, RunPublished):
+        ping_heartbeat("video_digest")
     if isinstance(outcome, RunDeferred):
         raise dg.RetryRequested(
             max_retries=VIDEO_DIGEST_MAX_RETRIES,
