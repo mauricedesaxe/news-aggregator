@@ -5,7 +5,7 @@ import math
 import os
 import subprocess
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
@@ -25,6 +25,7 @@ from romanian_news.catalog.video_digest import (
     checkpoint_generation_failure,
     checkpoint_subtitles,
     read_generation_attempts,
+    record_assembly_attempt,
 )
 from romanian_news.storage import (
     ResearchObjectIntegrityError,
@@ -367,6 +368,7 @@ def validate_media_file(
     expected_digest: Sha256,
     expected_size: int,
     requested_duration_ms: int,
+    before_process: Callable[[], None] | None = None,
 ) -> MediaProbe:
     content = path.read_bytes()
     if len(content) != expected_size:
@@ -376,6 +378,8 @@ def validate_media_file(
             "stored_digest_mismatch", "Stored candidate digest does not match"
         )
     try:
+        if before_process is not None:
+            before_process()
         probe_result = _run(ffprobe_command(path), capture_output=True)
     except subprocess.CalledProcessError as error:
         raise MediaValidationError("probe_failed", "Candidate probe failed") from error
@@ -403,6 +407,8 @@ def validate_media_file(
             "duration_mismatch", "Candidate duration differs from the requested duration"
         )
     try:
+        if before_process is not None:
+            before_process()
         _run(full_decode_command(path), capture_output=True)
     except subprocess.CalledProcessError as error:
         raise MediaValidationError("full_decode_failed", "Candidate decode failed") from error
@@ -508,12 +514,26 @@ def accept_candidate(
     )
 
 
-def assemble_edition(lease: SlotLease, plan: DigestPlan) -> AssembledEdition:
+def assemble_edition(
+    lease: SlotLease,
+    plan: DigestPlan,
+    *,
+    attempt_index: int | None = None,
+    renew_lease: Callable[[SlotLease], SlotLease] | None = None,
+) -> AssembledEdition:
     if lease.edition_id != plan.edition_id:
         raise ValueError("Assembly plan does not match the claimed edition")
+    current_lease = lease
+
+    def renew() -> None:
+        nonlocal current_lease
+        if renew_lease is not None:
+            current_lease = renew_lease(current_lease)
+
+    renew()
     attempts = read_generation_attempts(lease.edition_id)
     accepted = _accepted_attempts(plan, attempts)
-    checkpoint_assembly_ready(lease, recorded_at=_now())
+    checkpoint_assembly_ready(current_lease, recorded_at=_now())
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         paths: list[Path] = []
@@ -530,6 +550,7 @@ def assemble_edition(lease: SlotLease, plan: DigestPlan) -> AssembledEdition:
                 expected_digest=attempt.accepted_clip.content_digest,
                 expected_size=attempt.accepted_clip.byte_size,
                 requested_duration_ms=story.requested_duration_ms,
+                before_process=renew,
             )
             paths.append(path)
             entries.append(
@@ -544,12 +565,15 @@ def assemble_edition(lease: SlotLease, plan: DigestPlan) -> AssembledEdition:
             )
         intermediate = root / "assembled.mp4"
         final = root / "final.mp4"
+        renew()
         _run(
             assembly_command(paths, [entry.duration_ms for entry in entries], intermediate),
             capture_output=True,
         )
+        renew()
         analysis = _run(loudnorm_analysis_command(intermediate), capture_output=True)
         measurement = _parse_loudness(analysis.stderr)
+        renew()
         _run(loudnorm_render_command(intermediate, final, measurement), capture_output=True)
         output = final.read_bytes()
         expected_duration_ms = sum(entry.duration_ms for entry in entries)
@@ -558,6 +582,7 @@ def assemble_edition(lease: SlotLease, plan: DigestPlan) -> AssembledEdition:
             expected_digest=sha256(output),
             expected_size=len(output),
             requested_duration_ms=expected_duration_ms,
+            before_process=renew,
         )
 
     video_file = artifact_file(
@@ -592,12 +617,24 @@ def assemble_edition(lease: SlotLease, plan: DigestPlan) -> AssembledEdition:
     publish_immutable_r2_objects(
         ((video_file.r2_key, video_file.content), (manifest_file.r2_key, manifest_file.content))
     )
-    checkpoint_assembled_video(
-        lease,
-        video_file=video_file,
-        manifest_file=manifest_file,
-        recorded_at=_now(),
-    )
+    renew()
+    if attempt_index is None:
+        checkpoint_assembled_video(
+            current_lease,
+            video_file=video_file,
+            manifest_file=manifest_file,
+            recorded_at=_now(),
+        )
+    else:
+        record_assembly_attempt(
+            current_lease,
+            attempt_index,
+            "succeeded",
+            evidence_file=manifest_file,
+            video_file=video_file,
+            manifest_file=manifest_file,
+            recorded_at=_now(),
+        )
     return AssembledEdition(
         video_file=video_file,
         manifest_file=manifest_file,

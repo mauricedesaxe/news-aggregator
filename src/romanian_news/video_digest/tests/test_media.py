@@ -643,17 +643,30 @@ def test_assembly_preserves_plan_order_and_deterministic_manifest(
     attempts = (_attempt(stories[0], red, "red"), _attempt(stories[1], blue, "blue"))
     objects = {"clips/red.mp4": red, "clips/blue.mp4": blue}
     publications: list[dict[str, bytes]] = []
+    recorded: list[tuple[int, str, str]] = []
+    renewals: list[SlotLease] = []
     monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: attempts)
     monkeypatch.setattr(media, "read_verified_r2_object", lambda key, _digest: objects[key])
     monkeypatch.setattr(media, "checkpoint_assembly_ready", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(media, "checkpoint_assembled_video", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         media,
+        "record_assembly_attempt",
+        lambda _lease, index, disposition, *, evidence_file, **_kwargs: recorded.append(
+            (index, disposition, evidence_file.artifact_kind)
+        ),
+    )
+    monkeypatch.setattr(
+        media,
         "publish_immutable_r2_objects",
         lambda values: publications.append(dict(values)),
     )
 
-    first = media.assemble_edition(_lease(edition), plan)
+    def renew(lease: SlotLease) -> SlotLease:
+        renewals.append(lease)
+        return lease
+
+    first = media.assemble_edition(_lease(edition), plan, attempt_index=0, renew_lease=renew)
     second = media.assemble_edition(_lease(edition), plan)
 
     assert first.video_file.content == second.video_file.content
@@ -664,6 +677,8 @@ def test_assembly_preserves_plan_order_and_deterministic_manifest(
     assert manifest["loudness_target_i"] == "-16"
     assert abs(first.duration_ms - 2000) <= 100
     assert publications[0][first.video_file.r2_key] == first.video_file.content
+    assert recorded == [(0, "succeeded", "video_digest_assembly_manifest")]
+    assert len(renewals) >= 10
     output = tmp_path / "result.mp4"
     output.write_bytes(first.video_file.content)
     assert _sample_rgb(output, "0.5") == "red"
