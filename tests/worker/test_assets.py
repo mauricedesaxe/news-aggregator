@@ -81,6 +81,7 @@ def test_automation_starts_running_and_uses_bucharest_time() -> None:
         "youtube_approved_publication",
         "quarter_hourly_news_feedback_sync",
         "scheduled_video_digest",
+        "scheduled_video_digest_incident_monitor",
     }
     assert defs.resolve_job_def("morning_report_check").name == morning_report_check.name
     assert defs.resolve_job_def("weekly_report").name == weekly_report_job.name
