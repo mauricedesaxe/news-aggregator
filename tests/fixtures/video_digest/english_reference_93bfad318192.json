@@ -1,0 +1,33 @@
+{
+  "video_url": "https://media.alexlazar.dev/h3-daily-news/2026-09-18/daily-news-report-subtitled-93bfad318192.mp4",
+  "video_sha256": "93bfad318192125019bbe48a99b1efeb6deb000e99c036aecd631c21020dd382",
+  "duration_ms": 44352,
+  "screenplay_source": "mauricedesaxe/chartly@9ee232c: notebooks/news_video_h3_report_assembly.py and its three imported H3 story scripts",
+  "qa_windows_note": "Approximate 15-second story cuts around the known 44.352-second assembly; the prototype manifest was not available to verify exact clip durations.",
+  "stories": [
+    {
+      "name": "pensions",
+      "start_ms": 0,
+      "end_ms": 15000,
+      "approved_text": "Auditors found two point two million pensioners underpaid and five hundred seventy thousand overpaid after reviewing four point seven million files. So yes, the calculator has entered witness protection.",
+      "expected_words": 29,
+      "expected_cues": 4
+    },
+    {
+      "name": "energy_prices",
+      "start_ms": 15000,
+      "end_ms": 30000,
+      "approved_text": "Over the past year, wholesale electricity climbed from about four hundred thirty-five to six hundred ninety lei per megawatt-hour, while gas more than doubled. Even the price cap now needs a price cap.",
+      "expected_words": 33,
+      "expected_cues": 4
+    },
+    {
+      "name": "government",
+      "start_ms": 30000,
+      "end_ms": 44352,
+      "approved_text": "President Nicușor Dan is preparing one nominee before S and P's October second review. After two failed investiture votes and sixty days, he may dissolve Parliament, triggering early elections. Cue the eject lever.",
+      "expected_words": 33,
+      "expected_cues": 4
+    }
+  ]
+}
