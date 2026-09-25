@@ -313,6 +313,25 @@ def test_public_verification_hashes_full_body_and_probes_first_and_last_bytes() 
     assert session.responses == []
 
 
+def test_public_verification_accepts_cache_control_whitespace() -> None:
+    value = _value()
+    responses = [
+        _full_response(value),
+        _range_response(value, 0),
+        _range_response(value, value.byte_size - 1),
+    ]
+    for response in responses:
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+
+    result = verify_public_object_url(
+        "https://media.example.com/video.mp4",
+        value,
+        session=cast(requests.Session, cast(object, _Session(responses))),
+    )
+
+    assert result.content_digest == value.content_digest
+
+
 @pytest.mark.parametrize(
     "mutate",
     (
