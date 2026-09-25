@@ -38,6 +38,26 @@ class CurrentDailyReportRecord(NewsModel):
     input_time: datetime
 
 
+class ExactDailyReportFile(NewsModel):
+    version_id: Sha256
+    content_digest: Sha256
+    r2_key: str
+
+
+def read_exact_daily_report_file(version_id: Sha256) -> ExactDailyReportFile:
+    rows = catalog_query(
+        """SELECT version.id AS version_id, file.content_digest, file.r2_key
+           FROM artifact_versions version
+           JOIN artifacts artifact ON artifact.id = version.artifact_id
+           JOIN artifact_files file ON file.artifact_version_id = version.id
+           WHERE version.id = %s AND artifact.kind = 'news_daily_report'""",
+        [version_id],
+    )
+    if len(rows) != 1:
+        raise ValueError(f"Exact daily report file is unavailable: {version_id}")
+    return ExactDailyReportFile.model_validate(rows[0], strict=False)
+
+
 class DailyReportInputVersions(NewsModel):
     day: date
     themes: Sha256
