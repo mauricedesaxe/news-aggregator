@@ -151,12 +151,33 @@ def _whisper_model() -> Any:
 
 
 def clip_narration_matches(path: Path, approved_text: str) -> bool:
+    result = _run_narration_check(path, approved_text)
+    if result not in {"match", "mismatch"}:
+        raise NarrationCheckError("English narration check returned an invalid result")
+    return result == "match"
+
+
+def clip_narration_tail_cutoff_ms(path: Path, approved_text: str) -> int | None:
+    result = _run_narration_check(path, approved_text, tail_cutoff=True)
+    if result == "mismatch":
+        return None
+    try:
+        cutoff = int(result)
+    except ValueError as error:
+        raise NarrationCheckError("English narration cutoff was invalid") from error
+    if cutoff <= 0:
+        raise NarrationCheckError("English narration cutoff was invalid")
+    return cutoff
+
+
+def _run_narration_check(path: Path, approved_text: str, *, tail_cutoff: bool = False) -> str:
     try:
         result = subprocess.run(
             [
                 sys.executable,
                 "-m",
                 "romanian_news.video_digest.narration_quality",
+                *(["--tail-cutoff"] if tail_cutoff else []),
                 str(path),
             ],
             input=approved_text,
@@ -167,9 +188,28 @@ def clip_narration_matches(path: Path, approved_text: str) -> bool:
         )
     except (OSError, subprocess.CalledProcessError) as error:
         raise NarrationCheckError("English narration check failed") from error
-    if result.stdout.strip() not in {"match", "mismatch"}:
-        raise NarrationCheckError("English narration check returned an invalid result")
-    return result.stdout.strip() == "match"
+    return result.stdout.strip()
+
+
+def narration_tail_cutoff_ms(
+    approved_text: str, words: tuple[tuple[str, float, float], ...]
+) -> int | None:
+    spoken = tuple(word[0] for word in words)
+    if not spoken or narration_matches(approved_text, spoken):
+        return None
+    approved_tokens = _canonical_words(approved_text)
+    if not approved_tokens:
+        return None
+    final_token = approved_tokens[-1]
+    for count in range(1, len(words)):
+        current = _canonical_words(words[count - 1][0])
+        if not current or current[-1] != final_token:
+            continue
+        if narration_matches(approved_text, spoken[:count]):
+            last_end = words[count - 1][2]
+            next_start = words[count][1]
+            return round(max(last_end, min(next_start, last_end + 0.15)) * 1000)
+    return None
 
 
 def _transcribed_narration_matches(path: Path, approved_text: str) -> bool:
@@ -180,9 +220,23 @@ def _transcribed_narration_matches(path: Path, approved_text: str) -> bool:
     return narration_matches(approved_text, spoken)
 
 
-if __name__ == "__main__":
-    print(
-        "match"
-        if _transcribed_narration_matches(Path(sys.argv[1]), sys.stdin.read())
-        else "mismatch"
+def _transcribed_tail_cutoff_ms(path: Path, approved_text: str) -> int | None:
+    segments, _info = _whisper_model().transcribe(
+        str(path), language="en", word_timestamps=True, vad_filter=True
     )
+    words = tuple(
+        (word.word, word.start, word.end) for segment in segments for word in segment.words or ()
+    )
+    return narration_tail_cutoff_ms(approved_text, words)
+
+
+if __name__ == "__main__":
+    if sys.argv[1] == "--tail-cutoff":
+        cutoff = _transcribed_tail_cutoff_ms(Path(sys.argv[2]), sys.stdin.read())
+        sys.stdout.write(f"{cutoff if cutoff is not None else 'mismatch'}\n")
+    else:
+        sys.stdout.write(
+            "match\n"
+            if _transcribed_narration_matches(Path(sys.argv[1]), sys.stdin.read())
+            else "mismatch\n"
+        )

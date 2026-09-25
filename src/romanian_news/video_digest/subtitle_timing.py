@@ -15,8 +15,8 @@ from romanian_news.video_digest.media import (
     SubtitleTimeSpan,
     SubtitleTimingRequest,
     _run,
-    _subtitle_cue_texts,
 )
+from romanian_news.video_digest.subtitle_text import _subtitle_cue_texts
 
 MODEL_NAME = "base.en"
 MIN_MATCH_FRACTION = 0.6
