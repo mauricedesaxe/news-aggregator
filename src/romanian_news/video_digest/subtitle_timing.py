@@ -36,9 +36,15 @@ def _load_model() -> Any:
 
 
 class FasterWhisperSubtitleTimingProvider:
-    def __init__(self, model_factory: Callable[[], Any] = _load_model) -> None:
+    def __init__(
+        self,
+        model_factory: Callable[[], Any] = _load_model,
+        *,
+        before_transcribe: Callable[[], None] | None = None,
+    ) -> None:
         self._model_factory = model_factory
         self._model: Any | None = None
+        self._before_transcribe = before_transcribe
 
     def timings(
         self,
@@ -90,6 +96,8 @@ class FasterWhisperSubtitleTimingProvider:
         return tuple(result)
 
     def _transcribe(self, path: Path, *, vad_filter: bool) -> tuple[TimedWord, ...]:
+        if self._before_transcribe is not None:
+            self._before_transcribe()
         model = self._model
         if model is None:
             model = self._model_factory()

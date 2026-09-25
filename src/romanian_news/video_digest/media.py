@@ -653,28 +653,7 @@ def produce_subtitles(
         raise ValueError("Subtitle screenplay does not match the claimed edition")
     failures: list[SubtitleAttemptFailure] = []
     try:
-        cue_texts = tuple(_subtitle_cue_texts(story.narration) for story in screenplay.stories)
-        if len(assembled.clip_durations_ms) != len(screenplay.stories):
-            raise ValueError("Subtitle story windows must cover every story")
-        cursor = 0
-        windows = []
-        for duration_ms in assembled.clip_durations_ms:
-            if duration_ms <= 0:
-                raise ValueError("Subtitle story window must have positive duration")
-            windows.append((cursor, cursor + duration_ms))
-            cursor += duration_ms
-        if abs(cursor - assembled.duration_ms) > 100:
-            raise ValueError("Subtitle story windows differ from assembled duration")
-        requests = tuple(
-            SubtitleTimingRequest(
-                story_position=position,
-                cue_count=len(texts),
-                approved_text=screenplay.stories[position].narration,
-                start_ms=windows[position][0],
-                end_ms=windows[position][1],
-            )
-            for position, texts in enumerate(cue_texts)
-        )
+        cue_texts, requests = subtitle_timing_requests(screenplay, assembled)
     except ValueError as error:
         failures.extend(
             SubtitleAttemptFailure(strategy=strategy, code=type(error).__name__)
@@ -932,6 +911,34 @@ def _subtitle_cue_texts(text: str) -> tuple[str, ...]:
     if any(len(cue.replace("\n", " ")) > 60 or cue.count("\n") > 1 for cue in cues):
         raise ValueError("Subtitle cue exceeds its line or character bound")
     return tuple(cues)
+
+
+def subtitle_timing_requests(
+    screenplay: ScreenplayPlan, assembled: AssembledEdition
+) -> tuple[tuple[tuple[str, ...], ...], tuple[SubtitleTimingRequest, ...]]:
+    cue_texts = tuple(_subtitle_cue_texts(story.narration) for story in screenplay.stories)
+    if len(assembled.clip_durations_ms) != len(screenplay.stories):
+        raise ValueError("Subtitle story windows must cover every story")
+    cursor = 0
+    windows = []
+    for duration_ms in assembled.clip_durations_ms:
+        if duration_ms <= 0:
+            raise ValueError("Subtitle story window must have positive duration")
+        windows.append((cursor, cursor + duration_ms))
+        cursor += duration_ms
+    if abs(cursor - assembled.duration_ms) > 100:
+        raise ValueError("Subtitle story windows differ from assembled duration")
+    requests = tuple(
+        SubtitleTimingRequest(
+            story_position=position,
+            cue_count=len(texts),
+            approved_text=screenplay.stories[position].narration,
+            start_ms=windows[position][0],
+            end_ms=windows[position][1],
+        )
+        for position, texts in enumerate(cue_texts)
+    )
+    return cue_texts, requests
 
 
 def _webvtt(

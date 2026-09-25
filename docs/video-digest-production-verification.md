@@ -48,7 +48,10 @@ hosted-runner billing, spending limit, and Actions entitlement before changing w
    `Content-Length`, `Accept-Ranges: bytes`, and a successful byte-range response.
 6. Run one deterministic slot manually. Stop the worker after each durable stage, restart it with a
    new process, and confirm each paid or public side effect occurred once.
-7. Confirm reader playback, transcript order, clean-video fallback after subtitle exhaustion, and
+7. Run a representative Romanian narration clip through the production `base.en` timing adapter.
+   Record whether it produces a valid VTT or the clean-video fallback. Require a valid VTT before
+   marking subtitle timing verified.
+   Confirm reader playback, transcript order, clean-video fallback after subtitle exhaustion, and
    feedback persistence for that edition.
 8. Start `scheduled_video_digest` only after all preceding checks pass.
 
