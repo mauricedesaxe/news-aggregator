@@ -31,6 +31,7 @@ from romanian_news.video_digest.orchestration import (
     DomainPorts,
     FailedPublicationSubtitles,
     FailedResume,
+    GenerateAction,
     GenerationResume,
     IncidentAlert,
     MediaArtifactReference,
@@ -512,6 +513,39 @@ def test_action_bound_remains_nonterminal_with_bounded_retry_timing() -> None:
         retry_after_seconds=300,
     )
     assert alert == NoAlert()
+
+
+def test_generation_progress_continues_when_slot_projection_is_unchanged() -> None:
+    catalog = _Catalog(GenerationResume(slot=SLOT, lease=LEASE))
+
+    class ProgressingGenerationPort:
+        calls = 0
+
+        def execute(self, action: GenerateAction) -> ActionAdvanced:
+            assert action.kind == "generate"
+            self.calls += 1
+            if self.calls == 2:
+                catalog.state = PublishedResume(slot=SLOT)
+            return ActionAdvanced(durable_progress=True)
+
+    generation = ProgressingGenerationPort()
+    default_ports = _ports(catalog)
+    ports = DomainPorts(
+        planning=default_ports.planning,
+        generation=generation,
+        assembly=default_ports.assembly,
+        subtitles=default_ports.subtitles,
+        publication=default_ports.publication,
+    )
+    request = VideoDigestRunRequest(
+        slot=SLOT, owner_token="owner", source=SourceReady(edition=EDITION)
+    )
+
+    outcome, alert = run_video_digest(request, cast(CatalogPort, catalog), ports, now=lambda: NOW)
+
+    assert outcome == RunPublished()
+    assert alert == NoAlert()
+    assert generation.calls == 2
 
 
 def test_active_state_without_a_next_action_raises_a_checkpoint_conflict() -> None:

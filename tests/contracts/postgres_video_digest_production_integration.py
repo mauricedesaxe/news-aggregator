@@ -212,10 +212,13 @@ def test_production_runtime_reacquires_queued_generation_and_accepts_candidate(
     second = ProductionVideoDigestRuntime(generation_port)
     outcome, _alert = second.run(slot.slot_id, owner_token="integration-run")
     assert isinstance(outcome, RunDeferred)
-    assert outcome.reason == "durable state did not advance"
+    assert outcome.reason == "Fal H3 request IN_QUEUE"
     state = read_slot_resume_state(slot.slot_id)
     assert isinstance(state, GenerationResume)
     attempts = read_generation_attempts(state.lease.edition_id)
-    assert [attempt.stage for attempt in attempts] == [GenerationStage.ACCEPTED]
-    assert fal.receipts == ["fixture-0"]
+    assert [attempt.stage for attempt in attempts] == [
+        GenerationStage.ACCEPTED,
+        GenerationStage.SUBMITTED,
+    ]
+    assert fal.receipts == ["fixture-0", "fixture-1"]
     assert len(read_planning_attempts(state.lease.edition_id)) == 1
