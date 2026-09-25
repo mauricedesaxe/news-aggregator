@@ -234,7 +234,7 @@ def test_verification_request_uses_supported_openrouter_parameters() -> None:
 
 
 def _plan_content() -> str:
-    narration = " ".join(f"cuvant{index}" for index in range(30))
+    narration = " ".join(f"cuvant{index}" for index in range(20))
     return json.dumps(
         {
             "stories": [

@@ -144,6 +144,26 @@ def _stories() -> tuple[ScreenplayStory, ...]:
     )
 
 
+def test_short_narration_policy_bounds_speech_for_silent_tail() -> None:
+    policy = _policy(
+        narration_policy="target-20-tolerance-3-v2",
+        target_spoken_words=20,
+        spoken_word_tolerance=3,
+    )
+    stories = (
+        _story(MAIN_ONE, (ARTICLE_ONE, ARTICLE_TWO), words=17),
+        _story(MAIN_TWO, (ARTICLE_THREE,), words=23),
+    )
+    create_screenplay_plan(_report(), REPORT_VERSION, POLICY_VERSION, policy, stories)
+
+    too_long = (stories[0], _story(MAIN_TWO, (ARTICLE_THREE,), words=24))
+    with pytest.raises(ValueError, match="17 to 23 spoken words"):
+        create_screenplay_plan(_report(), REPORT_VERSION, POLICY_VERSION, policy, too_long)
+
+    with pytest.raises(ValidationError, match="Narration word limits do not match"):
+        _policy(narration_policy="target-20-tolerance-3-v2")
+
+
 def _evidence(
     story: ScreenplayStory,
     policy: VideoDigestPolicyBundle,

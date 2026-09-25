@@ -26,15 +26,27 @@ class VideoDigestPolicyBundle(NewsModel):
     citation_policy: Literal["exact-report-subject-citations-v1"] = (
         "exact-report-subject-citations-v1"
     )
-    narration_policy: Literal["target-30-tolerance-5-v1"] = "target-30-tolerance-5-v1"
+    narration_policy: Literal["target-30-tolerance-5-v1", "target-20-tolerance-3-v2"] = (
+        "target-30-tolerance-5-v1"
+    )
     duration_policy: Literal["fixed-15000ms-v1"] = "fixed-15000ms-v1"
     planning_attempt_policy: Literal["initial-plus-two-rewrites-v1"] = (
         "initial-plus-two-rewrites-v1"
     )
-    target_spoken_words: Literal[30] = 30
-    spoken_word_tolerance: Literal[5] = 5
+    target_spoken_words: Literal[20, 30] = 30
+    spoken_word_tolerance: Literal[3, 5] = 5
     story_duration_ms: Literal[15_000] = 15_000
     maximum_planning_attempt_index: Literal[2] = 2
+
+    @model_validator(mode="after")
+    def require_matching_narration_policy(self) -> VideoDigestPolicyBundle:
+        expected = {
+            "target-30-tolerance-5-v1": (30, 5),
+            "target-20-tolerance-3-v2": (20, 3),
+        }[self.narration_policy]
+        if (self.target_spoken_words, self.spoken_word_tolerance) != expected:
+            raise ValueError("Narration word limits do not match the policy version")
+        return self
 
 
 def policy_bundle_digest(policy: VideoDigestPolicyBundle) -> Sha256:

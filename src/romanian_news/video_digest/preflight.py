@@ -63,8 +63,9 @@ PLANNING_PROMPT = (
     "inside a narrow retro-futurist broadcast booth. Keep both hosts visually stable, but make "
     "the action fast, strange, physical, and specific to the news: props transform, diagrams "
     "move, and the booth reacts to the facts instead of showing generic presenter shots. "
-    "Preserve report order and exact subject and citation IDs. Write 25 to 35 spoken words "
-    "of concise dialogue per narration, request exactly 15000 milliseconds, and use only "
+    "Preserve report order and exact subject and citation IDs. Write 17 to 23 spoken words "
+    "of concise dialogue per narration, leaving four seconds silent at the end of each "
+    "15000-millisecond clip, and use only "
     "supplied report evidence. Never invent names, dates, places, numbers, or outcomes."
 )
 VERIFICATION_PROMPT = (
@@ -228,12 +229,15 @@ class PlanningProvider(Protocol):
 
 PRODUCTION_POLICY_DEFINITION = VideoDigestPolicyDefinition(
     policy=VideoDigestPolicyBundle(
-        policy_id="video-digest-production-v2",
+        policy_id="video-digest-production-v3",
         planning_model=PLANNING_MODEL,
         verification_model=VERIFICATION_MODEL,
         planning_prompt_digest=sha256(PLANNING_PROMPT.encode()),
         verification_prompt_digest=sha256(VERIFICATION_PROMPT.encode()),
         coverage_policy="selected-main-sections-exact-report-order-v2",
+        narration_policy="target-20-tolerance-3-v2",
+        target_spoken_words=20,
+        spoken_word_tolerance=3,
     ),
     planning_prompt=PLANNING_PROMPT,
     verification_prompt=VERIFICATION_PROMPT,

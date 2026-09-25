@@ -57,7 +57,7 @@ def _prepared() -> preflight.PreparedPaidGeneration:
         group_count=2,
         sections=sections,
     )
-    narration = " ".join(f"cuvant{index}" for index in range(30))
+    narration = " ".join(f"cuvant{index}" for index in range(20))
     stories = tuple(
         ScreenplayStory(
             report_subject_id=subject,
