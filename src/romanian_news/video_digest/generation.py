@@ -659,7 +659,7 @@ def _fal_arguments(
 ) -> dict[str, object]:
     prompt = (
         f"{request.story.visual_direction}\n\n"
-        f'The hosts say exactly once in Romanian: "{request.story.narration}" '
+        f'The hosts say exactly once in English: "{request.story.narration}" '
         "No other speech, captions, subtitles, logos, title cards, or readable text."
     )
     seed_source = sha256(

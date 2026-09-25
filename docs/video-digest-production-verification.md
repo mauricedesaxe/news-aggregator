@@ -17,7 +17,7 @@ Verification on 2026-09-25 established these production facts:
 | Dagster deployment | Pass | The code location deployed successfully from the merged H3 reference registry commit |
 | Execution ownership | Decided | Dagster owns all background work; the unrelated Railway worker remains untouched |
 | Schedule ownership | Safe, inactive | `scheduled_video_digest` is registered `STOPPED` and excluded from production activation |
-| Subtitle timing | Code ready, quality gate open | The production timing provider and fallback are installed; Romanian narration timing still needs a real-sample review |
+| Subtitle timing | Code ready, quality gate open | The production timing provider and fallback are installed; English narration timing still needs a real-sample review |
 | Incident delivery | Configuration pending | Terminal failure and deadline payloads are wired to an incoming webhook. The stopped five-minute monitor also reads durable publication, budget, and success-gap state. Configure and verify `BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL` before activation |
 | Video heartbeat | Configuration pending | A successful publication pings `BETTERSTACK_VIDEO_DIGEST_HEARTBEAT_URL`; create the Better Stack heartbeat before activation |
 
@@ -57,9 +57,12 @@ The production reader has `NEWS_PUBLIC_MEDIA_R2_BUCKET=romanian-news-public-medi
    `Content-Length`, `Accept-Ranges: bytes`, and a successful byte-range response.
 6. Run one deterministic slot manually. Stop the worker after each durable stage, restart it with a
    new process, and confirm each paid or public side effect occurred once.
-7. Run a representative Romanian narration clip through the production `base.en` timing adapter.
-   Record whether it produces a valid VTT or the clean-video fallback. Require a valid VTT before
-   marking subtitle timing verified.
+7. Use the [approved English feasibility video](https://media.alexlazar.dev/h3-daily-news/2026-09-18/daily-news-report-subtitled-93bfad318192.mp4)
+   from [issue #11](https://github.com/mauricedesaxe/news-aggregator/issues/11), whose SHA-256 is
+   `93bfad318192125019bbe48a99b1efeb6deb000e99c036aecd631c21020dd382`, with its exact
+   approved English screenplay. Run all three subtitle strategies through the production `base.en`
+   timing adapter. Record word and cue coverage, match rate, and fallback rate. Require a valid VTT
+   before marking subtitle timing verified.
    Confirm reader playback, transcript order, clean-video fallback after subtitle exhaustion, and
    feedback persistence for that edition.
 8. Start `scheduled_video_digest` only after all preceding checks pass.
