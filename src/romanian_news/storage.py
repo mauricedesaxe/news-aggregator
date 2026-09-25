@@ -474,11 +474,14 @@ def _require_public_http_headers(
         actual_length = int(_required_header(response, "Content-Length"))
     except ValueError as error:
         raise PublicObjectConflict("Public media Content-Length is invalid") from error
+    cache_control = tuple(
+        directive.strip() for directive in _required_header(response, "Cache-Control").split(",")
+    )
     if (
         actual_length,
         _required_header(response, "Content-Type"),
-        _required_header(response, "Cache-Control"),
-    ) != (content_length, expected.content_type, expected.cache_control):
+        cache_control,
+    ) != (content_length, expected.content_type, tuple(expected.cache_control.split(","))):
         raise PublicObjectConflict("Public media response headers differ from intent")
 
 
