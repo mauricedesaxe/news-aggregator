@@ -229,6 +229,17 @@ class H3ReferencePackProjection(NewsModel):
     media: tuple[H3ReferenceMediaProjection, ...]
 
 
+def read_edition_identity(edition_id: EditionId) -> EditionIdentity:
+    rows = catalog_query(
+        """SELECT edition_id, daily_report_version_id, policy_bundle_version_id
+           FROM video_digest_editions WHERE edition_id = %s""",
+        [edition_id],
+    )
+    if len(rows) != 1:
+        raise ValueError(f"Video digest edition is unavailable: {edition_id}")
+    return EditionIdentity.model_validate(rows[0], strict=False)
+
+
 class AcceptedClipReference(ArtifactReference):
     byte_size: Annotated[int, Field(gt=0)]
 
