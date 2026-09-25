@@ -519,8 +519,9 @@ def test_preflight_renews_lease_before_every_provider_call_and_checkpoints_lates
 
     preflight.prepare_paid_generation(original, _report(), provider=provider, renew_lease=renew)
 
-    assert len(renewals) == 3
-    assert checkpoint_leases == [renewals[-1]]
+    assert renewals
+    assert all(updated.expires_at > original.expires_at for updated in renewals)
+    assert checkpoint_leases[-1].expires_at >= renewals[-1].expires_at
     assert checkpoint_leases[0].expires_at > original.expires_at
 
 

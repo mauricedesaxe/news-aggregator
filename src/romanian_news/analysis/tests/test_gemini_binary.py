@@ -2,6 +2,7 @@ import ast
 import hashlib
 import inspect
 import json
+from collections.abc import Callable
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -213,6 +214,7 @@ def test_gemini_binary_rejects_missing_or_invalid_identity_and_accounting(
     value: object,
     message: str,
 ) -> None:
+    # The SDK cannot build these invalid response shapes, so they stay hand-rolled.
     response = _response(**{field: value})
     create = Mock(return_value=response)
     monkeypatch.setattr(gemini_binary, "openrouter_client", lambda **_kwargs: _client(create))
@@ -222,22 +224,56 @@ def test_gemini_binary_rejects_missing_or_invalid_identity_and_accounting(
 
 
 def test_gemini_binary_rejects_wrong_tool_without_semantic_retry(monkeypatch) -> None:
-    create = Mock(return_value=_response(tool_name="other-tool"))
-    monkeypatch.setattr(gemini_binary, "openrouter_client", lambda **_kwargs: _client(create))
+    sent: list[object] = []
+    attempts: list[BinaryAttemptEvidence] = []
+
+    def handle(transport_request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(transport_request.content))
+        return httpx.Response(
+            200,
+            json=_wire_completion(tool_name="other-tool"),
+            request=transport_request,
+        )
+
+    monkeypatch.setattr(gemini_binary, "openrouter_client", _mock_transport_client(handle))
 
     with pytest.raises(ValueError, match="wrong tool"):
-        evaluate_gemini_binary(_request(), execution_ref="trial-1")
+        evaluate_gemini_binary(
+            _request(),
+            execution_ref="trial-1",
+            clock=iter((3.0, 3.25)).__next__,
+            on_attempt=attempts.append,
+        )
 
-    assert create.call_count == 1
+    assert len(sent) == 1
+    assert len(attempts) == 1
+    assert attempts[0].status == "terminal_error"
+    assert attempts[0].provider_request_id == "openrouter-request-1"
+    assert attempts[0].actual_model == "google/gemini-2.5-flash-001"
+    assert attempts[0].input_tokens == 101
+    assert attempts[0].output_tokens == 7
+    assert attempts[0].cost_usd == Decimal("0.00042")
+    assert attempts[0].latency_ms == 250
+    assert attempts[0].probability == Decimal("0.73")
+    assert attempts[0].error is not None
+    assert attempts[0].error.retryable is False
 
 
 def test_gemini_binary_preserves_response_accounting_when_output_is_malformed(
     monkeypatch,
 ) -> None:
-    response = _response(content="not-json", model="google/gemini-2.5-flash-001")
-    create = Mock(return_value=response)
+    sent: list[object] = []
     attempts: list[BinaryAttemptEvidence] = []
-    monkeypatch.setattr(gemini_binary, "openrouter_client", lambda **_kwargs: _client(create))
+
+    def handle(transport_request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(transport_request.content))
+        return httpx.Response(
+            200,
+            json=_wire_completion(arguments="not-json"),
+            request=transport_request,
+        )
+
+    monkeypatch.setattr(gemini_binary, "openrouter_client", _mock_transport_client(handle))
 
     with pytest.raises(ValueError):
         evaluate_gemini_binary(
@@ -247,7 +283,7 @@ def test_gemini_binary_preserves_response_accounting_when_output_is_malformed(
             on_attempt=attempts.append,
         )
 
-    assert create.call_count == 1
+    assert len(sent) == 1
     assert len(attempts) == 1
     assert attempts[0].status == "terminal_error"
     assert attempts[0].provider_request_id == "openrouter-request-1"
@@ -311,6 +347,58 @@ def _request() -> BinaryRequest:
         state=state,
         state_digest=binary_state_digest(state),
     )
+
+
+def _mock_transport_client(
+    handle,
+) -> Callable[..., OpenAI]:
+    def client(*, max_retries: int, timeout_seconds: float) -> OpenAI:
+        del max_retries, timeout_seconds
+        return OpenAI(
+            base_url="http://openrouter.test/v1",
+            api_key="test-key",
+            http_client=httpx.Client(transport=httpx.MockTransport(handle)),
+        )
+
+    return client
+
+
+def _wire_completion(
+    *,
+    tool_name: str = "report_probability",
+    arguments: str | None = None,
+) -> dict[str, object]:
+    if arguments is None:
+        arguments = json.dumps({"probability": 0.73})
+    return {
+        "id": "openrouter-request-1",
+        "object": "chat.completion",
+        "created": 1_760_000_000,
+        "model": "google/gemini-2.5-flash-001",
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {"name": tool_name, "arguments": arguments},
+                        }
+                    ],
+                },
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 101,
+            "completion_tokens": 7,
+            "total_tokens": 108,
+            "cost": 0.00042,
+        },
+    }
 
 
 def _client(create: Mock) -> SimpleNamespace:

@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,8 +7,10 @@ from typing import Literal
 
 import pytest
 
+from romanian_news import storage
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json
+from romanian_news.storage import ResearchObjectIntegrityError
 from romanian_news.video_digest import subtitle_port
 from romanian_news.video_digest.errors import VideoDigestLeaseLostError
 from romanian_news.video_digest.media import (
@@ -29,6 +32,7 @@ from romanian_news.video_digest.orchestration import (
     SubtitleAttemptReference,
 )
 from romanian_news.video_digest.tests.test_media import _subtitle_inputs
+from tests.worker.conftest import FakeR2Client
 
 
 def _reference(file: ArtifactFile) -> ArtifactReference:
@@ -148,19 +152,17 @@ class FakeTimingProvider:
 
 def _setup(
     monkeypatch: pytest.MonkeyPatch, *, clip_count: int = 2
-) -> tuple[SlotLease, list[SubtitleAttemptReference], dict[str, bytes]]:
+) -> tuple[SlotLease, list[SubtitleAttemptReference], FakeR2Client]:
     lease, screenplay, _assembled = _subtitle_inputs()
     video, manifest, assembly_attempt = _assembly(lease.edition_id, clip_count=clip_count)
-    objects = {video.r2_key: video.content, manifest.r2_key: manifest.content}
+    r2 = FakeR2Client()
+    r2.objects[video.r2_key] = video.content
+    r2.objects[manifest.r2_key] = manifest.content
+    monkeypatch.setattr(storage, "_r2_client", lambda: r2)
     attempts: list[SubtitleAttemptReference] = []
 
-    def read_object(key: str, digest: str) -> bytes:
-        content = objects[key]
-        assert sha256(content) == digest
-        return content
-
     def publish(values: tuple[tuple[str, bytes], ...]) -> None:
-        objects.update(values)
+        r2.objects.update(values)
 
     def record(
         _lease: SlotLease,
@@ -172,7 +174,9 @@ def _setup(
         subtitle_file: ArtifactFile | None = None,
         recorded_at: object,
     ) -> SubtitleAttemptReference:
-        assert _lease == lease
+        assert _lease.slot_id == lease.slot_id
+        assert _lease.owner_token == lease.owner_token
+        assert _lease.expires_at >= lease.expires_at
         assert index == len(attempts)
         assert recorded_at is not None
         attempt = SubtitleAttemptReference(
@@ -202,17 +206,16 @@ def _setup(
         "read_accepted_digest_plan",
         lambda _edition: (SimpleNamespace(plan=screenplay), None),
     )
-    monkeypatch.setattr(subtitle_port, "read_verified_r2_object", read_object)
     monkeypatch.setattr(subtitle_port, "publish_immutable_r2_objects", publish)
     monkeypatch.setattr(subtitle_port, "record_subtitle_attempt", record)
-    return lease, attempts, objects
+    return lease, attempts, r2
 
 
 def test_one_strategy_records_subtitles_and_preserves_approved_words(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    lease, attempts, objects = _setup(monkeypatch)
-    renewals = []
+    lease, attempts, r2 = _setup(monkeypatch)
+    renewals: list[SlotLease] = []
     providers: list[FakeTimingProvider] = []
 
     def provider_factory(before_transcribe: Callable[[], None]) -> FakeTimingProvider:
@@ -221,18 +224,22 @@ def test_one_strategy_records_subtitles_and_preserves_approved_words(
         return provider
 
     def renew(current: SlotLease) -> SlotLease:
-        renewals.append(current)
-        return current
+        renewed = current.model_copy(
+            update={"expires_at": current.expires_at + timedelta(minutes=1)}
+        )
+        renewals.append(renewed)
+        return renewed
 
     port = subtitle_port.ResumableSubtitlePort(provider_factory=provider_factory, renew_lease=renew)
     action = SubtitleAction(lease=lease, attempt_index=0, strategy="whole-edition-v1")
 
     assert isinstance(port.execute(action), ActionAdvanced)
-    assert len(renewals) == 4
+    assert renewals
+    assert all(renewed.expires_at > lease.expires_at for renewed in renewals)
     assert providers[0].strategies == [SubtitleStrategy.WHOLE_EDITION]
     assert attempts[0].disposition == "succeeded"
     assert attempts[0].subtitle is not None
-    subtitles = objects[attempts[0].subtitle.r2_key].decode()
+    subtitles = r2.objects[attempts[0].subtitle.r2_key].decode()
     assert subtitles.startswith("WEBVTT\n")
     assert "Acesta este textul aprobat" in subtitles
     assert "Al doilea text aprobat" in subtitles
@@ -243,7 +250,7 @@ def test_one_strategy_records_subtitles_and_preserves_approved_words(
 def test_three_durable_failures_publish_one_complete_failure_receipt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    lease, attempts, objects = _setup(monkeypatch)
+    lease, attempts, r2 = _setup(monkeypatch)
     providers: list[FakeTimingProvider] = []
 
     def provider_factory(before_transcribe: Callable[[], None]) -> FakeTimingProvider:
@@ -264,7 +271,7 @@ def test_three_durable_failures_publish_one_complete_failure_receipt(
 
     assert [attempt.disposition for attempt in attempts] == ["failed"] * 3
     final = SubtitleFailureEvidence.model_validate_json(
-        objects[attempts[-1].evidence.r2_key], strict=True
+        r2.objects[attempts[-1].evidence.r2_key], strict=True
     )
     assert final.edition_id == lease.edition_id
     assert [failure.strategy for failure in final.attempts] == list(SubtitleStrategy)
@@ -274,7 +281,7 @@ def test_three_durable_failures_publish_one_complete_failure_receipt(
 def test_lost_lease_during_transcription_does_not_record_subtitle_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    lease, attempts, _objects = _setup(monkeypatch)
+    lease, attempts, _r2 = _setup(monkeypatch)
     renewal_count = 0
 
     def renew(current: SlotLease) -> SlotLease:
@@ -297,9 +304,9 @@ def test_lost_lease_during_transcription_does_not_record_subtitle_failure(
 def test_rehydration_rejects_corrupt_accepted_video_before_provider_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    lease, attempts, objects = _setup(monkeypatch)
-    video_key = next(key for key in objects if key.endswith("video.mp4"))
-    objects[video_key] = b"different video"
+    lease, attempts, r2 = _setup(monkeypatch)
+    video_key = next(key for key in r2.objects if key.endswith("video.mp4"))
+    r2.objects[video_key] = b"different video"
     called = False
 
     def provider_factory(_before: Callable[[], None]) -> FakeTimingProvider:
@@ -311,16 +318,49 @@ def test_rehydration_rejects_corrupt_accepted_video_before_provider_call(
         provider_factory=provider_factory, renew_lease=lambda current: current
     )
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ResearchObjectIntegrityError):
         port.execute(SubtitleAction(lease=lease, attempt_index=0, strategy="whole-edition-v1"))
     assert not called
     assert attempts == []
 
 
+def test_subtitle_action_with_a_skipped_attempt_index_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lease, attempts, _r2 = _setup(monkeypatch)
+    port = subtitle_port.ResumableSubtitlePort(
+        provider_factory=lambda _before: pytest.fail("sequence guard reached the timing provider"),
+        renew_lease=lambda current: current,
+    )
+
+    with pytest.raises(ValueError, match="durable attempt sequence"):
+        port.execute(SubtitleAction(lease=lease, attempt_index=1, strategy="whole-edition-v1"))
+    assert attempts == []
+
+
+def test_subtitle_action_after_a_succeeded_attempt_cannot_restart_the_sequence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lease, attempts, _r2 = _setup(monkeypatch)
+    port = subtitle_port.ResumableSubtitlePort(
+        provider_factory=lambda before: FakeTimingProvider(before, fail=False),
+        renew_lease=lambda current: current,
+    )
+    assert isinstance(
+        port.execute(SubtitleAction(lease=lease, attempt_index=0, strategy="whole-edition-v1")),
+        ActionAdvanced,
+    )
+    assert [attempt.disposition for attempt in attempts] == ["succeeded"]
+
+    with pytest.raises(ValueError, match="durable attempt sequence"):
+        port.execute(SubtitleAction(lease=lease, attempt_index=1, strategy="per-story-v1"))
+    assert len(attempts) == 1
+
+
 def test_accepted_assembly_must_cover_every_approved_story(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    lease, attempts, _objects = _setup(monkeypatch, clip_count=1)
+    lease, attempts, _r2 = _setup(monkeypatch, clip_count=1)
     called = False
 
     def provider_factory(before: Callable[[], None]) -> FakeTimingProvider:

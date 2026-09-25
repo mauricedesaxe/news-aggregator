@@ -3,10 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import threading
 from collections.abc import Mapping
 from decimal import Decimal
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import cast
+from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).parents[3]))
 
@@ -425,32 +428,42 @@ def test_frozen_source_loader_requires_exact_article_coverage(monkeypatch) -> No
 def test_proxy_artifact_reader_verifies_status_and_digest(monkeypatch) -> None:
     content = b"verified"
     reference = _reference("d" * 64, content)
-    calls = []
+    requested_keys: list[str] = []
 
-    class Response:
-        status_code = 200
-        content = b"verified"
+    class Handler(BaseHTTPRequestHandler):
+        routes: dict[str, tuple[int, bytes]] = {reference.r2_key: (200, content)}
 
-    monkeypatch.setenv("NEWS_R2_READ_PROXY_URL", "https://proxy.example.test/read")
-    monkeypatch.setattr(
-        "scripts.run_split_subject_assessment_experiment.requests.get",
-        lambda url, **kwargs: calls.append((url, kwargs)) or Response(),
-    )
+        def do_GET(self) -> None:
+            key = parse_qs(urlparse(self.path).query)["key"][0]
+            requested_keys.append(key)
+            status, body = type(self).routes[key]
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
-    assert _experiment_artifact_reader()(reference) == content
-    assert calls == [
-        (
-            "https://proxy.example.test/read",
-            {"params": {"key": reference.r2_key}, "timeout": 30},
-        )
-    ]
-    bad_reference = reference.model_copy(update={"content_digest": "f" * 64})
-    with pytest.raises(ValueError, match="proxy digest mismatch"):
-        _experiment_artifact_reader()(bad_reference)
+        def log_message(self, format: str, *args: object) -> None:
+            del format, args
 
-    Response.status_code = 503
-    with pytest.raises(RuntimeError, match="returned 503"):
-        _experiment_artifact_reader()(reference)
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        monkeypatch.setenv("NEWS_R2_READ_PROXY_URL", f"http://127.0.0.1:{server.server_port}/read")
+        reader = _experiment_artifact_reader()
+
+        assert reader(reference) == content
+        bad_reference = reference.model_copy(update={"content_digest": "f" * 64})
+        with pytest.raises(ValueError, match="proxy digest mismatch"):
+            reader(bad_reference)
+
+        Handler.routes[reference.r2_key] = (503, b"")
+        with pytest.raises(RuntimeError, match="returned 503"):
+            reader(reference)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert requested_keys == [reference.r2_key] * 3
 
 
 def test_candidate_rejects_fixed_tier_change_after_one_correction() -> None:

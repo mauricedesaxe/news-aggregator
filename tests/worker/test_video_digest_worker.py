@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 import dagster as dg
 import pytest
 
+from romanian_news.video_digest import publication
 from romanian_news.video_digest.models import SlotFailureReason
 from romanian_news.video_digest.orchestration import (
     IncidentAlert,
@@ -13,7 +14,9 @@ from romanian_news.video_digest.orchestration import (
     RunPublished,
 )
 from romanian_news.worker import video_digest
+from romanian_news.worker.video_digest_runtime import ProductionVideoDigestRuntime
 from tests.postgres_catalog import TEST_POSTGRES_DSN, PostgresCatalog
+from tests.worker.conftest import FakeR2Client
 
 requires_postgres = pytest.mark.skipif(
     TEST_POSTGRES_DSN is None,
@@ -43,18 +46,17 @@ def test_schedule_contract_and_deterministic_slot_mapping() -> None:
         assert slot.name.value == expected
 
 
-def test_runtime_factory_wires_the_h3_port(monkeypatch: pytest.MonkeyPatch) -> None:
-    generation = object()
-    runtime = object()
+def test_runtime_factory_builds_the_production_runtime_under_a_safe_media_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(publication, "NEWS_R2_BUCKET", "private-environment")
+    monkeypatch.setattr(publication, "NEWS_PUBLIC_MEDIA_R2_BUCKET", "public-environment")
+    monkeypatch.setattr(publication, "NEWS_PUBLIC_MEDIA_BASE_URL", "https://media.environment")
+    monkeypatch.setattr(publication, "r2_client", lambda: FakeR2Client())
 
-    def make_runtime(port: object) -> object:
-        assert port is generation
-        return runtime
-
-    monkeypatch.setattr(video_digest, "ProductionH3GenerationPort", lambda: generation)
-    monkeypatch.setattr(video_digest, "ProductionVideoDigestRuntime", make_runtime)
-    assert video_digest.runtime_factory is not None
-    assert video_digest.runtime_factory() is runtime
+    factory = video_digest.runtime_factory
+    assert factory is not None
+    assert isinstance(factory(), ProductionVideoDigestRuntime)
 
 
 @pytest.mark.parametrize(

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 
+from romanian_news.catalog.youtube import claim_youtube_video, reject_youtube_video
+from romanian_news.youtube.models import YOUTUBE_SOURCES, YouTubeVideoState
 from romanian_news.youtube.recovery import (
     inspect_youtube_quarantine,
     release_quarantined_youtube_video,
@@ -14,8 +16,10 @@ from tests.postgres_catalog import postgres_catalog_fixture
 
 postgres_catalog = postgres_catalog_fixture("youtube_recovery")
 SOURCE = "recorder-youtube"
+SOURCE_SPEC = next(source for source in YOUTUBE_SOURCES.sources if source.source_id == SOURCE)
 VIDEO = "abcdefghijk"
 REQUESTED_AT = datetime(2026, 9, 25, tzinfo=UTC)
+POISON = ValueError("deterministic poison payload")
 
 
 def _seed_quarantine(catalog) -> None:
@@ -50,6 +54,58 @@ def _release(request_id, *, generation: int = 1):
         reason="Source payload fixed",
         requested_at=REQUESTED_AT,
     )
+
+
+def _seed_pending_video(catalog) -> None:
+    first_poll_version_id = "3" * 64
+    catalog.execute(
+        "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, "
+        "visibility, created_at) VALUES ('poll', 'youtube_feed_snapshot', 'Poll', "
+        "'source', 'current', 'private', %s)",
+        (REQUESTED_AT,),
+    )
+    catalog.execute(
+        "INSERT INTO artifact_versions (id, artifact_id, schema_version, content_digest, "
+        "created_at) VALUES (%s, 'poll', 1, 'digest', %s)",
+        (first_poll_version_id, REQUESTED_AT),
+    )
+    catalog.execute(
+        "INSERT INTO youtube_videos (source_id, video_id, first_poll_version_id, "
+        "state, published_at, title) VALUES (%s, %s, %s, 'pending', %s, 'Video')",
+        (SOURCE, VIDEO, first_poll_version_id, REQUESTED_AT),
+    )
+
+
+def test_repeated_rejection_increments_quarantine_generation_across_release_cycles(
+    postgres_catalog,
+) -> None:
+    _seed_pending_video(postgres_catalog)
+    now = datetime(2026, 9, 25, 10, tzinfo=UTC)
+
+    for cycle in (1, 2):
+        state = None
+        for attempt in range(3):
+            lease = claim_youtube_video(SOURCE_SPEC, f"owner-{cycle}-{attempt}", now)
+            assert lease is not None
+            state = reject_youtube_video(lease, POISON, now)
+            now = now + timedelta(hours=1)
+
+        assert state == YouTubeVideoState.QUARANTINED
+        rows = postgres_catalog.query(
+            "SELECT state, quarantine_generation, retry_at FROM youtube_videos "
+            "WHERE source_id = %s AND video_id = %s",
+            [SOURCE, VIDEO],
+        )
+        assert rows[0]["state"] == "quarantined"
+        assert rows[0]["quarantine_generation"] == cycle
+        assert rows[0]["retry_at"] is None
+
+        _release(uuid4(), generation=cycle)
+
+        released = inspect_youtube_quarantine(SOURCE, VIDEO)
+        assert released.state == "pending"
+        assert released.quarantine_generation == cycle
+        assert released.failure_fingerprint is None
 
 
 def test_release_is_recorded_and_replay_is_exact(postgres_catalog) -> None:

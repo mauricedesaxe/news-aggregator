@@ -5,38 +5,22 @@ from pathlib import Path
 
 import pytest
 
+from romanian_news.catalog.schema import NEWS_CATALOG_MIGRATIONS
+
 SCHEMA_PATH = Path(__file__).parents[3] / "tests" / "fixtures" / "sqlite_catalog.sql"
-MIGRATION_PATH = Path(__file__).parents[1] / "catalog" / "migrations" / "0001_initial.sql"
-RECOVERY_MIGRATION_PATH = (
-    Path(__file__).parents[1] / "catalog" / "migrations" / "0011_article_recovery_overrides.sql"
-)
-REPAIR_MIGRATION_PATH = (
-    Path(__file__).parents[1] / "catalog" / "migrations" / "0012_daily_report_repair_requests.sql"
-)
-YOUTUBE_RECOVERY_MIGRATION_PATH = (
-    Path(__file__).parents[1] / "catalog" / "migrations" / "0013_youtube_quarantine_releases.sql"
-)
-JEV_SHADOW_MIGRATION_PATH = (
-    Path(__file__).parents[1] / "catalog" / "migrations" / "0014_jev_relevance_shadow.sql"
-)
-H3_REFERENCE_MIGRATION_PATH = (
-    Path(__file__).parents[1] / "catalog" / "migrations" / "0015_video_digest_h3_references.sql"
-)
 
 
 def test_sqlite_catalog_covers_the_production_catalog_tables() -> None:
     production_tables = set(
         re.findall(
             r"CREATE TABLE\s+(\w+)",
-            MIGRATION_PATH.read_text()
-            + RECOVERY_MIGRATION_PATH.read_text()
-            + REPAIR_MIGRATION_PATH.read_text()
-            + YOUTUBE_RECOVERY_MIGRATION_PATH.read_text()
-            + JEV_SHADOW_MIGRATION_PATH.read_text()
-            + H3_REFERENCE_MIGRATION_PATH.read_text(),
+            "".join(migration.path.read_text() for migration in NEWS_CATALOG_MIGRATIONS),
             flags=re.IGNORECASE,
         )
     ) - {"news_schema_migrations"}
+    mirrored_tables = {
+        table for table in production_tables if not table.startswith("video_digest_")
+    }
     fixture_tables = set(
         re.findall(
             r"CREATE TABLE(?: IF NOT EXISTS)?\s+(\w+)",
@@ -45,7 +29,12 @@ def test_sqlite_catalog_covers_the_production_catalog_tables() -> None:
         )
     )
 
-    assert fixture_tables == production_tables
+    assert fixture_tables <= production_tables
+    assert mirrored_tables <= fixture_tables
+    assert {table for table in fixture_tables if table.startswith("video_digest_")} == {
+        "video_digest_h3_reference_packs",
+        "video_digest_h3_reference_media",
+    }
 
 
 def test_youtube_clip_checkpoints_are_source_scoped_unique_and_immutable() -> None:

@@ -1,8 +1,17 @@
 import json
+import os
+from collections.abc import Iterator
 from datetime import UTC, datetime
+from uuid import uuid4
 
+import psycopg
+import pytest
+from psycopg import sql
+from psycopg.conninfo import make_conninfo
 from pydantic import HttpUrl
 
+import romanian_news.catalog.schema as news_schema
+import romanian_news.catalog_transport as catalog_transport
 from romanian_news.articles.extraction import extract_article
 from romanian_news.articles.models import (
     ArticleAcquisitionResult,
@@ -20,6 +29,7 @@ from romanian_news.catalog.articles import (
     write_article_failure_attempts,
     write_article_recovery_overrides,
 )
+from romanian_news.catalog.schema import ensure_news_catalog_schema
 from romanian_news.feeds.models import CatalogedFeedEntry, FeedEntry
 from romanian_news.feeds.registry import feed_registry
 
@@ -159,61 +169,109 @@ def test_article_catalog_states_parse_typed_dates(monkeypatch) -> None:
     assert state.source_updated_at is None
 
 
-def test_article_recovery_override_read_and_write_preserve_utc(monkeypatch) -> None:
+_TEST_POSTGRES_DSN = os.getenv("NEWS_TEST_POSTGRES_DSN")
+
+
+@pytest.fixture
+def article_recovery_postgres(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    base_dsn = _TEST_POSTGRES_DSN
+    if base_dsn is None:
+        raise RuntimeError("NEWS_TEST_POSTGRES_DSN is required")
+    schema = f"article_catalog_{uuid4().hex}"
+    with psycopg.connect(base_dsn, autocommit=True) as connection:
+        connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+    schema_dsn = make_conninfo(base_dsn, options=f"-csearch_path={schema}")
+    monkeypatch.setattr(news_schema, "NEWS_POSTGRES_DSN", schema_dsn)
+    monkeypatch.setattr(catalog_transport, "NEWS_POSTGRES_DSN", schema_dsn)
+    ensure_news_catalog_schema()
+    yield schema_dsn
+    with psycopg.connect(base_dsn, autocommit=True) as connection:
+        connection.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
+
+
+def _seed_cataloged_feed_entry(dsn: str, event_id: str) -> None:
+    observed_at = datetime(2026, 9, 1, tzinfo=UTC)
+    with psycopg.connect(dsn) as connection:
+        connection.execute(
+            "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, "
+            "visibility, created_at) VALUES ('news:feed:hotnews', 'news_feed', 'HotNews', "
+            "'source', 'current', 'private', %s)",
+            (observed_at,),
+        )
+        connection.execute(
+            "INSERT INTO artifact_versions (id, artifact_id, schema_version, content_digest, "
+            "created_at) VALUES ('feed-v1', 'news:feed:hotnews', 1, 'digest', %s)",
+            (observed_at,),
+        )
+        connection.execute(
+            "INSERT INTO news_dlt_loads (load_id, artifact_version_id, registered_at) "
+            "VALUES ('load-1', 'feed-v1', %s)",
+            (observed_at,),
+        )
+        connection.execute(
+            "INSERT INTO news_feed_entry_events (event_id, dlt_load_id, registry_version_id, "
+            "feed_snapshot_version_id, feed_id, source_id, original_url, published_at, "
+            "source_updated_at, observed_at) VALUES (%s, 'load-1', 'registry-v1', 'feed-v1', "
+            "'hotnews', 'source-1', 'https://hotnews.ro/stiri/eveniment/article-1', %s, NULL, %s)",
+            (event_id, observed_at, observed_at),
+        )
+        connection.execute(
+            "INSERT INTO news_feed_entry_event_versions (event_id, version_id) " "VALUES (%s, %s)",
+            (event_id, event_id),
+        )
+
+
+@pytest.mark.skipif(
+    _TEST_POSTGRES_DSN is None,
+    reason="NEWS_TEST_POSTGRES_DSN is required",
+)
+def test_article_recovery_override_round_trip_normalizes_utc_and_orders_by_replay_sequence(
+    article_recovery_postgres,
+) -> None:
     event_id = "a" * 64
-    recovery_id = "b" * 64
-    base_generation = "c" * 64
-    expected_generation = "d" * 64
-    queried = []
-    batches = []
-
-    def query(sql, parameters):
-        queried.append((sql, parameters))
-        return [
-            {
-                "recovery_id": recovery_id,
-                "recovery_sequence": 3,
-                "event_id": event_id,
-                "base_work_generation": base_generation,
-                "expected_work_generation": expected_generation,
-                "requested_by": "operator",
-                "reason": "Parser updated",
-                "requested_at": "2026-09-01T03:00:00+00:00",
-            }
-        ]
-
-    monkeypatch.setattr("romanian_news.catalog.articles.catalog_query", query)
-    monkeypatch.setattr(
-        "romanian_news.catalog.articles.catalog_batch",
-        lambda statements, **kwargs: batches.append((statements, kwargs)),
-    )
+    _seed_cataloged_feed_entry(article_recovery_postgres, event_id)
 
     assert read_article_recovery_overrides(()) == ()
-    override = read_article_recovery_overrides((event_id,))[0]
-    assert queried[0][1] == [[event_id]]
-    assert override.requested_at == datetime(2026, 9, 1, 3, tzinfo=UTC)
-    assert override.recovery_sequence == 3
-    assert override.work_generation != override.base_work_generation
+    assert read_article_recovery_overrides(("f" * 64,)) == ()
 
     write_article_recovery_overrides(
         (
-            override.model_copy(
-                update={"requested_at": datetime.fromisoformat("2026-09-01T06:00:00+03:00")}
+            ArticleRecoveryOverride(
+                recovery_id="b" * 64,
+                event_id=event_id,
+                base_work_generation="c" * 64,
+                expected_work_generation="d" * 64,
+                requested_by="operator",
+                reason="Parser updated",
+                requested_at=datetime.fromisoformat("2026-09-01T06:00:00+03:00"),
             ),
         )
     )
-    assert batches[0][0][0][1] == [
-        recovery_id,
-        event_id,
-        base_generation,
-        expected_generation,
-        "operator",
-        "Parser updated",
-        "2026-09-01T03:00:00+00:00",
+    write_article_recovery_overrides(
+        (
+            ArticleRecoveryOverride(
+                recovery_id="e" * 64,
+                event_id=event_id,
+                base_work_generation="c" * 64,
+                expected_work_generation="0" * 64,
+                requested_by="operator",
+                reason="Parser updated again",
+                requested_at=datetime.fromisoformat("2026-09-01T05:00:00-04:00"),
+            ),
+        )
+    )
+
+    overrides = read_article_recovery_overrides((event_id,))
+
+    assert [override.requested_at for override in overrides] == [
+        datetime(2026, 9, 1, 3, tzinfo=UTC),
+        datetime(2026, 9, 1, 9, tzinfo=UTC),
     ]
-    assert batches[0][1] == {"retry_transient_errors": True}
-    assert "ON CONFLICT" not in batches[0][0][0][0]
-    assert ArticleRecoveryOverride.model_validate(override.model_dump()) == override
+    assert [override.recovery_sequence for override in overrides] == sorted(
+        override.recovery_sequence for override in overrides
+    )
+    assert all(override.work_generation != override.base_work_generation for override in overrides)
+    assert ArticleRecoveryOverride.model_validate(overrides[0].model_dump()) == overrides[0]
 
 
 def test_article_failure_write_serializes_enum_and_utc_times(monkeypatch) -> None:
