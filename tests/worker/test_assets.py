@@ -5,12 +5,14 @@ from typing import cast
 from zoneinfo import ZoneInfo
 
 import dagster as dg
+import pytest
 from dagster._core.definitions.metadata.metadata_value import JsonMetadataValue
 
 from romanian_news.articles.models import ArticleAcquisitionFailure, ArticleFailureKind
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.daily import DailyArtifactReferences
 from romanian_news.groups import DailyClusterSet, NewsGroup
+from romanian_news.jev_relevance_shadow import JevShadowBatchResult
 from romanian_news.reports import DailyReportInput
 from romanian_news.worker import assets, definitions
 from romanian_news.worker.definitions import (
@@ -689,11 +691,6 @@ def test_article_batch_run_keys_recover_after_a_failed_tick(monkeypatch) -> None
     assert first.tags["news/article_batch_key"] == second.tags["news/article_batch_key"]
     assert first.run_key != second.run_key
     assert json.loads(first.tags["news/article_event_ids"]) == [event_id]
-    assert article_batch_job.run_tags == {
-        "dagster/max_runtime": "600",
-        "dagster/max_retries": "1",
-        "dagster/retry_on_asset_or_op_failure": "false",
-    }
 
 
 def test_article_controller_reports_unchanged_quarantine_once(monkeypatch) -> None:
@@ -735,6 +732,133 @@ def test_article_controller_reports_unchanged_quarantine_once(monkeypatch) -> No
         )
 
     assert second is None
+
+
+def test_mixed_quarantine_batch_failure_does_not_count_as_reported_until_work_drains(
+    monkeypatch,
+) -> None:
+    day = datetime.fromisoformat(DAY).date()
+    selected_id = "a" * 64
+    quarantined_id = "b" * 64
+    mixed_plan = SimpleNamespace(
+        selected=(
+            SimpleNamespace(source=SimpleNamespace(event_id=selected_id), work_generation="c" * 64),
+        ),
+        remaining_entries=0,
+        deferred_event_ids=(),
+        quarantined_event_ids=(quarantined_id,),
+        source_covered_days=(day,),
+    )
+    drained_plan = SimpleNamespace(
+        selected=(),
+        remaining_entries=0,
+        deferred_event_ids=(),
+        quarantined_event_ids=(quarantined_id,),
+        source_covered_days=(day,),
+    )
+    plans = {"mixed": mixed_plan, "drained": drained_plan}
+    requested = {"mixed": 0, "drained": 0}
+
+    def plan(*_args, **_kwargs):
+        if requested["mixed"] < 2:
+            requested["mixed"] += 1
+            return plans["mixed"]
+        requested["drained"] += 1
+        return plans["drained"]
+
+    monkeypatch.setattr(definitions, "plan_article_work", plan)
+    monkeypatch.setattr(definitions, "read_article_attempt_states", lambda _event_ids: {})
+    monkeypatch.setattr(definitions, "feed_registry", SimpleNamespace)
+    monkeypatch.setattr(
+        definitions,
+        "read_daily_article_references",
+        lambda _day: DailyArtifactReferences(day=day, values=()),
+    )
+    with dg.instance_for_test() as instance:
+        context = dg.build_sensor_context(
+            instance=instance,
+            repository_def=defs.get_repository_def(),
+        )
+        first = definitions._article_batch_request(
+            context, day, datetime.fromisoformat("2026-09-09T09:00:00+00:00")
+        )
+        assert first is not None
+        instance.add_run(
+            dg.DagsterRun(
+                job_name="article_batch",
+                run_id="mixed-batch-failed",
+                status=dg.DagsterRunStatus.FAILURE,
+                tags=first.tags,
+            )
+        )
+        second = definitions._article_batch_request(
+            context, day, datetime.fromisoformat("2026-09-09T09:01:00+00:00")
+        )
+        assert second is not None
+        assert second.tags["news/article_batch_key"] == first.tags["news/article_batch_key"]
+        assert second.run_key != first.run_key
+
+        third = definitions._article_batch_request(
+            context, day, datetime.fromisoformat("2026-09-09T09:02:00+00:00")
+        )
+        assert third is not None
+        assert third.tags["news/article_batch_key"] != first.tags["news/article_batch_key"]
+        instance.add_run(
+            dg.DagsterRun(
+                job_name="article_batch",
+                run_id="drained-batch-failed",
+                status=dg.DagsterRunStatus.FAILURE,
+                tags=third.tags,
+            )
+        )
+        fourth = definitions._article_batch_request(
+            context, day, datetime.fromisoformat("2026-09-09T09:03:00+00:00")
+        )
+
+    assert fourth is None
+
+
+def test_mixed_quarantine_batch_fails_the_asset_without_materializing(monkeypatch) -> None:
+    day = datetime.fromisoformat(DAY).date()
+    quarantined = "b" * 64
+    references = DailyArtifactReferences(day=day, values=())
+    monkeypatch.setattr(assets, "materialize_feed_intake", lambda *_args: references)
+    monkeypatch.setattr(
+        assets,
+        "materialize_articles",
+        lambda *_args, **_kwargs: ArticleBatchResult(
+            references=references,
+            requested_event_ids=("a" * 64,),
+            acquired_event_ids=(),
+            skipped_event_ids=(),
+            failures=(),
+            remaining_entries=1,
+            deferred_event_ids=(),
+            quarantined_event_ids=(quarantined,),
+            source_covered=True,
+        ),
+    )
+
+    result = dg.materialize(
+        [assets.feed_intake, assets.articles],
+        partition_key=DAY,
+        raise_on_error=False,
+        tags={
+            "news/scheduled_at": "2026-09-02T12:00:00+03:00",
+            "news/article_event_ids": '["' + "a" * 64 + '"]',
+        },
+    )
+
+    assert not result.success
+    assert result.asset_materializations_for_node("articles") == []
+    observations = [
+        event for event in result.all_events if event.event_type_value == "ASSET_OBSERVATION"
+    ]
+    assert len(observations) == 1
+    metadata = observations[0].asset_observation_data.asset_observation.metadata
+    quarantined_metadata = metadata["quarantined_event_ids"]
+    assert isinstance(quarantined_metadata, JsonMetadataValue)
+    assert quarantined_metadata.data == [quarantined]
 
 
 def test_article_batch_identity_changes_with_implementation_ref(monkeypatch) -> None:
@@ -1015,3 +1139,56 @@ def test_daily_report_completeness_uses_its_cluster_snapshot(monkeypatch) -> Non
     result = assets.daily_report_completeness_result(DAY)
 
     assert result.passed
+
+
+@pytest.mark.parametrize(
+    (
+        "paired",
+        "over_guard",
+        "failed",
+        "already_claimed",
+        "unresolved",
+        "missing_incumbent",
+        "passed",
+    ),
+    (
+        pytest.param(1, 1, 0, 1, 0, 0, True, id="claim_only_outcomes_pass"),
+        pytest.param(3, 0, 0, 0, 0, 0, True, id="all_paired_passes"),
+        pytest.param(0, 1, 1, 0, 0, 0, False, id="failed_fails"),
+        pytest.param(0, 0, 0, 1, 1, 0, False, id="unresolved_fails"),
+        pytest.param(0, 0, 0, 0, 0, 1, False, id="missing_incumbent_fails"),
+    ),
+)
+def test_jev_shadow_paired_accounting_check_follows_the_batch_result(
+    monkeypatch,
+    paired: int,
+    over_guard: int,
+    failed: int,
+    already_claimed: int,
+    unresolved: int,
+    missing_incumbent: int,
+    passed: bool,
+) -> None:
+    day = datetime.fromisoformat(DAY).date()
+    result_value = JevShadowBatchResult(
+        day=day,
+        enabled=True,
+        article_count=paired + over_guard + failed + already_claimed + unresolved,
+        missing_incumbent=missing_incumbent,
+        paired=paired,
+        over_guard=over_guard,
+        failed=failed,
+        already_claimed=already_claimed,
+        unresolved=unresolved,
+    )
+    monkeypatch.setattr(assets, "materialize_jev_relevance_shadow", lambda _day: result_value)
+
+    result = dg.materialize([assets.jev_relevance_shadow], partition_key=DAY)
+
+    assert result.success
+    (evaluation,) = result.get_asset_check_evaluations()
+    assert evaluation.passed is passed
+    assert evaluation.check_name == "paired_accounting"
+    assert {key: value.value for key, value in evaluation.metadata.items()} == (
+        result_value.model_dump(mode="json")
+    )

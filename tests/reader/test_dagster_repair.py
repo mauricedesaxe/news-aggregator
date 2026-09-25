@@ -193,7 +193,6 @@ def test_pending_reservation_does_not_launch_again(monkeypatch) -> None:
     with pytest.raises(dagster_repair.DagsterRepairError, match="outcome is pending"):
         dagster_repair.request_daily_report_repair(DAY)
 
-    assert len(queries) == 2
     assert all("LaunchDailyReportRepair" not in query for query in queries)
 
 

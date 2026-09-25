@@ -156,7 +156,7 @@ def _recover_lease(pipeline: _GenerationPipeline) -> ClaimedSlot:
 
 
 class _GenerationPipeline:
-    def __init__(self, *, seed: int) -> None:
+    def __init__(self, *, seed: int, scheduled_at: datetime = SCHEDULED_AT) -> None:
         self.seed = seed
         self.story_count = 0
         self.plan_stories: tuple[tuple[str, str, int], ...] | None = None
@@ -170,10 +170,10 @@ class _GenerationPipeline:
             policy_bundle_version_id=policy,
         )
         self.slot = ScheduledSlot(
-            slot_id=scheduled_slot_id(SlotName.MORNING, SCHEDULED_AT),
+            slot_id=scheduled_slot_id(SlotName.MORNING, scheduled_at),
             name=SlotName.MORNING,
-            scheduled_at=SCHEDULED_AT,
-            bucharest_day=SCHEDULED_AT.astimezone(BUCHAREST).date(),
+            scheduled_at=scheduled_at,
+            bucharest_day=scheduled_at.astimezone(BUCHAREST).date(),
         )
         video_digest_catalog.schedule_slot(self.slot, recorded_at=self.recorded_at)
         claimed = video_digest_catalog.claim_slot(

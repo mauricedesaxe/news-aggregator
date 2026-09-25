@@ -1001,3 +1001,37 @@ def test_print_catalog_status_reports_each_day_from_the_real_catalog(
         "2026-09-22 feeds=1/" + str(expected) + " freshness=inputs_not_ready report=" + "a" * 12
     )
     assert REPORT_VERSION.startswith("a")
+
+
+def test_print_catalog_status_reports_every_day_when_one_freshness_read_fails(
+    capsys,
+    harness,
+    postgres_catalog,
+    fake_r2,
+    fake_http,
+    monkeypatch,
+) -> None:
+    from romanian_news.worker import catalog_status
+
+    expected = len(feed_registry().feeds)
+    _seed_one_feed_observation(harness, fake_http, datetime(2026, 9, 22, 10, tzinfo=UTC))
+    seed_daily_report(postgres_catalog, daily_report(date(2026, 9, 22)))
+    real_freshness = catalog_status.read_daily_report_freshness
+
+    def failing_freshness(day: date):
+        if day == date(2026, 9, 21):
+            raise RuntimeError("freshness read failed")
+        return real_freshness(day)
+
+    monkeypatch.setattr(catalog_status, "read_daily_report_freshness", failing_freshness)
+
+    print_catalog_status(days=(date(2026, 9, 21), date(2026, 9, 22)))
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == f"expected_feeds={expected}"
+    assert lines[1] == (
+        "2026-09-21 feeds=0/" + str(expected) + " freshness=error:freshness read failed report=-"
+    )
+    assert lines[2] == (
+        "2026-09-22 feeds=1/" + str(expected) + " freshness=inputs_not_ready report=" + "a" * 12
+    )
