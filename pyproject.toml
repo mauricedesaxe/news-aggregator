@@ -17,6 +17,7 @@ dependencies = [
     "dagster-cloud==1.13.19",
     "dlt[duckdb,filesystem,parquet]==1.30.0",
     "duckdb==1.5.5",
+    "faster-whisper==1.2.1",
     "feedparser==6.0.12",
     "langfuse==4.15.1",
     "lxml==6.1.2",

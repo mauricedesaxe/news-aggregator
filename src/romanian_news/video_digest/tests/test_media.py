@@ -899,5 +899,6 @@ def _subtitle_inputs() -> tuple[SlotLease, ScreenplayPlan, media.AssembledEditio
             video_file=video_file,
             manifest_file=manifest_file,
             duration_ms=2000,
+            clip_durations_ms=(1000, 1000),
         ),
     )

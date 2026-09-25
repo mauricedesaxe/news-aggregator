@@ -150,6 +150,7 @@ class AssembledEdition(NewsModel):
     video_file: ArtifactFile
     manifest_file: ArtifactFile
     duration_ms: Annotated[int, Field(gt=0)]
+    clip_durations_ms: Annotated[tuple[int, ...], Field(min_length=1)]
 
 
 class SubtitleStrategy(StrEnum):
@@ -162,6 +163,14 @@ class SubtitleTimingRequest(NewsModel):
     story_position: Annotated[int, Field(ge=0)]
     cue_count: Annotated[int, Field(gt=0)]
     approved_text: str
+    start_ms: Annotated[int, Field(ge=0)]
+    end_ms: Annotated[int, Field(gt=0)]
+
+    @model_validator(mode="after")
+    def require_positive_duration(self) -> SubtitleTimingRequest:
+        if self.end_ms <= self.start_ms:
+            raise ValueError("Subtitle story window must have positive duration")
+        return self
 
 
 class SubtitleTimeSpan(NewsModel):
@@ -593,6 +602,7 @@ def assemble_edition(lease: SlotLease, plan: DigestPlan) -> AssembledEdition:
         video_file=video_file,
         manifest_file=manifest_file,
         duration_ms=output_probe.duration_ms,
+        clip_durations_ms=tuple(entry.duration_ms for entry in entries),
     )
 
 
@@ -607,11 +617,24 @@ def produce_subtitles(
     failures: list[SubtitleAttemptFailure] = []
     try:
         cue_texts = tuple(_subtitle_cue_texts(story.narration) for story in screenplay.stories)
+        if len(assembled.clip_durations_ms) != len(screenplay.stories):
+            raise ValueError("Subtitle story windows must cover every story")
+        cursor = 0
+        windows = []
+        for duration_ms in assembled.clip_durations_ms:
+            if duration_ms <= 0:
+                raise ValueError("Subtitle story window must have positive duration")
+            windows.append((cursor, cursor + duration_ms))
+            cursor += duration_ms
+        if abs(cursor - assembled.duration_ms) > 100:
+            raise ValueError("Subtitle story windows differ from assembled duration")
         requests = tuple(
             SubtitleTimingRequest(
                 story_position=position,
                 cue_count=len(texts),
                 approved_text=screenplay.stories[position].narration,
+                start_ms=windows[position][0],
+                end_ms=windows[position][1],
             )
             for position, texts in enumerate(cue_texts)
         )
