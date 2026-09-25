@@ -11,7 +11,7 @@ Verification on 2026-09-25 established these production facts:
 | Boundary | Result | Evidence |
 | --- | --- | --- |
 | Authenticated reader | Pass | `/` returns a `303` to `/login`; `/livez` and `/readyz` return `200` at `https://news.alexlazar.dev` |
-| Reader deployment | Pass | Railway's current successful deployment runs repository commit `74f648b`, the same commit as Dagster |
+| Reader deployment | Pass | Railway's 2026-09-25 15:13 UTC deployment succeeded at `f71c2a9`; its diff from Dagster commit `74f648b` changes only this runbook |
 | Public media origin | Pass | `romanian-news-public-media` is served at `https://news-media.alexlazar.dev` with active TLS 1.2 or newer |
 | R2 custom-domain probe | Pass | The permanent smoke object returns exact bytes, `Content-Length`, `Accept-Ranges`, and a valid `206` byte range |
 | Dagster deployment | Pass | The code location deployed successfully from commit `74f648b`, which rejects generated clips with unapproved English speech |
@@ -65,7 +65,10 @@ The production reader has `NEWS_PUBLIC_MEDIA_R2_BUCKET=romanian-news-public-medi
    HTTPS `NEWS_PUBLIC_MEDIA_BASE_URL` in both the worker and reader as required.
 3. Apply all catalog migrations to production PostgreSQL and run the upgrade contracts against a
    disposable PostgreSQL 15 database restored from the pre-video schema.
-4. Deploy the Dagster location from the same commit as the reader and confirm definitions load.
+4. Deploy the Dagster location and confirm definitions load. Before activation, compare the
+   deployed Dagster and reader commits with
+   `git diff --name-only <dagster-commit> <reader-commit>`. If they differ, require every
+   changed path to start with `docs/`. Otherwise, redeploy the older service.
 5. Probe one immutable public video and subtitle through the custom domain. Require exact bytes,
    `Content-Length`, `Accept-Ranges: bytes`, and a successful byte-range response.
 6. Run one deterministic slot manually. Stop the worker after each durable stage, restart it with a
@@ -124,7 +127,7 @@ logs, screenshots, or issue comments.
 ## Rollback
 
 Stop `scheduled_video_digest` first. Do not delete catalog rows or immutable R2 objects. Roll the
-Dagster location and reader back to the last known-good shared commit, then inspect the affected
+Dagster location and reader back to the last known-good application commit, then inspect the affected
 slot in PostgreSQL. A later deployment must resume from that durable state with a fresh owner token.
 If public verification failed, leave the edition unpublished and preserve the publication attempt
 evidence for diagnosis.
