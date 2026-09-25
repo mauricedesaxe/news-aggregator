@@ -35,3 +35,33 @@ def test_one_missed_boundary_word_does_not_reject_faithful_audio() -> None:
 
 def test_empty_transcript_cannot_pass() -> None:
     assert not narration_matches(APPROVED, ())
+
+
+NUMERIC_APPROVED = (
+    "The National Bank of Romania established the official reference exchange rate "
+    "at five point two seven seven zero lei per euro, as the continental currency "
+    "slipped zero point eighteen bani yesterday."
+)
+NUMERIC_TRANSCRIPT = (
+    "The National Bank of Romania established the official reference exchange rate "
+    "at 5 .2770 per euro as the continental currency slipped 0 .18 Bonnie yesterday."
+)
+
+
+def test_spoken_decimal_matches_equivalent_english_number_words() -> None:
+    assert narration_matches(NUMERIC_APPROVED, tuple(NUMERIC_TRANSCRIPT.split()))
+
+
+def test_wrong_decimal_cannot_pass_as_a_transcription_variant() -> None:
+    transcript = NUMERIC_TRANSCRIPT.replace(".2770", ".2870").replace(".18", ".19")
+    assert not narration_matches(NUMERIC_APPROVED, tuple(transcript.split()))
+
+
+def test_numeric_transcript_with_extra_intro_or_repeated_phrase_fails() -> None:
+    intro = "The Department's yards a fliver's news play gold coffins "
+    assert not narration_matches(NUMERIC_APPROVED, tuple((intro + NUMERIC_TRANSCRIPT).split()))
+    repeated = NUMERIC_TRANSCRIPT.replace(
+        "Bonnie yesterday",
+        "Bonnie as the continental currency slipped 0 .18 Bonnie yesterday",
+    )
+    assert not narration_matches(NUMERIC_APPROVED, tuple(repeated.split()))

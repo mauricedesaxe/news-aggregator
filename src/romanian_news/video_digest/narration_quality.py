@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import unicodedata
@@ -13,6 +14,39 @@ from typing import Any
 MIN_APPROVED_WORD_COVERAGE = 0.8
 MAX_EXTRA_WORD_RUN = 3
 NARRATION_CHECK_TIMEOUT_SECONDS = 120
+_WORD_OR_NUMBER = re.compile(r"\d+(?:\.\d+)?|\.\d+|[^\W\d_]+(?:['’][^\W\d_]+)?")
+_UNITS = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+}
+_TENS = {
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
 
 
 class NarrationCheckError(RuntimeError):
@@ -27,10 +61,73 @@ def _normalized(word: str) -> str:
     )
 
 
+def _number_words(tokens: list[str], start: int) -> tuple[str, int] | None:
+    first = tokens[start]
+    if first not in _UNITS and first not in _TENS:
+        return None
+    whole = _UNITS.get(first, _TENS.get(first, 0))
+    position = start + 1
+    if first in _TENS and position < len(tokens) and tokens[position] in _UNITS:
+        whole += _UNITS[tokens[position]]
+        position += 1
+    if position >= len(tokens) or tokens[position] != "point":
+        return str(whole), position
+    position += 1
+    fraction = ""
+    while position < len(tokens):
+        word = tokens[position]
+        if word in _UNITS:
+            fraction += str(_UNITS[word])
+        elif word in _TENS:
+            value = _TENS[word]
+            if position + 1 < len(tokens) and tokens[position + 1] in _UNITS:
+                value += _UNITS[tokens[position + 1]]
+                position += 1
+            fraction += str(value)
+        else:
+            break
+        position += 1
+    if not fraction:
+        return str(whole), position - 1
+    return f"{whole}.{fraction}", position
+
+
+def _canonical_words(text: str) -> tuple[str, ...]:
+    tokens = _WORD_OR_NUMBER.findall(text.casefold())
+    words: list[str] = []
+    position = 0
+    while position < len(tokens):
+        token = tokens[position]
+        if (
+            token.isdigit()
+            and position + 1 < len(tokens)
+            and re.fullmatch(r"\.\d+", tokens[position + 1])
+        ):
+            words.append(f"#{token}{tokens[position + 1]}")
+            position += 2
+            continue
+        number = _number_words(tokens, position)
+        if number is not None:
+            value, position = number
+            words.append(f"#{value}")
+            continue
+        words.append(f"#{token}" if token[0].isdigit() else _normalized(token))
+        position += 1
+    return tuple(filter(None, words))
+
+
+def _numeric_facts_match(approved: tuple[str, ...], spoken: tuple[str, ...]) -> bool:
+    return tuple(word for word in approved if word.startswith("#")) == tuple(
+        word for word in spoken if word.startswith("#")
+    )
+
+
 def narration_matches(approved_text: str, spoken_words: tuple[str, ...]) -> bool:
-    approved = tuple(filter(None, (_normalized(word) for word in approved_text.split())))
-    spoken = tuple(filter(None, (_normalized(word) for word in spoken_words)))
+    approved = _canonical_words(approved_text)
+    spoken = _canonical_words(" ".join(spoken_words))
     if not approved or not spoken:
+        return False
+    if not _numeric_facts_match(approved, spoken):
         return False
     opcodes = SequenceMatcher(None, approved, spoken, autojunk=False).get_opcodes()
     matched = sum(i2 - i1 for tag, i1, i2, _j1, _j2 in opcodes if tag == "equal")
@@ -56,7 +153,12 @@ def _whisper_model() -> Any:
 def clip_narration_matches(path: Path, approved_text: str) -> bool:
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "romanian_news.video_digest.narration_quality", str(path)],
+            [
+                sys.executable,
+                "-m",
+                "romanian_news.video_digest.narration_quality",
+                str(path),
+            ],
             input=approved_text,
             capture_output=True,
             text=True,
