@@ -661,17 +661,17 @@ def _fal_arguments(
         raise ValueError("H3 English prompt requires one video and one audio reference")
     spoken_line = request.story.narration.replace('"', "'")
     prompt = (
-        "One continuous 15-second adult animated pirate-news sequence with native synchronized "
-        "English speech, sound effects, and low music beneath the voice. Video 1 is the approved "
-        "visual reference for the lead scientist, the silent three-eyed alien co-host, the narrow "
-        "broadcast booth, and their stable appearance and blocking. Audio 1 is the approved English "
-        "voice reference for the scientist. Keep the alien visible and silent. "
-        f"Exact action during the story: {request.story.visual_direction} "
-        "The scientist says exactly once, rapidly and clearly in English: "
-        f'"{spoken_line}" '
-        "The first vocal sound must be the first syllable of that quoted line. Finish the entire "
-        "line before the clip ends. No spoken introduction, visual directions, instructions, "
-        "muttering, repeated dialogue, captions, subtitles, logos, title cards, or readable text."
+        "In a 15-second adult animated pirate-news clip, the scientist speaks from 0 to 11 seconds. "
+        "He reads this one English sentence only: "
+        f"<d>[English] {spoken_line}</d>. "
+        "Read the full sentence once at a measured pace. From 11 to 15 seconds, he closes his mouth, "
+        "sets down his clipboard, and silently looks at the co-host. The final four seconds have only "
+        "quiet instrumental music, with no speech or vocal sounds. Video 1 is the approved visual "
+        "reference for the scientist, silent three-eyed alien co-host, and narrow booth. Audio 1 is "
+        "the approved scientist voice. "
+        f"Visual action during the sentence: {request.story.visual_direction} "
+        "Native lip-synced English speech, quiet background music. The alien never speaks. "
+        "No introduction, repeated phrase, other dialogue, captions, subtitles, title cards, or logos."
     )
     seed_source = sha256(
         canonical_json(

@@ -108,9 +108,10 @@ def test_fal_prompt_requires_english_speech() -> None:
 
     assert isinstance(prompt, str)
     assert "Video 1 is the approved visual reference" in prompt
-    assert "Audio 1 is the approved English voice reference" in prompt
-    assert f'in English: "{request.story.narration}"' in prompt
-    assert "The first vocal sound must be the first syllable" in prompt
+    assert "Audio 1 is the approved scientist voice" in prompt
+    assert f"<d>[English] {request.story.narration}</d>" in prompt
+    assert "From 11 to 15 seconds" in prompt
+    assert "no speech or vocal sounds" in prompt
     assert "in Romanian" not in prompt
 
 
@@ -144,7 +145,7 @@ def test_fal_prompt_keeps_quoted_narration_inside_spoken_line() -> None:
     prompt = generation._fal_arguments(request, lambda _: "https://r2.example/reference")["prompt"]
 
     assert isinstance(prompt, str)
-    assert "in English: \"The scientist says 'hello'.\"" in prompt
+    assert "<d>[English] The scientist says 'hello'.</d>" in prompt
 
 
 def _section(subject: str, article: str, position: int) -> DailyReportSection:
