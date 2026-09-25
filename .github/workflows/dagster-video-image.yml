@@ -1,0 +1,53 @@
+name: Build Dagster video base image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment: production
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build -f deploy/dagster-video/Dockerfile -t news-dagster-video:${{ github.sha }} .
+
+      - name: Verify media tools
+        run: |
+          docker run --rm news-dagster-video:${{ github.sha }} sh -ec '
+            ffmpeg -nostdin -v error -f lavfi -i color=c=black:s=1344x768:r=24 \
+              -f lavfi -i anullsrc=r=32000:cl=stereo -t 0.2 \
+              -c:v libx264 -pix_fmt yuv420p -c:a aac /tmp/fixture.mp4
+            ffprobe -v error -show_format -show_streams /tmp/fixture.mp4 >/dev/null
+            ffmpeg -nostdin -v error -i /tmp/fixture.mp4 \
+              -af loudnorm=I=-16:LRA=11:TP=-1.5 -f null -
+          '
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.12.5"
+
+      - name: Upload base image
+        env:
+          DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          DAGSTER_CLOUD_ORGANIZATION: ${{ secrets.DAGSTER_CLOUD_ORGANIZATION }}
+          DAGSTER_CLOUD_DEPLOYMENT: ${{ secrets.DAGSTER_CLOUD_DEPLOYMENT }}
+          IMAGE_TAG: video-ffmpeg-${{ github.sha }}
+        run: |
+          uvx --exclude-newer '7 days' --from 'dagster-cloud-cli==1.13.19' \
+            dagster-cloud serverless upload-base-image \
+            news-dagster-video:${{ github.sha }} \
+            --api-token "$DAGSTER_CLOUD_API_TOKEN" \
+            --organization "$DAGSTER_CLOUD_ORGANIZATION" \
+            --deployment "$DAGSTER_CLOUD_DEPLOYMENT" \
+            --published-tag "$IMAGE_TAG"
+          printf 'Uploaded Dagster base image tag: %s\n' "$IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"

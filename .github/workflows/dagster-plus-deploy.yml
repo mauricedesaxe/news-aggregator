@@ -55,6 +55,7 @@ jobs:
       DAGSTER_CLOUD_YAML_PATH: .
       DAGSTER_CLOUD_FILE: dagster_cloud.yaml
       ENABLE_FAST_DEPLOYS: "true"
+      SERVERLESS_BASE_IMAGE_TAG: ${{ vars.SERVERLESS_BASE_IMAGE_TAG }}
     steps:
       - name: Check deployment event
         id: prerun
