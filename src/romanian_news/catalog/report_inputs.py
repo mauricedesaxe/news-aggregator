@@ -18,11 +18,6 @@ class RecordedDailyReportCatalogInput(NewsModel):
     sentiments: tuple[ArtifactReference, ...]
 
 
-class ReportDayHead(NewsModel):
-    day: date
-    current_run_id: str | None
-
-
 class ReportArticleCatalogRecord(NewsModel):
     reference: ArtifactReference
     outlet_id: str
@@ -227,25 +222,6 @@ def read_recorded_daily_report_input(day: date) -> RecordedDailyReportCatalogInp
         cluster_set=references["cluster_set"][0],
         summaries=tuple(references["summary"]),
         sentiments=tuple(references["sentiment"]),
-    )
-
-
-def read_report_day_heads(not_before: date, through: date) -> tuple[ReportDayHead, ...]:
-    rows = catalog_query(
-        """SELECT substr(cluster.id, length('news:clusters:') + 1) AS day, report.current_run_id
-           FROM artifacts cluster LEFT JOIN artifacts report
-             ON report.id = 'news:daily:' || substr(cluster.id, length('news:clusters:') + 1)
-           WHERE cluster.kind = 'news_clusters' AND cluster.current_version_id IS NOT NULL
-             AND substr(cluster.id, length('news:clusters:') + 1) >= %s
-             AND substr(cluster.id, length('news:clusters:') + 1) <= %s ORDER BY day""",
-        [not_before.isoformat(), through.isoformat()],
-    )
-    return tuple(
-        ReportDayHead(
-            day=date.fromisoformat(str(row["day"])),
-            current_run_id=None if row["current_run_id"] is None else str(row["current_run_id"]),
-        )
-        for row in rows
     )
 
 

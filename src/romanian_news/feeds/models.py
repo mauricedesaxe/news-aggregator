@@ -220,12 +220,6 @@ class FeedAcquisitionResult(NewsModel):
     captures: tuple[FeedCapture, ...]
 
 
-class CurrentFeedState(NewsModel):
-    acquisition: FeedAcquisitionResult
-    snapshot_versions: dict[str, Sha256]
-    missing_feed_ids: tuple[str, ...] = ()
-
-
 def feed_entry_event(
     entry: FeedEntry,
     capture: FeedCapture,

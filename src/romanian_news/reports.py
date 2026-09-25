@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 import threading
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import Field
 
-from romanian_news import BUCHAREST, NewsModel, Sha256
+from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.groups.models import GroupSentiment, GroupSummary
 from romanian_news.articles.models import ExtractedArticle
 from romanian_news.artifacts import ArtifactReference
@@ -362,31 +362,6 @@ def report_run_id(request_id: Sha256, implementation_ref: str) -> Sha256:
     return _sha256(f"{request_id}\0{implementation_ref}".encode())
 
 
-def stale_daily_report_days(
-    scheduled_at: datetime,
-    implementation_ref: str,
-    not_before: date,
-) -> tuple[date, ...]:
-    """Find ready report days whose current head does not match current inputs."""
-    local_time = _bucharest_time(scheduled_at)
-    last_day = local_time.date()
-    from romanian_news.catalog.report_inputs import read_report_day_heads
-
-    heads = read_report_day_heads(not_before, last_day)
-    stale = []
-    for head in heads:
-        day = head.day
-        try:
-            request_id = report_run_id(
-                daily_report_request_id(read_daily_report_input_cached(day)), implementation_ref
-            )
-        except ValueError:
-            continue
-        if head.current_run_id != request_id:
-            stale.append(day)
-    return tuple(stale)
-
-
 def build_daily_report_from_input(value: DailyReportInput) -> DailyReportOutput:
     """Build one report from exact inputs selected before the job was claimed."""
     theme_set = _load_daily_theme_set(value.themes)
@@ -667,12 +642,6 @@ def build_weekly_report_from_construction(
         content_digest=_sha256(content),
         content=content,
     )
-
-
-def _bucharest_time(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        raise ValueError("Report reconciliation time must include a timezone")
-    return value.astimezone(BUCHAREST)
 
 
 def _summary_request_id(group) -> Sha256:
