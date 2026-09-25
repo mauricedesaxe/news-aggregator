@@ -77,13 +77,15 @@ def _probe_payload(
     frame_rate: str = "24/1",
     pixel_format: str = "yuv420p",
     duration: str = "1.0",
+    video_duration: str | None = None,
+    audio_duration: str | None = None,
 ) -> dict[str, object]:
     return {
         "streams": [
             {
                 "codec_type": "video",
                 "avg_frame_rate": frame_rate,
-                "duration": duration,
+                "duration": video_duration or duration,
                 "start_time": "0",
                 "nb_read_frames": "24",
                 "codec_name": "h264",
@@ -93,7 +95,7 @@ def _probe_payload(
             },
             {
                 "codec_type": "audio",
-                "duration": duration,
+                "duration": audio_duration or duration,
                 "start_time": "0",
                 "nb_read_frames": "32",
                 "codec_name": "aac",
@@ -222,6 +224,50 @@ def test_technical_validation_rejects_profile_duration_digest_and_size(tmp_path:
             expected_size=len(valid) + 1,
             requested_duration_ms=1000,
         )
+
+
+@pytest.mark.parametrize(
+    ("audio_duration", "expected_valid"),
+    (("15.104", True), ("15.150", False)),
+)
+def test_technical_validation_allows_one_aac_frame_of_tail_padding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    audio_duration: str,
+    expected_valid: bool,
+) -> None:
+    path = tmp_path / "candidate.mp4"
+    content = b"candidate"
+    path.write_bytes(content)
+    payload = _probe_payload(
+        duration=audio_duration,
+        video_duration="15.083333",
+        audio_duration=audio_duration,
+    )
+    monkeypatch.setattr(
+        media,
+        "_run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess((), 0, json.dumps(payload), ""),
+    )
+
+    if expected_valid:
+        probe = media.validate_media_file(
+            path,
+            expected_digest=sha256(content),
+            expected_size=len(content),
+            requested_duration_ms=15_000,
+        )
+        assert probe.video_duration_ms == 15_083
+        assert probe.audio_duration_ms == 15_104
+    else:
+        with pytest.raises(media.MediaValidationError) as captured:
+            media.validate_media_file(
+                path,
+                expected_digest=sha256(content),
+                expected_size=len(content),
+                requested_duration_ms=15_000,
+            )
+        assert captured.value.code == "duration_mismatch"
 
 
 def test_technical_validation_rejects_indeterminate_frame_rate(
