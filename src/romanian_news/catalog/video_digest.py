@@ -208,6 +208,27 @@ class AcceptedPlanReference(NewsModel):
     plan: ArtifactReference
 
 
+class H3ReferenceMediaArtifact(NewsModel):
+    role: Literal["video", "audio"]
+    position: Annotated[int, Field(ge=0)]
+    file: ArtifactFile
+
+
+class H3ReferenceMediaProjection(NewsModel):
+    role: Literal["video", "audio"]
+    position: Annotated[int, Field(ge=0)]
+    reference: ArtifactReference
+    media_type: str
+    byte_size: Annotated[int, Field(gt=0)]
+
+
+class H3ReferencePackProjection(NewsModel):
+    pack_id: Sha256
+    approval_ref: str
+    manifest: ArtifactReference
+    media: tuple[H3ReferenceMediaProjection, ...]
+
+
 class AcceptedClipReference(ArtifactReference):
     byte_size: Annotated[int, Field(gt=0)]
 
@@ -800,6 +821,128 @@ def read_accepted_plan_reference(edition_id: EditionId) -> AcceptedPlanReference
         daily_report_version_id=row["daily_report_version_id"],
         policy_bundle_version_id=row["policy_bundle_version_id"],
         plan=_catalog_reference(row, "plan"),
+    )
+
+
+def record_h3_reference_pack(
+    pack_id: Sha256,
+    approval_ref: str,
+    manifest: ArtifactFile,
+    media: tuple[H3ReferenceMediaArtifact, ...],
+    *,
+    recorded_at: datetime,
+) -> None:
+    timestamp = _utc(recorded_at, "recorded_at")
+    if not approval_ref.strip() or not media:
+        raise ValueError("H3 reference pack needs approval and media")
+    for role in ("video", "audio"):
+        positions = sorted(item.position for item in media if item.role == role)
+        if positions != list(range(len(positions))) or not positions:
+            raise ValueError(f"H3 reference {role} positions must be nonempty and contiguous")
+
+    def record(connection: CatalogConnection) -> None:
+        for item in media:
+            _register_artifact(connection, item.file, timestamp)
+            if not _stored_artifact_matches(connection, item.file):
+                raise VideoDigestCheckpointConflictError("H3 reference media artifact conflicts")
+        _register_artifact(connection, manifest, timestamp)
+        if not _stored_artifact_matches(connection, manifest):
+            raise VideoDigestCheckpointConflictError("H3 reference manifest artifact conflicts")
+        connection.execute(
+            """
+            INSERT INTO video_digest_h3_reference_packs
+                (pack_id, manifest_artifact_version_id, approval_ref, created_at)
+            VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING
+            """,
+            (pack_id, manifest.version_id, approval_ref, timestamp),
+        )
+        row = connection.execute(
+            """
+            SELECT manifest_artifact_version_id, approval_ref
+            FROM video_digest_h3_reference_packs WHERE pack_id = %s
+            """,
+            (pack_id,),
+        ).fetchone()
+        if row is None or (row["manifest_artifact_version_id"], row["approval_ref"]) != (
+            manifest.version_id,
+            approval_ref,
+        ):
+            raise VideoDigestCheckpointConflictError("H3 reference pack identity conflicts")
+        for item in media:
+            connection.execute(
+                """
+                INSERT INTO video_digest_h3_reference_media
+                    (pack_id, role, position, artifact_version_id)
+                VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING
+                """,
+                (pack_id, item.role, item.position, item.file.version_id),
+            )
+        rows = connection.execute(
+            """
+            SELECT role, position, artifact_version_id
+            FROM video_digest_h3_reference_media WHERE pack_id = %s
+            ORDER BY role, position
+            """,
+            (pack_id,),
+        ).fetchall()
+        actual = tuple((row["role"], row["position"], row["artifact_version_id"]) for row in rows)
+        expected = tuple(sorted((item.role, item.position, item.file.version_id) for item in media))
+        if actual != expected:
+            raise VideoDigestCheckpointConflictError("H3 reference pack media conflicts")
+
+    _checkpoint_transaction(record)
+
+
+def read_h3_reference_pack_projection(pack_id: Sha256) -> H3ReferencePackProjection:
+    rows = catalog_query(
+        """
+        SELECT pack.pack_id, pack.approval_ref,
+               artifact.id AS manifest_artifact_id, version.id AS manifest_version_id,
+               version.content_digest AS manifest_version_digest,
+               file.content_digest AS manifest_content_digest,
+               file.r2_key AS manifest_r2_key
+        FROM video_digest_h3_reference_packs pack
+        JOIN artifact_versions version ON version.id = pack.manifest_artifact_version_id
+        JOIN artifacts artifact ON artifact.id = version.artifact_id
+        JOIN artifact_files file ON file.artifact_version_id = version.id
+        WHERE pack.pack_id = %s
+        """,
+        [pack_id],
+    )
+    if len(rows) != 1 or rows[0]["manifest_version_digest"] != rows[0]["manifest_content_digest"]:
+        raise VideoDigestCheckpointConflictError("H3 reference pack manifest is unavailable")
+    row = rows[0]
+    media_rows = catalog_query(
+        """
+        SELECT item.role, item.position,
+               artifact.id AS media_artifact_id, version.id AS media_version_id,
+               version.content_digest AS media_version_digest,
+               file.content_digest AS media_content_digest,
+               file.r2_key AS media_r2_key, file.media_type, file.byte_size
+        FROM video_digest_h3_reference_media item
+        JOIN artifact_versions version ON version.id = item.artifact_version_id
+        JOIN artifacts artifact ON artifact.id = version.artifact_id
+        JOIN artifact_files file ON file.artifact_version_id = version.id
+        WHERE item.pack_id = %s ORDER BY item.role, item.position
+        """,
+        [pack_id],
+    )
+    if any(item["media_version_digest"] != item["media_content_digest"] for item in media_rows):
+        raise VideoDigestCheckpointConflictError("H3 reference media digest conflicts")
+    return H3ReferencePackProjection(
+        pack_id=row["pack_id"],
+        approval_ref=row["approval_ref"],
+        manifest=_catalog_reference(row, "manifest"),
+        media=tuple(
+            H3ReferenceMediaProjection(
+                role=item["role"],
+                position=item["position"],
+                reference=_catalog_reference(item, "media"),
+                media_type=item["media_type"],
+                byte_size=item["byte_size"],
+            )
+            for item in media_rows
+        ),
     )
 
 

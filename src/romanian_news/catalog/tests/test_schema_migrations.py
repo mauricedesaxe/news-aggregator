@@ -98,6 +98,7 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         (12, "daily_report_repair_requests"),
         (13, "youtube_quarantine_releases"),
         (14, "jev_relevance_shadow"),
+        (15, "video_digest_h3_references"),
     )
     assert tuple(migration.version for migration in NEWS_CATALOG_MIGRATIONS) == tuple(
         range(1, len(NEWS_CATALOG_MIGRATIONS) + 1)
@@ -123,4 +124,5 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         "ef288ed9310aa098db525df84bb29a1ac9b1e460c13147e6a7301ca1b3bb342b",
         "6c0cb261d54f9f14053090ba54c70551ae4935d5ade3e8dee01194e64cdbb0a5",
         "8ea60fe7abe745d5c989fd0028f9cedab98d75465e9d63bac3e17d562df5a7d4",
+        "31c8cea32983b1c97da65c31ba88570417338d64744c5a008277fbad58d15b3d",
     )

@@ -233,8 +233,25 @@ def publish_private_video_object(
     retention: Literal["candidate-7d", "permanent"],
     source_lineage: str,
 ) -> None:
+    publish_private_reference_media_object(
+        key,
+        content,
+        content_type="video/mp4",
+        retention=retention,
+        source_lineage=source_lineage,
+    )
+
+
+def publish_private_reference_media_object(
+    key: str,
+    content: bytes,
+    *,
+    content_type: Literal["video/mp4", "audio/wav", "audio/mpeg"],
+    retention: Literal["candidate-7d", "permanent"],
+    source_lineage: str,
+) -> None:
     if not source_lineage.strip():
-        raise ValueError("Private video source lineage is required")
+        raise ValueError("Private media source lineage is required")
     digest = _sha256(content)
     metadata = {
         "sha256": digest,
@@ -246,14 +263,16 @@ def publish_private_video_object(
         client = _r2_client()
         head = _head_r2_object(client, NEWS_R2_BUCKET, key)
         if head is not None:
-            _require_matching_private_video_object(client, key, content, metadata, head)
+            _require_matching_private_video_object(
+                client, key, content, metadata, head, content_type
+            )
             return
         try:
             client.put_object(
                 Bucket=NEWS_R2_BUCKET,
                 Key=key,
                 Body=content,
-                ContentType="video/mp4",
+                ContentType=content_type,
                 CacheControl="private,no-store",
                 Metadata=metadata,
                 IfNoneMatch="*",
@@ -269,7 +288,7 @@ def publish_private_video_object(
         head = _head_r2_object(client, NEWS_R2_BUCKET, key)
         if head is None:
             raise ResearchObjectUnavailable(f"Private R2 object disappeared after write: {key}")
-        _require_matching_private_video_object(client, key, content, metadata, head)
+        _require_matching_private_video_object(client, key, content, metadata, head, content_type)
     except ResearchObjectIntegrityError:
         raise
     except ValueError as error:
@@ -379,6 +398,7 @@ def _require_matching_private_video_object(
     content: bytes,
     metadata: dict[str, str],
     head: _R2Head,
+    content_type: str,
 ) -> None:
     remote = _read_r2_body(client, NEWS_R2_BUCKET, key)
     actual = (
@@ -390,7 +410,7 @@ def _require_matching_private_video_object(
     )
     expected = (
         len(content),
-        "video/mp4",
+        content_type,
         "private,no-store",
         metadata,
         _sha256(content),

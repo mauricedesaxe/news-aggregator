@@ -94,6 +94,11 @@ NEWS_CATALOG_MIGRATIONS = (
         "jev_relevance_shadow",
         MIGRATIONS_PATH / "0014_jev_relevance_shadow.sql",
     ),
+    NewsCatalogMigration(
+        15,
+        "video_digest_h3_references",
+        MIGRATIONS_PATH / "0015_video_digest_h3_references.sql",
+    ),
 )
 
 
