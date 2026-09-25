@@ -73,7 +73,12 @@ def _configured(monkeypatch: pytest.MonkeyPatch, outcome: object) -> tuple[Mock,
     monkeypatch.setattr(
         generation_port,
         "read_prepared_paid_generation",
-        lambda _lease: SimpleNamespace(plan=SimpleNamespace(stories=("story",))),
+        lambda _lease: SimpleNamespace(
+            plan=SimpleNamespace(stories=("story",)),
+            verified_plan=SimpleNamespace(
+                plan=SimpleNamespace(stories=(SimpleNamespace(narration="English narration"),))
+            ),
+        ),
     )
     monkeypatch.setattr(generation_port, "read_generation_attempts", lambda _edition: ())
     monkeypatch.setattr(generation_port, "generate_next_candidate", lambda *_args, **_kw: outcome)
@@ -131,7 +136,9 @@ def test_generation_port_validates_candidate_then_advances(monkeypatch: pytest.M
     ).execute(action)
 
     assert isinstance(outcome, ActionAdvanced)
-    accepted.assert_called_once_with(action.lease, candidate, "story")
+    accepted.assert_called_once_with(
+        action.lease, candidate, "story", approved_narration="English narration"
+    )
     assembly.assert_not_called()
 
 
