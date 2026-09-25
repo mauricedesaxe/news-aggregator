@@ -79,22 +79,6 @@ def read_durable_feed_ids() -> frozenset[FeedId]:
     return frozenset(str(row["feed_id"]) for row in rows)
 
 
-def read_current_feed_snapshot_files() -> tuple[FeedSnapshotFile, ...]:
-    """Read the current file for each durable feed snapshot."""
-    rows = catalog_query(
-        """
-        SELECT substr(artifact.id, length('news:feed:') + 1) AS feed_id,
-               artifact.current_version_id AS version_id,
-               file.content_digest, file.r2_key
-        FROM artifacts artifact
-        JOIN artifact_files file ON file.artifact_version_id = artifact.current_version_id
-        WHERE artifact.kind = 'news_feed'
-        ORDER BY artifact.id
-        """
-    )
-    return tuple(FeedSnapshotFile.model_validate(row, strict=True) for row in rows)
-
-
 def read_feed_snapshot_files(
     version_ids: tuple[Sha256, ...],
 ) -> dict[Sha256, FeedSnapshotFile]:
