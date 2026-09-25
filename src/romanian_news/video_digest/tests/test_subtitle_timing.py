@@ -137,6 +137,37 @@ def test_audio_extraction_failure_is_recoverable_by_subtitle_fallback(
         provider.timings(SubtitleStrategy.PER_STORY, _requests(), Path("edition.mp4"))
 
 
+def test_zero_duration_word_uses_neighboring_verified_timestamps() -> None:
+    provider = subtitle_timing.FasterWhisperSubtitleTimingProvider(
+        lambda: SimpleNamespace(
+            transcribe=lambda *_args, **_kwargs: (
+                [
+                    SimpleNamespace(
+                        words=[
+                            SimpleNamespace(word="Hello", start=0.1, end=0.2),
+                            SimpleNamespace(word="little", start=0.3, end=0.3),
+                            SimpleNamespace(word="story", start=0.7, end=0.8),
+                        ]
+                    )
+                ],
+                None,
+            )
+        )
+    )
+    request = SubtitleTimingRequest(
+        story_position=0,
+        cue_count=1,
+        approved_text="Hello little story",
+        start_ms=0,
+        end_ms=1000,
+    )
+
+    result = provider.timings(SubtitleStrategy.WHOLE_EDITION, (request,), Path("edition.mp4"))
+
+    assert result[0][0].start_ms == 100
+    assert result[0][0].end_ms == 800
+
+
 def test_missing_words_interpolate_only_between_verified_anchors() -> None:
     words = (
         subtitle_timing.TimedWord("Hello", 100, 200),
@@ -154,6 +185,22 @@ def test_missing_words_interpolate_only_between_verified_anchors() -> None:
 
     assert result[0][0].start_ms == 100
     assert result[0][0].end_ms == 800
+
+
+def test_interpolation_borrows_one_millisecond_from_an_adjacent_anchor() -> None:
+    words = subtitle_timing._interpolate_words(
+        3,
+        {
+            0: subtitle_timing.TimedWord("S", 100, 200),
+            2: subtitle_timing.TimedWord("P", 200, 500),
+        },
+    )
+
+    assert [(word.start_ms, word.end_ms) for word in words] == [
+        (100, 200),
+        (200, 201),
+        (201, 500),
+    ]
 
 
 def test_missing_story_end_cannot_be_extrapolated_to_publish() -> None:

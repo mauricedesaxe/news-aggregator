@@ -113,9 +113,9 @@ class FasterWhisperSubtitleTimingProvider:
             )
             for segment in segments
             for word in segment.words or ()
-            if _normalized(word.word)
+            if _normalized(word.word) and round(word.end * 1000) > round(word.start * 1000)
         )
-        if not words or any(word.end_ms <= word.start_ms for word in words):
+        if not words:
             raise ValueError("Whisper returned no usable word timestamps")
         return words
 
@@ -203,7 +203,14 @@ def _interpolate_words(count: int, anchors: dict[int, TimedWord]) -> tuple[Timed
         left_time = anchors[left_index].end_ms
         right_time = anchors[right_index].start_ms
         if right_time - left_time < missing:
-            raise ValueError("Whisper timing has no room for unmatched words")
+            borrowed = missing - (right_time - left_time)
+            right_anchor = anchors[right_index]
+            if right_anchor.end_ms - right_anchor.start_ms <= borrowed:
+                raise ValueError("Whisper timing has no room for unmatched words")
+            spans[right_index] = TimedWord(
+                right_anchor.text, right_anchor.start_ms + borrowed, right_anchor.end_ms
+            )
+            right_time += borrowed
         for step in range(1, missing + 1):
             start = left_time + (right_time - left_time) * (step - 1) // missing
             end = left_time + (right_time - left_time) * step // missing

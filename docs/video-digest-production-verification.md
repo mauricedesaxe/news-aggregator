@@ -17,7 +17,7 @@ Verification on 2026-09-25 established these production facts:
 | Dagster deployment | Pass | The code location deployed successfully from the merged H3 reference registry commit |
 | Execution ownership | Decided | Dagster owns all background work; the unrelated Railway worker remains untouched |
 | Schedule ownership | Safe, inactive | `scheduled_video_digest` is registered `STOPPED` and excluded from production activation |
-| Subtitle timing | Code ready, quality gate open | The production timing provider and fallback are installed; English narration timing still needs a real-sample review |
+| Subtitle timing | English sample passed, production gate open | The [approved-video QA](video-digest-english-timing-qa.md) produced 12/12 valid cues with per-story fallback; an exact generated edition still needs reader playback review |
 | Incident delivery | Configuration pending | Terminal failure and deadline payloads are wired to an incoming webhook. The stopped five-minute monitor also reads durable publication, budget, and success-gap state. Configure and verify `BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL` before activation |
 | Video heartbeat | Configuration pending | A successful publication pings `BETTERSTACK_VIDEO_DIGEST_HEARTBEAT_URL`; create the Better Stack heartbeat before activation |
 
