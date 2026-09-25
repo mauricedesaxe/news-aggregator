@@ -195,6 +195,19 @@ class PlanningAttemptReference(NewsModel):
     accepted_plan_artifact_version_id: Sha256 | None
 
 
+class GenerationPreparationReference(NewsModel):
+    daily_report_version_id: Sha256
+    policy_bundle_version_id: Sha256
+    plan: ArtifactReference
+    authorization: ArtifactReference
+
+
+class AcceptedPlanReference(NewsModel):
+    daily_report_version_id: Sha256
+    policy_bundle_version_id: Sha256
+    plan: ArtifactReference
+
+
 class AcceptedClipReference(ArtifactReference):
     byte_size: Annotated[int, Field(gt=0)]
 
@@ -697,6 +710,97 @@ def read_planning_attempts(edition_id: EditionId) -> tuple[PlanningAttemptRefere
     if any(item.disposition == "accepted" for item in attempts[:-1]):
         raise VideoDigestCheckpointConflictError("Accepted planning attempt must be final")
     return attempts
+
+
+def read_generation_preparation(lease: SlotLease) -> GenerationPreparationReference:
+    rows = catalog_query(
+        """
+        SELECT edition.daily_report_version_id, edition.policy_bundle_version_id,
+               plan_artifact.id AS plan_artifact_id,
+               plan_version.id AS plan_version_id,
+               plan_file.content_digest AS plan_content_digest,
+               plan_file.r2_key AS plan_r2_key,
+               manifest_artifact.id AS authorization_artifact_id,
+               manifest_version.id AS authorization_version_id,
+               manifest_file.content_digest AS authorization_content_digest,
+               manifest_file.r2_key AS authorization_r2_key,
+               plan_version.content_digest AS plan_version_digest,
+               manifest_version.content_digest AS authorization_version_digest,
+               attempt.accepted_plan_artifact_version_id
+        FROM video_digest_slots AS slot
+        JOIN video_digest_editions AS edition ON edition.edition_id = slot.edition_id
+        JOIN video_digest_planning_attempts AS attempt
+          ON attempt.edition_id = edition.edition_id AND attempt.disposition = 'accepted'
+        JOIN artifact_versions AS plan_version
+          ON plan_version.id = edition.plan_artifact_version_id
+        JOIN artifacts AS plan_artifact ON plan_artifact.id = plan_version.artifact_id
+        JOIN artifact_files AS plan_file ON plan_file.artifact_version_id = plan_version.id
+        JOIN artifact_versions AS manifest_version
+          ON manifest_version.id = edition.verification_manifest_artifact_version_id
+        JOIN artifacts AS manifest_artifact
+          ON manifest_artifact.id = manifest_version.artifact_id
+        JOIN artifact_files AS manifest_file
+          ON manifest_file.artifact_version_id = manifest_version.id
+        WHERE slot.slot_id = %s AND slot.edition_id = %s
+          AND slot.lease_owner_token = %s AND slot.claim_count = %s
+          AND slot.stage = 'generating' AND edition.planning_contract = 'verified_v1'
+        """,
+        [lease.slot_id, lease.edition_id, lease.owner_token, lease.claim_count],
+    )
+    if len(rows) != 1:
+        raise VideoDigestCheckpointConflictError(
+            "Generating slot has no unique verified preparation for its lease"
+        )
+    row = rows[0]
+    if (
+        row["accepted_plan_artifact_version_id"] != row["plan_version_id"]
+        or row["plan_version_digest"] != row["plan_content_digest"]
+        or row["authorization_version_digest"] != row["authorization_content_digest"]
+    ):
+        raise VideoDigestCheckpointConflictError(
+            "Verified generation preparation conflicts with its artifact versions"
+        )
+    return GenerationPreparationReference(
+        daily_report_version_id=row["daily_report_version_id"],
+        policy_bundle_version_id=row["policy_bundle_version_id"],
+        plan=_catalog_reference(row, "plan"),
+        authorization=_catalog_reference(row, "authorization"),
+    )
+
+
+def read_accepted_plan_reference(edition_id: EditionId) -> AcceptedPlanReference:
+    rows = catalog_query(
+        """
+        SELECT edition.daily_report_version_id, edition.policy_bundle_version_id,
+               artifact.id AS plan_artifact_id, version.id AS plan_version_id,
+               version.content_digest AS plan_version_digest,
+               file.content_digest AS plan_content_digest, file.r2_key AS plan_r2_key,
+               attempt.accepted_plan_artifact_version_id
+        FROM video_digest_editions AS edition
+        JOIN video_digest_planning_attempts AS attempt
+          ON attempt.edition_id = edition.edition_id AND attempt.disposition = 'accepted'
+        JOIN artifact_versions AS version ON version.id = edition.plan_artifact_version_id
+        JOIN artifacts AS artifact ON artifact.id = version.artifact_id
+        JOIN artifact_files AS file ON file.artifact_version_id = version.id
+        WHERE edition.edition_id = %s AND edition.planning_contract = 'verified_v1'
+        """,
+        [edition_id],
+    )
+    if len(rows) != 1:
+        raise VideoDigestCheckpointConflictError("Edition has no unique accepted verified plan")
+    row = rows[0]
+    if (
+        row["accepted_plan_artifact_version_id"] != row["plan_version_id"]
+        or row["plan_version_digest"] != row["plan_content_digest"]
+    ):
+        raise VideoDigestCheckpointConflictError(
+            "Accepted plan conflicts with its artifact version"
+        )
+    return AcceptedPlanReference(
+        daily_report_version_id=row["daily_report_version_id"],
+        policy_bundle_version_id=row["policy_bundle_version_id"],
+        plan=_catalog_reference(row, "plan"),
+    )
 
 
 def schedule_slot(slot: ScheduledSlot, *, recorded_at: datetime) -> ScheduledSlot:

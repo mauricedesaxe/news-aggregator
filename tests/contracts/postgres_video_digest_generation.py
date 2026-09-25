@@ -1116,6 +1116,28 @@ def test_edition_verification_records_and_replays_an_exact_manifest(
         )
 
 
+def test_generation_preparation_reads_exact_plan_and_manifest_for_fenced_slot(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _GenerationPipeline(seed=73)
+    plan = pipeline.checkpoint_plan()
+    pipeline.verify_story(0)
+    manifest = pipeline.verify_edition()
+
+    accepted = video_digest_catalog.read_accepted_plan_reference(pipeline.edition.edition_id)
+    preparation = video_digest_catalog.read_generation_preparation(pipeline.lease)
+
+    assert accepted.plan.version_id == plan.artifact_version_id
+    assert preparation.plan == accepted.plan
+    assert preparation.authorization.version_id == manifest.version_id
+    assert preparation.daily_report_version_id == pipeline.edition.daily_report_version_id
+
+    stale = pipeline.lease.model_copy(update={"claim_count": pipeline.lease.claim_count + 1})
+    with pytest.raises(VideoDigestCheckpointConflictError, match="no unique verified preparation"):
+        video_digest_catalog.read_generation_preparation(stale)
+
+
 def test_edition_verification_requires_every_mandatory_story(
     postgres_news_schema: str,
 ) -> None:
