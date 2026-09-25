@@ -257,6 +257,67 @@ class GenerationAttemptReference(NewsModel):
     validation_evidence: ArtifactReference | None = None
 
 
+FalQueueStatus = Literal["IN_QUEUE", "IN_PROGRESS", "COMPLETED"]
+
+
+class FalQueueState(NewsModel):
+    request_id: Sha256
+    provider_receipt_id: str
+    provider_status: FalQueueStatus
+    transition_index: Annotated[int, Field(ge=0)]
+    entered_at: AwareDatetime
+
+
+class StalledFalQueueIncidentCandidate(FalQueueState):
+    alert_id: Sha256
+    slot_id: str
+    edition_id: Sha256
+    stalled_at: AwareDatetime
+
+
+def read_stalled_fal_queue_incidents(
+    as_of: datetime,
+) -> tuple[StalledFalQueueIncidentCandidate, ...]:
+    cutoff = _utc(as_of, "as_of") - timedelta(minutes=20)
+    rows = catalog_query(
+        """
+        SELECT request.request_id, request.provider_receipt_id,
+               request.edition_id, slot.slot_id,
+               state.provider_status, state.transition_index, state.entered_at
+        FROM video_digest_generation_requests AS request
+        JOIN video_digest_slots AS slot ON slot.edition_id = request.edition_id
+        JOIN LATERAL (
+            SELECT provider_status, transition_index, entered_at
+            FROM video_digest_fal_queue_states
+            WHERE request_id = request.request_id
+            ORDER BY transition_index DESC
+            LIMIT 1
+        ) AS state ON TRUE
+        WHERE request.stage = 'submitted' AND slot.stage = 'generating'
+          AND state.provider_status IN ('IN_QUEUE', 'IN_PROGRESS')
+          AND state.entered_at <= %s
+        ORDER BY request.request_id
+        """,
+        (cutoff,),
+    )
+    return tuple(
+        StalledFalQueueIncidentCandidate(
+            request_id=str(row["request_id"]),
+            provider_receipt_id=str(row["provider_receipt_id"]),
+            provider_status=cast(FalQueueStatus, str(row["provider_status"])),
+            transition_index=int(row["transition_index"]),
+            entered_at=_datetime(row["entered_at"]),
+            stalled_at=_datetime(row["entered_at"]) + timedelta(minutes=20),
+            slot_id=str(row["slot_id"]),
+            edition_id=str(row["edition_id"]),
+            alert_id=sha256(
+                f"fal-queue-stalled:{row['request_id']}:{row['transition_index']}".encode()
+            ),
+        )
+        for row in rows
+    )
+
+
 def read_slot_resume_state(slot_id: SlotId) -> SlotResumeState:
     rows = catalog_query(
         """
@@ -1693,6 +1754,67 @@ def checkpoint_generation_submission(
             stage=GenerationStage.SUBMITTED,
             provider_receipt_id=receipt_id,
             cost=cost,
+        )
+
+    return _checkpoint_transaction(checkpoint)
+
+
+def checkpoint_fal_queue_state(
+    lease: SlotLease,
+    request_id: GenerationRequestId,
+    *,
+    provider_receipt_id: str,
+    provider_status: FalQueueStatus,
+    recorded_at: datetime,
+) -> FalQueueState:
+    _utc(recorded_at, "recorded_at")
+    if provider_status not in {"IN_QUEUE", "IN_PROGRESS", "COMPLETED"}:
+        raise ValueError("Fal queue status is invalid")
+    receipt_id = provider_receipt_id.strip()
+    if not receipt_id:
+        raise ValueError("provider_receipt_id must not be empty")
+
+    def checkpoint(connection: CatalogConnection) -> FalQueueState:
+        slot_row, current = _lock_slot_for_lease(connection, lease)
+        row = _required_generation_request(connection, request_id, lease.edition_id)
+        if (
+            str(slot_row["stage"]) != SlotStage.GENERATING.value
+            or str(row["stage"]) != GenerationStage.SUBMITTED.value
+            or str(row["provider_receipt_id"]) != receipt_id
+        ):
+            raise VideoDigestCheckpointConflictError(
+                "Stored generation request conflicts with the Fal queue state"
+            )
+        prior = connection.execute(
+            """
+            SELECT provider_status, transition_index, entered_at
+            FROM video_digest_fal_queue_states
+            WHERE request_id = %s
+            ORDER BY transition_index DESC
+            LIMIT 1
+            """,
+            (request_id,),
+        ).fetchone()
+        if prior is not None and prior["provider_status"] == provider_status:
+            transition_index = int(prior["transition_index"])
+            entered_at = _datetime(prior["entered_at"])
+        else:
+            transition_index = 0 if prior is None else int(prior["transition_index"]) + 1
+            entered_at = current
+            connection.execute(
+                """
+                INSERT INTO video_digest_fal_queue_states
+                    (request_id, transition_index, provider_status, entered_at)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (request_id, transition_index, provider_status, entered_at),
+            )
+        return FalQueueState(
+            request_id=request_id,
+            provider_receipt_id=receipt_id,
+            provider_status=provider_status,
+            transition_index=transition_index,
+            entered_at=entered_at,
         )
 
     return _checkpoint_transaction(checkpoint)

@@ -69,6 +69,13 @@ and fail closed.
 After the receipt reaches immutable R2 and PostgreSQL, every restart polls the stored Fal
 request ID. The workflow never submits another request while one is active.
 
+Each observed Fal status change is appended to PostgreSQL with the database time at first
+observation. Repeated polls of the same status retain that entry time. The status payload has no
+transition timestamp, so the clock starts when the worker first sees the status. A query returns
+a stable incident candidate once the latest `IN_QUEUE` or `IN_PROGRESS` state has lasted 20
+minutes. `COMPLETED` and terminal requests produce no candidate. The candidate ID includes the
+request and transition index, so a new queue state starts a distinct timer across restarts.
+
 ## Media boundary
 
 Fal completion publishes the raw response and candidate bytes, then returns `CandidateReady`.

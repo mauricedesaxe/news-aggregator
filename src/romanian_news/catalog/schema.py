@@ -104,6 +104,11 @@ NEWS_CATALOG_MIGRATIONS = (
         "video_digest_slot_selection",
         MIGRATIONS_PATH / "0016_video_digest_slot_selection.sql",
     ),
+    NewsCatalogMigration(
+        17,
+        "video_digest_fal_queue_states",
+        MIGRATIONS_PATH / "0017_video_digest_fal_queue_states.sql",
+    ),
 )
 
 

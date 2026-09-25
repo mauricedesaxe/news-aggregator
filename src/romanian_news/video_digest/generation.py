@@ -18,6 +18,7 @@ from romanian_news.catalog.artifacts import (
 )
 from romanian_news.catalog.video_digest import (
     GenerationAttemptReference,
+    checkpoint_fal_queue_state,
     checkpoint_generation_failure,
     checkpoint_generation_request,
     checkpoint_generation_response,
@@ -500,6 +501,13 @@ def _poll_submitted(
         raise
     if status.request_id != receipt.request_id:
         raise ValueError("Fal status receipt identity changed")
+    checkpoint_fal_queue_state(
+        lease,
+        active.request.request_id,
+        provider_receipt_id=receipt.request_id,
+        provider_status=status.status,
+        recorded_at=datetime.now(UTC),
+    )
     if status.status != "COMPLETED":
         return GenerationInProgress(
             request_id=active.request.request_id,
