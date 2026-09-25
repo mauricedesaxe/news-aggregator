@@ -11,12 +11,18 @@ import psycopg
 import pytest
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
+from psycopg.types.json import Jsonb
 
 import romanian_news.catalog.schema as news_schema
 import romanian_news.catalog.video_digest as video_digest_catalog
+import romanian_news.catalog.video_digest_selection as video_selection_catalog
 import romanian_news.catalog_transport as catalog_transport
 from romanian_news import BUCHAREST
 from romanian_news.catalog.artifacts import artifact_file
+from romanian_news.catalog.report_inputs import (
+    CurrentDailyReportRecord,
+    read_current_daily_report_record,
+)
 from romanian_news.catalog.schema import NewsCatalogSchemaError, ensure_news_catalog_schema
 from romanian_news.video_digest.errors import (
     VideoDigestCheckpointConflictError,
@@ -49,8 +55,10 @@ from romanian_news.video_digest.models import (
     publication_id,
     scheduled_slot_id,
 )
+from romanian_news.video_digest.selection import select_slot_subjects
 from tests.contracts.video_digest_planning_fixtures import accepted_planning_files
 from tests.postgres_catalog import TEST_POSTGRES_DSN
+from tests.worker.test_video_digest_source import _report as selection_test_report
 
 
 def _sha256_id(value: int) -> str:
@@ -344,7 +352,7 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         ).fetchall()
 
     assert "debt_transcript_projection_items" not in tables
-    assert len(tables) == 60
+    assert len(tables) == 61
     assert migrations == [
         (1, "initial", news_schema.NEWS_CATALOG_MIGRATIONS[0].sha256),
         (2, "video_digest", news_schema.NEWS_CATALOG_MIGRATIONS[1].sha256),
@@ -369,7 +377,145 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         (13, "youtube_quarantine_releases", news_schema.NEWS_CATALOG_MIGRATIONS[12].sha256),
         (14, "jev_relevance_shadow", news_schema.NEWS_CATALOG_MIGRATIONS[13].sha256),
         (15, "video_digest_h3_references", news_schema.NEWS_CATALOG_MIGRATIONS[14].sha256),
+        (16, "video_digest_slot_selection", news_schema.NEWS_CATALOG_MIGRATIONS[15].sha256),
     ]
+
+
+def test_video_slot_freezes_missing_report_before_later_head_appears(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    scheduled_at = datetime(2026, 9, 25, 9, tzinfo=UTC)
+    slot = ScheduledSlot(
+        slot_id=scheduled_slot_id(SlotName.MIDDAY, scheduled_at),
+        name=SlotName.MIDDAY,
+        scheduled_at=scheduled_at,
+        bucharest_day=scheduled_at.astimezone(BUCHAREST).date(),
+    )
+    video_digest_catalog.schedule_slot(slot, recorded_at=scheduled_at)
+    assert video_selection_catalog.capture_slot_report_source(slot) is None
+
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN) as connection:
+        input_version = _record_artifact_versions(connection, 9000, 1)[0]
+        run_id, report_version = "a" * 64, "b" * 64
+        connection.execute(
+            """INSERT INTO runs
+               (id, operation_key, executor_kind, implementation_ref, parameters_json,
+                actor, status, idempotency_key, started_at, completed_at)
+               VALUES (%s, 'test', 'test', 'test', '{}'::jsonb, 'test', 'succeeded',
+                       %s, %s, %s)""",
+            (run_id, run_id, scheduled_at, scheduled_at),
+        )
+        connection.execute(
+            """INSERT INTO artifacts
+               (id, kind, title, authority_class, lifecycle_state, visibility, created_at)
+               VALUES (%s, 'news_daily_report', 'Report', 'test', 'active', 'private', %s)""",
+            (f"news:daily:{slot.bucharest_day.isoformat()}", scheduled_at),
+        )
+        connection.execute(
+            """INSERT INTO artifact_versions
+               (id, artifact_id, schema_version, content_digest, produced_by_run_id, created_at)
+               VALUES (%s, %s, 3, %s, %s, %s)""",
+            (
+                report_version,
+                f"news:daily:{slot.bucharest_day.isoformat()}",
+                report_version,
+                run_id,
+                scheduled_at,
+            ),
+        )
+        connection.execute(
+            """INSERT INTO artifact_files
+               (id, artifact_version_id, r2_key, media_type, content_digest, byte_size)
+               VALUES (%s, %s, %s, 'application/json', %s, 2)""",
+            ("report-file", report_version, "reports/test.json", report_version),
+        )
+        connection.execute(
+            """INSERT INTO run_inputs
+               (run_id, position, artifact_version_id, role, selected_content_digest,
+                selection_method)
+               VALUES (%s, 0, %s, 'themes', %s, 'test')""",
+            (run_id, input_version, input_version),
+        )
+        connection.execute(
+            """INSERT INTO run_outputs
+               (run_id, position, artifact_version_id, role)
+               VALUES (%s, 0, %s, 'report')""",
+            (run_id, report_version),
+        )
+        connection.execute(
+            """UPDATE artifacts SET current_version_id = %s, current_run_id = %s
+               WHERE id = %s""",
+            (report_version, run_id, f"news:daily:{slot.bucharest_day.isoformat()}"),
+        )
+
+    assert read_current_daily_report_record(slot.bucharest_day) is not None
+    assert video_selection_catalog.capture_slot_report_source(slot) is None
+
+
+def test_video_slot_selection_is_durable_and_binds_claimed_edition(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    now = datetime(2026, 9, 25, 6, tzinfo=UTC)
+    slot = ScheduledSlot(
+        slot_id=scheduled_slot_id(SlotName.MORNING, now),
+        name=SlotName.MORNING,
+        scheduled_at=now,
+        bucharest_day=now.astimezone(BUCHAREST).date(),
+    )
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN) as connection:
+        report_version, policy_version = _record_artifact_versions(connection, 9200, 2)
+    video_digest_catalog.schedule_slot(slot, recorded_at=datetime.now(UTC))
+    source = CurrentDailyReportRecord(
+        day=slot.bucharest_day,
+        version_id=report_version,
+        run_id="c" * 64,
+        content_digest="d" * 64,
+        r2_key="reports/selection.json",
+        input_time=now,
+    )
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN) as connection:
+        connection.execute(
+            """INSERT INTO video_digest_slot_sources
+               (slot_id, source_record, observed_at) VALUES (%s, %s, %s)""",
+            (slot.slot_id, Jsonb(source.model_dump(mode="json")), now),
+        )
+    selection = select_slot_subjects(
+        selection_test_report(day=slot.bucharest_day),
+        report_version,
+        (),
+        lambda *_args: pytest.fail("first slot used semantic adjudication"),
+    )
+    stored = video_selection_catalog.record_slot_subject_selection(slot, selection)
+    assert stored == selection
+    assert video_selection_catalog.record_slot_subject_selection(slot, selection) == selection
+    assert video_selection_catalog.read_slot_subject_selection(slot.slot_id) == selection
+    identity = EditionIdentity(
+        edition_id=edition_id(report_version, policy_version, selection.digest),
+        daily_report_version_id=report_version,
+        policy_bundle_version_id=policy_version,
+        selection_digest=selection.digest,
+    )
+    claimed = video_digest_catalog.claim_slot(
+        slot.slot_id,
+        identity,
+        owner_token="contract",
+        now=now,
+        lease_duration=timedelta(minutes=15),
+    )
+    assert isinstance(claimed, ClaimedSlot)
+    assert video_digest_catalog.read_edition_identity(identity.edition_id) == identity
+    assert video_selection_catalog.read_edition_subject_selection(identity.edition_id) == selection
+    with pytest.raises(psycopg.IntegrityError):
+        with psycopg.connect(news_schema.NEWS_POSTGRES_DSN) as connection:
+            connection.execute(
+                "UPDATE video_digest_slot_sources SET selection_digest = %s WHERE slot_id = %s",
+                ("f" * 64, slot.slot_id),
+            )
 
 
 def test_planning_migration_grandfathers_existing_editions_without_authorizing_paid_work(

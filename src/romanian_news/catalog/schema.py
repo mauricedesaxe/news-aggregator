@@ -99,6 +99,11 @@ NEWS_CATALOG_MIGRATIONS = (
         "video_digest_h3_references",
         MIGRATIONS_PATH / "0015_video_digest_h3_references.sql",
     ),
+    NewsCatalogMigration(
+        16,
+        "video_digest_slot_selection",
+        MIGRATIONS_PATH / "0016_video_digest_slot_selection.sql",
+    ),
 )
 
 

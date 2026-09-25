@@ -21,6 +21,7 @@ def test_news_schema_contains_its_catalog_boundaries() -> None:
         "video_digest_publication_attempts",
         "video_digest_feedback",
         "video_digest_feedback_stories",
+        "video_digest_slot_sources",
     } <= news_tables
     assert {
         "video_digest_editions_require_initial_state",
@@ -64,6 +65,9 @@ def test_news_schema_contains_its_catalog_boundaries() -> None:
         "video_digest_feedback_reject_deletes",
         "video_digest_feedback_stories_reject_updates",
         "video_digest_feedback_stories_reject_deletes",
+        "video_digest_slot_sources_protect_selection",
+        "video_digest_slot_sources_reject_deletes",
+        "video_digest_editions_protect_selection",
     } <= news_triggers
 
 
@@ -99,6 +103,7 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         (13, "youtube_quarantine_releases"),
         (14, "jev_relevance_shadow"),
         (15, "video_digest_h3_references"),
+        (16, "video_digest_slot_selection"),
     )
     assert tuple(migration.version for migration in NEWS_CATALOG_MIGRATIONS) == tuple(
         range(1, len(NEWS_CATALOG_MIGRATIONS) + 1)
@@ -125,4 +130,5 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         "6c0cb261d54f9f14053090ba54c70551ae4935d5ade3e8dee01194e64cdbb0a5",
         "8ea60fe7abe745d5c989fd0028f9cedab98d75465e9d63bac3e17d562df5a7d4",
         "31c8cea32983b1c97da65c31ba88570417338d64744c5a008277fbad58d15b3d",
+        "3b135e22c7ee7aa4ff4e50820e3f1743a664b0744885f15a7352e0b96cd574ab",
     )

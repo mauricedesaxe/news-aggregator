@@ -19,9 +19,10 @@ class VideoDigestPolicyBundle(NewsModel):
     verification_model: NonEmptyText
     planning_prompt_digest: Sha256
     verification_prompt_digest: Sha256
-    coverage_policy: Literal["main-sections-exact-report-order-v1"] = (
-        "main-sections-exact-report-order-v1"
-    )
+    coverage_policy: Literal[
+        "main-sections-exact-report-order-v1",
+        "selected-main-sections-exact-report-order-v2",
+    ] = "main-sections-exact-report-order-v1"
     citation_policy: Literal["exact-report-subject-citations-v1"] = (
         "exact-report-subject-citations-v1"
     )
@@ -64,6 +65,7 @@ class ScreenplayPlan(NewsModel):
     daily_report_version_id: Sha256
     policy_bundle_version_id: Sha256
     policy_bundle_digest: Sha256
+    selection_digest: Sha256 | None = None
     stories: Annotated[tuple[ScreenplayStory, ...], Field(min_length=1)]
 
     @model_validator(mode="after")
@@ -71,6 +73,7 @@ class ScreenplayPlan(NewsModel):
         expected_edition_id = edition_id(
             self.daily_report_version_id,
             self.policy_bundle_version_id,
+            self.selection_digest,
         )
         if self.edition_id != expected_edition_id:
             raise ValueError("Screenplay edition ID does not match its immutable inputs")
@@ -172,8 +175,25 @@ def create_screenplay_plan(
     policy_bundle_version_id: Sha256,
     policy: VideoDigestPolicyBundle,
     stories: tuple[ScreenplayStory, ...],
+    *,
+    selected_subject_ids: tuple[Sha256, ...] | None = None,
+    selection_digest: Sha256 | None = None,
 ) -> ScreenplayPlan:
+    if (selected_subject_ids is None) != (selection_digest is None):
+        raise ValueError("Selected subjects and selection digest must be supplied together")
+    if (
+        selected_subject_ids is not None
+        and policy.coverage_policy != "selected-main-sections-exact-report-order-v2"
+    ):
+        raise ValueError("Selected subjects require the selected-main coverage policy")
     main_sections = tuple(section for section in report.sections if section.tier == "main")
+    if selected_subject_ids is not None:
+        selected = set(selected_subject_ids)
+        if selected_subject_ids != tuple(
+            section.theme_id for section in main_sections if section.theme_id in selected
+        ):
+            raise ValueError("Selected subjects must be main sections in report order")
+        main_sections = tuple(section for section in main_sections if section.theme_id in selected)
     expected_subject_ids = tuple(section.theme_id for section in main_sections)
     actual_subject_ids = tuple(story.report_subject_id for story in stories)
     if actual_subject_ids != expected_subject_ids:
@@ -198,10 +218,11 @@ def create_screenplay_plan(
             )
 
     return ScreenplayPlan(
-        edition_id=edition_id(daily_report_version_id, policy_bundle_version_id),
+        edition_id=edition_id(daily_report_version_id, policy_bundle_version_id, selection_digest),
         daily_report_version_id=daily_report_version_id,
         policy_bundle_version_id=policy_bundle_version_id,
         policy_bundle_digest=policy_bundle_digest(policy),
+        selection_digest=selection_digest,
         stories=stories,
     )
 
@@ -227,6 +248,9 @@ def accept_planning_attempt(
     report: DailyReport,
     policy: VideoDigestPolicyBundle,
     attempt: PlanningAttempt,
+    *,
+    selected_subject_ids: tuple[Sha256, ...] | None = None,
+    selection_digest: Sha256 | None = None,
 ) -> VerifiedDigestPlan:
     attempt = PlanningAttempt.model_validate(attempt.model_dump())
     if attempt.disposition != "accepted":
@@ -237,6 +261,8 @@ def accept_planning_attempt(
         attempt.plan.policy_bundle_version_id,
         policy,
         attempt.plan.stories,
+        selected_subject_ids=selected_subject_ids,
+        selection_digest=selection_digest,
     )
     if checked_plan != attempt.plan:
         raise ValueError("Planning attempt does not match the supplied report and policy")

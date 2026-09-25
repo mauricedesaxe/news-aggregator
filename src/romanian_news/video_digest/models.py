@@ -100,27 +100,28 @@ class PolicyBundleIdentity(NewsModel):
 def edition_id(
     daily_report_version_id: Sha256,
     policy_bundle_version_id: Sha256,
+    selection_digest: Sha256 | None = None,
 ) -> EditionId:
-    return EditionId(
-        sha256(
-            canonical_json(
-                {
-                    "daily_report_version_id": daily_report_version_id,
-                    "policy_bundle_version_id": policy_bundle_version_id,
-                }
-            )
-        )
-    )
+    inputs = {
+        "daily_report_version_id": daily_report_version_id,
+        "policy_bundle_version_id": policy_bundle_version_id,
+    }
+    if selection_digest is not None:
+        inputs["selection_digest"] = selection_digest
+    return EditionId(sha256(canonical_json(inputs)))
 
 
 class EditionIdentity(NewsModel):
     edition_id: EditionIdField
     daily_report_version_id: Sha256
     policy_bundle_version_id: Sha256
+    selection_digest: Sha256 | None = None
 
     @model_validator(mode="after")
     def validate_edition_id(self) -> EditionIdentity:
-        expected = edition_id(self.daily_report_version_id, self.policy_bundle_version_id)
+        expected = edition_id(
+            self.daily_report_version_id, self.policy_bundle_version_id, self.selection_digest
+        )
         if self.edition_id != expected:
             raise ValueError("Edition ID does not match its report and policy bundle versions")
         return self

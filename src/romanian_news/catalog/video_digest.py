@@ -231,7 +231,8 @@ class H3ReferencePackProjection(NewsModel):
 
 def read_edition_identity(edition_id: EditionId) -> EditionIdentity:
     rows = catalog_query(
-        """SELECT edition_id, daily_report_version_id, policy_bundle_version_id
+        """SELECT edition_id, daily_report_version_id, policy_bundle_version_id,
+                  selection_digest
            FROM video_digest_editions WHERE edition_id = %s""",
         [edition_id],
     )
@@ -3858,25 +3859,44 @@ def _claim_scheduled_slot(
     expires_at: datetime,
     recorded_at: datetime,
 ) -> ClaimResult:
+    if edition.selection_digest is not None:
+        source = connection.execute(
+            """SELECT source_record, selection_digest, selection
+               FROM video_digest_slot_sources WHERE slot_id = %s FOR UPDATE""",
+            (slot_id,),
+        ).fetchone()
+        if (
+            source is None
+            or source["selection_digest"] != edition.selection_digest
+            or source["source_record"] is None
+            or source["selection"] is None
+            or not source["selection"].get("selected_sections")
+            or source["source_record"]["version_id"] != edition.daily_report_version_id
+        ):
+            raise VideoDigestCheckpointConflictError(
+                "Claimed edition does not match its frozen slot selection"
+            )
     connection.execute(
         """
         INSERT INTO video_digest_editions
-            (edition_id, daily_report_version_id, policy_bundle_version_id,
+            (edition_id, daily_report_version_id, policy_bundle_version_id, selection_digest,
              subtitle_state, created_at, updated_at)
-        VALUES (%s, %s, %s, 'pending', %s, %s)
+        VALUES (%s, %s, %s, %s, 'pending', %s, %s)
         ON CONFLICT DO NOTHING
         """,
         (
             edition.edition_id,
             edition.daily_report_version_id,
             edition.policy_bundle_version_id,
+            edition.selection_digest,
             recorded_at,
             recorded_at,
         ),
     )
     edition_row = connection.execute(
         """
-        SELECT edition_id, daily_report_version_id, policy_bundle_version_id
+        SELECT edition_id, daily_report_version_id, policy_bundle_version_id,
+               selection_digest
         FROM video_digest_editions
         WHERE edition_id = %s
         FOR UPDATE
@@ -3887,10 +3907,12 @@ def _claim_scheduled_slot(
         str(edition_row["edition_id"]),
         str(edition_row["daily_report_version_id"]),
         str(edition_row["policy_bundle_version_id"]),
+        edition_row["selection_digest"],
     ) != (
         edition.edition_id,
         edition.daily_report_version_id,
         edition.policy_bundle_version_id,
+        edition.selection_digest,
     ):
         raise VideoDigestCheckpointConflictError(
             "Stored video digest edition identity conflicts with the claim request"

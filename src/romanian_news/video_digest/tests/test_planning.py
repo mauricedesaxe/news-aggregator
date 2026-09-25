@@ -196,6 +196,37 @@ def test_complete_plan_contains_each_main_subject_once_in_report_order() -> None
     assert EXCLUDED not in {story.report_subject_id for story in plan.stories}
 
 
+def test_later_slot_plan_covers_only_its_exact_selected_subjects() -> None:
+    policy = _policy(coverage_policy="selected-main-sections-exact-report-order-v2")
+    digest = "c" * 64
+    plan = create_screenplay_plan(
+        _report(),
+        REPORT_VERSION,
+        POLICY_VERSION,
+        policy,
+        (_stories()[1],),
+        selected_subject_ids=(MAIN_TWO,),
+        selection_digest=digest,
+    )
+    assert tuple(story.report_subject_id for story in plan.stories) == (MAIN_TWO,)
+    verified = accept_planning_attempt(
+        _report(),
+        policy,
+        _attempt(plan, policy),
+        selected_subject_ids=(MAIN_TWO,),
+        selection_digest=digest,
+    )
+    assert verified.plan == plan
+    with pytest.raises(ValueError, match="exactly cover"):
+        accept_planning_attempt(
+            _report(),
+            policy,
+            _attempt(plan, policy),
+            selected_subject_ids=(MAIN_ONE,),
+            selection_digest=digest,
+        )
+
+
 def test_plan_identity_is_stable_and_sensitive_to_report_and_policy() -> None:
     report = _report()
     stories = _stories()
