@@ -103,8 +103,10 @@ uv run vulture
 uv run xenon --max-absolute C --max-modules B --max-average A src/romanian_news
 uv run dg check defs
 bd lint
-bd preflight
 ```
+
+`bd preflight --check` runs Go-toolchain checks against the current repository and fails in this
+Python project. Use `bd lint` for tracker validation and the Python checks above for release readiness.
 
 Inspect production variable names without printing their values. The required public-media names must
 be present in both relevant services before probing R2. Never place credentials in command history,
