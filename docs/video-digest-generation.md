@@ -10,6 +10,23 @@ not choose story positions or attempt indexes.
 reference assets, and the production generation policy. It returns either a candidate for the
 media checks in `news-nvs.5`, a completed edition, or a typed terminal failure.
 
+## Approved H3 references
+
+An operator imports approved host video and voice audio files with an explicit approval reference:
+
+```sh
+uv run python -m romanian_news.video_digest.references import \
+  --video /path/to/approved-host.mp4 \
+  --audio /path/to/approved-voice.wav \
+  --approval-ref issue-11-approved-assets
+```
+
+The command prints a content-derived pack ID. It stores media in private R2, records each exact
+artifact version and ordered role in PostgreSQL, and stores an immutable manifest containing the
+approval reference. `verify <pack-id>` re-reads and hashes every object. Runtime generation must
+read the exact pack ID through `read_h3_reference_pack()`; it must not choose media implicitly.
+The approved feasibility video is provenance for this workflow, not itself a reference pack.
+
 The workflow uses the existing request checkpoints. A new catalog read projection exposes the
 ordered stories, attempts, receipts, responses, and candidates needed to resume. PostgreSQL
 still enforces every transition selected by the reducer.

@@ -1666,3 +1666,34 @@ BEGIN SELECT RAISE(ABORT, 'news_jev_shadow_receipts are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS news_jev_shadow_receipts_reject_deletes
 BEFORE DELETE ON news_jev_shadow_receipts
 BEGIN SELECT RAISE(ABORT, 'news_jev_shadow_receipts are immutable'); END;
+
+CREATE TABLE IF NOT EXISTS video_digest_h3_reference_packs (
+    pack_id TEXT PRIMARY KEY,
+    manifest_artifact_version_id TEXT NOT NULL UNIQUE REFERENCES artifact_versions(id),
+    approval_ref TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS video_digest_h3_reference_media (
+    pack_id TEXT NOT NULL REFERENCES video_digest_h3_reference_packs(pack_id),
+    role TEXT NOT NULL CHECK (role IN ('video', 'audio')),
+    position INTEGER NOT NULL CHECK (position >= 0),
+    artifact_version_id TEXT NOT NULL REFERENCES artifact_versions(id),
+    PRIMARY KEY (pack_id, role, position)
+);
+
+CREATE TRIGGER IF NOT EXISTS video_digest_h3_reference_packs_reject_updates
+BEFORE UPDATE ON video_digest_h3_reference_packs
+BEGIN SELECT RAISE(ABORT, 'video_digest_h3_reference_packs are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS video_digest_h3_reference_packs_reject_deletes
+BEFORE DELETE ON video_digest_h3_reference_packs
+BEGIN SELECT RAISE(ABORT, 'video_digest_h3_reference_packs are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS video_digest_h3_reference_media_reject_updates
+BEFORE UPDATE ON video_digest_h3_reference_media
+BEGIN SELECT RAISE(ABORT, 'video_digest_h3_reference_media are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS video_digest_h3_reference_media_reject_deletes
+BEFORE DELETE ON video_digest_h3_reference_media
+BEGIN SELECT RAISE(ABORT, 'video_digest_h3_reference_media are immutable'); END;
