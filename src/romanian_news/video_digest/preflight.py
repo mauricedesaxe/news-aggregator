@@ -26,6 +26,7 @@ from romanian_news.catalog.video_digest import (
     read_planning_attempts,
     record_policy_bundle,
 )
+from romanian_news.catalog.video_digest_selection import read_edition_subject_selection
 from romanian_news.reports import DailyReport, DailyReportSection
 from romanian_news.storage import publish_immutable_r2_objects, read_verified_r2_object
 from romanian_news.video_digest.models import DigestPlan, EditionId, SlotLease, edition_id
@@ -224,11 +225,12 @@ class PlanningProvider(Protocol):
 
 PRODUCTION_POLICY_DEFINITION = VideoDigestPolicyDefinition(
     policy=VideoDigestPolicyBundle(
-        policy_id="video-digest-production-v1",
+        policy_id="video-digest-production-v2",
         planning_model=PLANNING_MODEL,
         verification_model=VERIFICATION_MODEL,
         planning_prompt_digest=sha256(PLANNING_PROMPT.encode()),
         verification_prompt_digest=sha256(VERIFICATION_PROMPT.encode()),
+        coverage_policy="selected-main-sections-exact-report-order-v2",
     ),
     planning_prompt=PLANNING_PROMPT,
     verification_prompt=VERIFICATION_PROMPT,
@@ -268,8 +270,7 @@ def prepare_paid_generation(
     provider: PlanningProvider | None = None,
     renew_lease: Callable[[SlotLease], SlotLease] | None = None,
 ) -> PreparedPaidGeneration:
-    if lease.edition_id != edition_id(report.version_id, policy.artifact.version_id):
-        raise ValueError("Planning inputs do not match the claimed edition")
+    selected_subject_ids, selection_digest = _selection_inputs(lease, report, policy)
     references = read_planning_attempts(lease.edition_id)
     recorded = tuple(_read_attempt(reference) for reference in references)
     accepted = next((item for item in recorded if item.disposition == "accepted"), None)
@@ -280,6 +281,8 @@ def prepare_paid_generation(
             policy,
             accepted,
             references[accepted.attempt_index],
+            selected_subject_ids,
+            selection_digest,
         )
     if len(recorded) >= 3:
         raise PlanningExhaustedError(
@@ -298,7 +301,14 @@ def prepare_paid_generation(
     attempts = list(recorded)
     for attempt_index in range(len(recorded), 3):
         artifact = _run_attempt(
-            current_lease, report, policy, attempt_index, tuple(attempts), guarded_call
+            current_lease,
+            report,
+            policy,
+            attempt_index,
+            tuple(attempts),
+            guarded_call,
+            selected_subject_ids,
+            selection_digest,
         )
         attempt_file = _attempt_file(current_lease, artifact)
         if artifact.disposition == "rejected":
@@ -312,10 +322,35 @@ def prepare_paid_generation(
             )
             attempts.append(artifact)
             continue
-        return _finish_new_accepted(current_lease, report, policy, artifact, attempt_file)
+        return _finish_new_accepted(
+            current_lease,
+            report,
+            policy,
+            artifact,
+            attempt_file,
+            selected_subject_ids,
+            selection_digest,
+        )
     raise PlanningExhaustedError(
         PlanningExhaustion(edition_id=lease.edition_id, attempts=tuple(attempts))
     )
+
+
+def _selection_inputs(
+    lease: SlotLease, report: PlanningReport, policy: PlanningPolicy
+) -> tuple[tuple[Sha256, ...] | None, Sha256 | None]:
+    legacy_id = edition_id(report.version_id, policy.artifact.version_id)
+    if lease.edition_id == legacy_id:
+        return None, None
+    selection = read_edition_subject_selection(lease.edition_id)
+    if selection is None or selection.report_version_id != report.version_id:
+        raise ValueError("Planning inputs do not match the claimed edition")
+    selection.validate_report(report.report)
+    if lease.edition_id != edition_id(
+        report.version_id, policy.artifact.version_id, selection.digest
+    ):
+        raise ValueError("Planning inputs do not match the claimed edition")
+    return selection.selected_subject_ids, selection.digest
 
 
 def _run_attempt(
@@ -325,8 +360,12 @@ def _run_attempt(
     attempt_index: int,
     prior_attempts: tuple[PlanningAttemptArtifact, ...],
     provider: PlanningProvider,
+    selected_subject_ids: tuple[Sha256, ...] | None = None,
+    selection_digest: Sha256 | None = None,
 ) -> PlanningAttemptArtifact:
-    planning_request = _planning_request(lease, report, policy, attempt_index, prior_attempts)
+    planning_request = _planning_request(
+        lease, report, policy, attempt_index, prior_attempts, selected_subject_ids
+    )
     parsed, planning_response, parse_failure = _call_model(
         PLANNING_OPERATION,
         planning_request_id(lease.edition_id, attempt_index, "planning"),
@@ -355,6 +394,8 @@ def _run_attempt(
             policy.artifact.version_id,
             policy.definition.policy,
             parsed.stories,
+            selected_subject_ids=selected_subject_ids,
+            selection_digest=selection_digest,
         )
     except ValueError as error:
         failure = PlanningFailure(code="invalid_screenplay_plan", message=str(error))
@@ -437,10 +478,18 @@ def _finish_new_accepted(
     policy: PlanningPolicy,
     artifact: PlanningAttemptArtifact,
     attempt_file: ArtifactFile,
+    selected_subject_ids: tuple[Sha256, ...] | None = None,
+    selection_digest: Sha256 | None = None,
 ) -> PreparedPaidGeneration:
     attempt = artifact.attempt
     assert attempt is not None
-    verified = accept_planning_attempt(report.report, policy.definition.policy, attempt)
+    verified = accept_planning_attempt(
+        report.report,
+        policy.definition.policy,
+        attempt,
+        selected_subject_ids=selected_subject_ids,
+        selection_digest=selection_digest,
+    )
     plan_file, plan = verified_plan_file(verified)
     publish_immutable_r2_objects(
         ((attempt_file.r2_key, attempt_file.content), (plan_file.r2_key, plan_file.content))
@@ -463,10 +512,18 @@ def _finish_accepted(
     policy: PlanningPolicy,
     artifact: PlanningAttemptArtifact,
     reference: PlanningAttemptReference,
+    selected_subject_ids: tuple[Sha256, ...] | None = None,
+    selection_digest: Sha256 | None = None,
 ) -> PreparedPaidGeneration:
     attempt = artifact.attempt
     assert attempt is not None
-    verified = accept_planning_attempt(report.report, policy.definition.policy, attempt)
+    verified = accept_planning_attempt(
+        report.report,
+        policy.definition.policy,
+        attempt,
+        selected_subject_ids=selected_subject_ids,
+        selection_digest=selection_digest,
+    )
     _plan_file, plan = verified_plan_file(verified)
     if reference.accepted_plan_artifact_version_id != plan.artifact_version_id:
         raise ValueError("Recorded accepted plan does not match its planning artifact")
@@ -543,14 +600,16 @@ def _planning_request(
     policy: PlanningPolicy,
     attempt_index: int,
     prior_attempts: tuple[PlanningAttemptArtifact, ...],
+    selected_subject_ids: tuple[Sha256, ...] | None = None,
 ) -> ProviderChatRequest:
+    selected = set(selected_subject_ids) if selected_subject_ids is not None else None
     context = {
         "edition_id": lease.edition_id,
         "attempt_index": attempt_index,
         "main_stories": [
             section.model_dump(mode="json")
             for section in report.report.sections
-            if section.tier == "main"
+            if section.tier == "main" and (selected is None or section.theme_id in selected)
         ],
         "prior_failures": [
             {

@@ -37,6 +37,7 @@ from romanian_news.video_digest.models import (
     StoryId,
     edition_id,
 )
+from romanian_news.video_digest.selection import SlotSubjectSelection, SubjectDecision
 
 SUBJECT_ONE = "1" * 64
 SUBJECT_TWO = "2" * 64
@@ -362,6 +363,51 @@ def _system_prompt(request: ProviderChatRequest) -> str:
     return content
 
 
+def test_preflight_uses_the_stored_later_slot_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = _report()
+    selection = SlotSubjectSelection(
+        report_version_id=report.version_id,
+        prior_slot_ids=("a" * 64,),
+        decisions=(
+            SubjectDecision(theme_id=SUBJECT_ONE, disposition="unchanged", reason="exact_match"),
+            SubjectDecision(theme_id=SUBJECT_TWO, disposition="selected", reason="new_subject"),
+        ),
+        selected_sections=(report.report.sections[1],),
+    )
+    lease = _lease().model_copy(
+        update={
+            "edition_id": edition_id(
+                report.version_id,
+                preflight.PRODUCTION_POLICY.artifact.version_id,
+                selection.digest,
+            )
+        }
+    )
+    monkeypatch.setattr(preflight, "read_edition_subject_selection", lambda _id: selection)
+    harness = _Harness(monkeypatch)
+
+    def provider(request: ProviderChatRequest) -> ChatCompletion:
+        if _system_prompt(request) == preflight.PLANNING_PROMPT:
+            assert [item["theme_id"] for item in _request_context(request)["main_stories"]] == [
+                SUBJECT_TWO
+            ]
+            content = json.loads(_plan_content())
+            content["stories"] = content["stories"][1:]
+            return _response("selected-plan", json.dumps(content), request["model"])
+        return _response(
+            "selected-verification",
+            '{"status":"accepted","failures":[]}',
+            request["model"],
+        )
+
+    prepared = preflight.prepare_paid_generation(lease, report, provider=provider)
+    assert prepared.verified_plan.plan.selection_digest == selection.digest
+    assert tuple(story.report_subject_id for story in prepared.plan.stories) == (SUBJECT_TWO,)
+    assert len(harness.story_files) == 1
+
+
 def test_preflight_preserves_report_order_isolates_verifiers_and_replays_without_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -580,6 +626,7 @@ def test_prepare_paid_generation_rejects_a_lease_for_a_different_edition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _Harness(monkeypatch)
+    monkeypatch.setattr(preflight, "read_edition_subject_selection", lambda _edition_id: None)
     report = _report()
     wrong_edition = SlotLease(
         slot_id=SlotId("5" * 64),
