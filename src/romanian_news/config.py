@@ -33,6 +33,7 @@ NEWS_JEV_RELEVANCE_SHADOW_ENABLED: bool = os.getenv(
 ).strip().lower() in ("1", "true", "yes")
 GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
 FAL_KEY: str | None = os.getenv("FAL_KEY") or os.getenv("FAL_AI_API_KEY")
+NEWS_H3_REFERENCE_PACK_ID: str | None = os.getenv("NEWS_H3_REFERENCE_PACK_ID")
 YOUTUBE_API_KEY: str | None = os.getenv("YOUTUBE_API_KEY")
 LANGFUSE_PUBLIC_KEY: str | None = os.getenv("LANGFUSE_PUBLIC_KEY")
 LANGFUSE_SECRET_KEY: str | None = os.getenv("LANGFUSE_SECRET_KEY")
