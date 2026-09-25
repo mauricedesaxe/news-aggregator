@@ -229,7 +229,7 @@ class PlanningProvider(Protocol):
 
 PRODUCTION_POLICY_DEFINITION = VideoDigestPolicyDefinition(
     policy=VideoDigestPolicyBundle(
-        policy_id="video-digest-production-v3",
+        policy_id="video-digest-production-v4",
         planning_model=PLANNING_MODEL,
         verification_model=VERIFICATION_MODEL,
         planning_prompt_digest=sha256(PLANNING_PROMPT.encode()),
