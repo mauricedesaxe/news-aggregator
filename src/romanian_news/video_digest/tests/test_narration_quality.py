@@ -1,4 +1,7 @@
-from romanian_news.video_digest.narration_quality import narration_matches
+from romanian_news.video_digest.narration_quality import (
+    narration_matches,
+    narration_tail_cutoff_ms,
+)
 
 APPROVED = (
     "The market opened lower today while investors awaited the central bank decision "
@@ -35,6 +38,22 @@ def test_one_missed_boundary_word_does_not_reject_faithful_audio() -> None:
 
 def test_empty_transcript_cannot_pass() -> None:
     assert not narration_matches(APPROVED, ())
+
+
+def test_tail_cutoff_keeps_the_complete_approved_line() -> None:
+    approved_words = APPROVED.split()
+    spoken_words = approved_words + "Read the full sentence once at a measured pace".split()
+    timed = tuple((word, index * 0.3, index * 0.3 + 0.2) for index, word in enumerate(spoken_words))
+
+    assert not narration_matches(APPROVED, tuple(spoken_words))
+    assert narration_tail_cutoff_ms(APPROVED, timed) == round((len(approved_words) - 1) * 300 + 300)
+    assert narration_tail_cutoff_ms(APPROVED, timed[: len(approved_words)]) is None
+    assert (
+        narration_tail_cutoff_ms(
+            APPROVED, timed[: len(approved_words) - 1] + timed[len(approved_words) :]
+        )
+        is None
+    )
 
 
 NUMERIC_APPROVED = (

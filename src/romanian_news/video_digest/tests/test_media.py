@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.artifacts import artifact_file, sha256
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, sha256
 from romanian_news.catalog.video_digest import AcceptedClipReference, GenerationAttemptReference
 from romanian_news.storage import ResearchObjectIntegrityError
 from romanian_news.video_digest import media
@@ -199,6 +199,26 @@ def test_technical_validation_accepts_exact_profile_and_full_decode(tmp_path: Pa
     assert (probe.audio_codec, probe.channels, probe.sample_rate_hz) == ("aac", 2, 32000)
     assert probe.video_frames > 0
     assert probe.audio_frames > 0
+
+
+@requires_ffmpeg
+def test_silencing_unapproved_tail_preserves_clip_profile(tmp_path: Path) -> None:
+    source = tmp_path / "candidate.mp4"
+    original = _synthetic_clip(source, "red")
+    accepted = tmp_path / "accepted.mp4"
+
+    media._silence_unapproved_tail(source, accepted, 500)
+
+    content = accepted.read_bytes()
+    assert content != original
+    probe = media.validate_media_file(
+        accepted,
+        expected_digest=sha256(content),
+        expected_size=len(content),
+        requested_duration_ms=1000,
+    )
+    assert probe.audio_codec == "aac"
+    assert probe.sample_rate_hz == 32000
 
 
 @requires_ffmpeg
@@ -520,6 +540,78 @@ def _processing_attempt(
         cost=UnknownAttemptCost(reason="test fixture"),
     )
     return attempt, candidate
+
+
+@requires_ffmpeg
+def test_candidate_with_prompt_speech_after_narration_is_silenced_and_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = _synthetic_clip(tmp_path / "candidate.mp4", "red")
+    edition = EditionId("e" * 64)
+    story = _story(edition, 0)
+    attempt, candidate = _processing_attempt(story, content, "tail-speech")
+    published: dict[str, bytes] = {}
+    checkpointed: dict[str, ArtifactFile] = {}
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
+    monkeypatch.setattr(media, "read_verified_r2_object", lambda _key, _digest: content)
+    monkeypatch.setattr(
+        media, "clip_narration_matches", lambda path, _text: path.name == "accepted.mp4"
+    )
+    monkeypatch.setattr(media, "clip_narration_tail_cutoff_ms", lambda _path, _text: 500)
+    monkeypatch.setattr(
+        media,
+        "publish_private_video_object",
+        lambda key, value, **_kwargs: published.update({key: value}),
+    )
+    monkeypatch.setattr(
+        media,
+        "publish_immutable_r2_objects",
+        lambda objects: published.update(objects),
+    )
+
+    def checkpoint(
+        *_args: object, clip_file: ArtifactFile, validation_file: ArtifactFile, **_kwargs: object
+    ) -> None:
+        checkpointed.update(clip=clip_file, validation=validation_file)
+
+    monkeypatch.setattr(media, "checkpoint_generation_acceptance", checkpoint)
+
+    result = _accept_candidate(_lease(edition), candidate, story)
+
+    assert isinstance(result, media.AcceptedCandidate)
+    clip_key = next(key for key in published if key.endswith("-silenced.mp4"))
+    assert published[clip_key] != content
+    validation_key = next(key for key in published if "/validation-" in key)
+    evidence = media.CandidateValidationEvidence.model_validate_json(
+        published[validation_key], strict=True
+    )
+    assert evidence.muted_after_ms == 500
+    assert evidence.accepted_clip_content_digest == sha256(published[clip_key])
+    assert evidence.candidate_content_digest == sha256(content)
+
+    clip = checkpointed["clip"]
+    validation = checkpointed["validation"]
+    accepted_attempt = attempt.model_copy(
+        update={
+            "stage": GenerationStage.ACCEPTED,
+            "accepted_clip": AcceptedClipReference(
+                artifact_id=clip.artifact_id,
+                version_id=clip.version_id,
+                content_digest=clip.content_digest,
+                r2_key=clip.r2_key,
+                byte_size=len(clip.content),
+            ),
+            "validation_evidence": ArtifactReference(
+                artifact_id=validation.artifact_id,
+                version_id=validation.version_id,
+                content_digest=validation.content_digest,
+                r2_key=validation.r2_key,
+            ),
+        }
+    )
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (accepted_attempt,))
+    monkeypatch.setattr(media, "read_verified_r2_object", lambda key, _digest: published[key])
+    assert _accept_candidate(_lease(edition), candidate, story) == result
 
 
 @requires_ffmpeg

@@ -8,10 +8,9 @@ import tempfile
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from enum import StrEnum
 from fractions import Fraction
 from pathlib import Path
-from typing import Annotated, Literal, Protocol, cast
+from typing import Annotated, Literal, cast
 
 from pydantic import Field, model_validator
 
@@ -50,11 +49,36 @@ from romanian_news.video_digest.models import (
 from romanian_news.video_digest.narration_quality import (
     NarrationCheckError,
     clip_narration_matches,
+    clip_narration_tail_cutoff_ms,
 )
 from romanian_news.video_digest.planning import ScreenplayPlan
+from romanian_news.video_digest.subtitle_text import (
+    SubtitleAttemptFailure as SubtitleAttemptFailure,
+)
+from romanian_news.video_digest.subtitle_text import (
+    SubtitleFailureEvidence as SubtitleFailureEvidence,
+)
+from romanian_news.video_digest.subtitle_text import (
+    SubtitleStrategy as SubtitleStrategy,
+)
+from romanian_news.video_digest.subtitle_text import (
+    SubtitleTimeSpan as SubtitleTimeSpan,
+)
+from romanian_news.video_digest.subtitle_text import (
+    SubtitleTimingProvider as SubtitleTimingProvider,
+)
+from romanian_news.video_digest.subtitle_text import (
+    SubtitleTimingRequest as SubtitleTimingRequest,
+)
+from romanian_news.video_digest.subtitle_text import (
+    _webvtt as _webvtt,
+)
+from romanian_news.video_digest.subtitle_text import (
+    subtitle_timing_requests as subtitle_timing_requests,
+)
 
 MEDIA_POLICY_VERSION = "video-digest-media-v1"
-SUBTITLE_POLICY_VERSION = "approved-screenplay-webvtt-v1"
+CANDIDATE_MEDIA_POLICY_VERSION = "video-digest-media-v2"
 LOUDNESS_POLICY_VERSION = "ebu-r128-minus-16-v1"
 FADE_SECONDS = Decimal("0.25")
 AAC_FRAME_DURATION_MS = 32
@@ -86,7 +110,9 @@ class MediaProbe(NewsModel):
 
 
 class CandidateValidationEvidence(NewsModel):
-    policy_version: Literal["video-digest-media-v1"] = MEDIA_POLICY_VERSION
+    policy_version: Literal["video-digest-media-v1", "video-digest-media-v2"] = (
+        CANDIDATE_MEDIA_POLICY_VERSION
+    )
     request_id: str
     request_artifact_version_id: Sha256
     response_artifact_version_id: Sha256
@@ -97,8 +123,23 @@ class CandidateValidationEvidence(NewsModel):
     candidate_r2_key: str
     candidate_content_digest: Sha256
     candidate_byte_size: Annotated[int, Field(gt=0)]
+    accepted_clip_content_digest: Sha256 | None = None
+    accepted_clip_byte_size: Annotated[int, Field(gt=0)] | None = None
+    muted_after_ms: Annotated[int, Field(gt=0)] | None = None
     probe: MediaProbe
     full_decode_succeeded: Literal[True] = True
+
+    @model_validator(mode="after")
+    def require_accepted_clip_provenance(self) -> CandidateValidationEvidence:
+        if self.policy_version == "video-digest-media-v2":
+            if self.accepted_clip_content_digest is None or self.accepted_clip_byte_size is None:
+                raise ValueError("Media v2 evidence requires accepted clip identity")
+            if self.muted_after_ms is None and (
+                self.accepted_clip_content_digest != self.candidate_content_digest
+                or self.accepted_clip_byte_size != self.candidate_byte_size
+            ):
+                raise ValueError("Unchanged candidate must retain its original identity")
+        return self
 
 
 class AcceptedCandidate(NewsModel):
@@ -157,57 +198,6 @@ class AssembledEdition(NewsModel):
     manifest_file: ArtifactFile
     duration_ms: Annotated[int, Field(gt=0)]
     clip_durations_ms: Annotated[tuple[int, ...], Field(min_length=1)]
-
-
-class SubtitleStrategy(StrEnum):
-    WHOLE_EDITION = "whole-edition-v1"
-    PER_STORY = "per-story-v1"
-    PER_STORY_WITHOUT_VAD = "per-story-without-vad-v1"
-
-
-class SubtitleTimingRequest(NewsModel):
-    story_position: Annotated[int, Field(ge=0)]
-    cue_count: Annotated[int, Field(gt=0)]
-    approved_text: str
-    start_ms: Annotated[int, Field(ge=0)]
-    end_ms: Annotated[int, Field(gt=0)]
-
-    @model_validator(mode="after")
-    def require_positive_duration(self) -> SubtitleTimingRequest:
-        if self.end_ms <= self.start_ms:
-            raise ValueError("Subtitle story window must have positive duration")
-        return self
-
-
-class SubtitleTimeSpan(NewsModel):
-    start_ms: Annotated[int, Field(ge=0)]
-    end_ms: Annotated[int, Field(gt=0)]
-
-    @model_validator(mode="after")
-    def require_positive_duration(self) -> SubtitleTimeSpan:
-        if self.end_ms <= self.start_ms:
-            raise ValueError("Subtitle timing must have positive duration")
-        return self
-
-
-class SubtitleTimingProvider(Protocol):
-    def timings(
-        self,
-        strategy: SubtitleStrategy,
-        requests: tuple[SubtitleTimingRequest, ...],
-        media_path: Path,
-    ) -> tuple[tuple[SubtitleTimeSpan, ...], ...]: ...
-
-
-class SubtitleAttemptFailure(NewsModel):
-    strategy: SubtitleStrategy
-    code: str
-
-
-class SubtitleFailureEvidence(NewsModel):
-    policy_version: Literal["approved-screenplay-webvtt-v1"] = SUBTITLE_POLICY_VERSION
-    edition_id: str
-    attempts: Annotated[tuple[SubtitleAttemptFailure, ...], Field(min_length=3, max_length=3)]
 
 
 def ffprobe_command(path: Path) -> tuple[str, ...]:
@@ -438,40 +428,11 @@ def accept_candidate(
     if story.position != candidate.story_position or story.story_id != candidate.story_id:
         raise ValueError("Candidate does not match its planned story")
     if attempt.stage is GenerationStage.ACCEPTED:
-        clip = attempt.accepted_clip
-        validation = attempt.validation_evidence
-        if (
-            clip is None
-            or validation is None
-            or clip.content_digest != candidate.candidate.content_digest
-            or clip.byte_size != candidate.candidate.byte_size
-        ):
-            raise ValueError("Accepted candidate does not match stored media evidence")
-        return AcceptedCandidate(
-            clip_artifact_version_id=clip.version_id,
-            validation_artifact_version_id=validation.version_id,
-        )
+        return _replay_accepted_candidate(attempt, candidate)
     try:
-        content = read_verified_r2_object(
-            candidate.candidate.r2_key, candidate.candidate.content_digest
+        content, probe, muted_after_ms = _validated_candidate_media(
+            candidate, story, approved_narration
         )
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "candidate.mp4"
-            path.write_bytes(content)
-            probe = validate_media_file(
-                path,
-                expected_digest=candidate.candidate.content_digest,
-                expected_size=candidate.candidate.byte_size,
-                requested_duration_ms=story.requested_duration_ms,
-            )
-            try:
-                matches_narration = clip_narration_matches(path, approved_narration)
-            except NarrationCheckError as error:
-                raise MediaValidationError("narration_check_failed", str(error)) from error
-            if not matches_narration:
-                raise MediaValidationError(
-                    "narration_mismatch", "Candidate speech differs from the approved screenplay"
-                )
     except (
         MediaValidationError,
         ResearchObjectIntegrityError,
@@ -490,6 +451,9 @@ def accept_candidate(
         candidate_r2_key=candidate.candidate.r2_key,
         candidate_content_digest=candidate.candidate.content_digest,
         candidate_byte_size=candidate.candidate.byte_size,
+        accepted_clip_content_digest=sha256(content),
+        accepted_clip_byte_size=len(content),
+        muted_after_ms=muted_after_ms,
         probe=probe,
     )
     clip_file = artifact_file(
@@ -499,7 +463,8 @@ def accept_candidate(
         content=content,
         r2_key=(
             f"news/video-digest/{lease.edition_id}/clips/"
-            f"{story.position}-{candidate.candidate.content_digest}.mp4"
+            f"{story.position}-{sha256(content)}"
+            f"{'-silenced' if muted_after_ms is not None else ''}.mp4"
         ),
         media_type="video/mp4",
     )
@@ -534,6 +499,122 @@ def accept_candidate(
         clip_artifact_version_id=clip_file.version_id,
         validation_artifact_version_id=validation_file.version_id,
     )
+
+
+def _replay_accepted_candidate(
+    attempt: GenerationAttemptReference, candidate: CandidateReady
+) -> AcceptedCandidate:
+    clip = attempt.accepted_clip
+    validation = attempt.validation_evidence
+    if clip is None or validation is None:
+        raise ValueError("Accepted candidate does not match stored media evidence")
+    if clip.r2_key.endswith("-silenced.mp4"):
+        recorded = CandidateValidationEvidence.model_validate_json(
+            read_verified_r2_object(validation.r2_key, validation.content_digest), strict=True
+        )
+        if (
+            recorded.muted_after_ms is None
+            or recorded.request_id != candidate.request_id
+            or recorded.candidate_content_digest != candidate.candidate.content_digest
+            or recorded.candidate_byte_size != candidate.candidate.byte_size
+            or clip.content_digest != recorded.accepted_clip_content_digest
+            or clip.byte_size != recorded.accepted_clip_byte_size
+        ):
+            raise ValueError("Accepted candidate does not match stored media evidence")
+    elif (
+        clip.content_digest != candidate.candidate.content_digest
+        or clip.byte_size != candidate.candidate.byte_size
+    ):
+        raise ValueError("Accepted candidate does not match stored media evidence")
+    return AcceptedCandidate(
+        clip_artifact_version_id=clip.version_id,
+        validation_artifact_version_id=validation.version_id,
+    )
+
+
+def _validated_candidate_media(
+    candidate: CandidateReady, story: PlannedStory, approved_narration: str
+) -> tuple[bytes, MediaProbe, int | None]:
+    content = read_verified_r2_object(
+        candidate.candidate.r2_key, candidate.candidate.content_digest
+    )
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "candidate.mp4"
+        path.write_bytes(content)
+        probe = validate_media_file(
+            path,
+            expected_digest=candidate.candidate.content_digest,
+            expected_size=candidate.candidate.byte_size,
+            requested_duration_ms=story.requested_duration_ms,
+        )
+        if _checked_narration_matches(path, approved_narration):
+            return content, probe, None
+        try:
+            cutoff_ms = clip_narration_tail_cutoff_ms(path, approved_narration)
+        except NarrationCheckError as error:
+            raise MediaValidationError("narration_check_failed", str(error)) from error
+        if cutoff_ms is None:
+            raise MediaValidationError(
+                "narration_mismatch", "Candidate speech differs from the approved screenplay"
+            )
+        accepted_path = Path(directory) / "accepted.mp4"
+        _silence_unapproved_tail(path, accepted_path, cutoff_ms)
+        content = accepted_path.read_bytes()
+        probe = validate_media_file(
+            accepted_path,
+            expected_digest=sha256(content),
+            expected_size=len(content),
+            requested_duration_ms=story.requested_duration_ms,
+        )
+        if not _checked_narration_matches(accepted_path, approved_narration):
+            raise MediaValidationError(
+                "narration_mismatch", "Candidate speech differs from the approved screenplay"
+            )
+        return content, probe, cutoff_ms
+
+
+def _checked_narration_matches(path: Path, approved_narration: str) -> bool:
+    try:
+        return clip_narration_matches(path, approved_narration)
+    except NarrationCheckError as error:
+        raise MediaValidationError("narration_check_failed", str(error)) from error
+
+
+def _silence_unapproved_tail(source: Path, destination: Path, cutoff_ms: int) -> None:
+    try:
+        _run(
+            (
+                "ffmpeg",
+                "-y",
+                "-nostdin",
+                "-v",
+                "error",
+                "-i",
+                str(source),
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0",
+                "-c:v",
+                "copy",
+                "-af",
+                f"volume=enable='gte(t,{cutoff_ms / 1000:.3f})':volume=0",
+                "-c:a",
+                "aac",
+                "-ar",
+                "32000",
+                "-ac",
+                "2",
+                "-movflags",
+                "+faststart",
+                str(destination),
+            ),
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        raise MediaValidationError(
+            "narration_tail_processing_failed", "Could not silence extra speech"
+        ) from error
 
 
 def assemble_edition(
@@ -902,107 +983,6 @@ def _finite_decimal(value: object) -> Decimal:
 
 def _decimal_argument(value: Decimal) -> str:
     return format(value.normalize(), "f")
-
-
-def _subtitle_cue_texts(text: str) -> tuple[str, ...]:
-    words = text.split()
-    if not words:
-        raise ValueError("Approved subtitle text must not be empty")
-    cues: list[str] = []
-    lines: list[str] = []
-    for word in words:
-        if len(word) > 60:
-            raise ValueError("Approved subtitle text contains a word longer than 60 characters")
-        if len(word) > 30:
-            if lines:
-                cues.append("\n".join(lines))
-                lines = []
-            cues.append(word)
-            continue
-        if not lines:
-            lines.append(word)
-        elif len(lines[-1]) + 1 + len(word) <= 30:
-            lines[-1] += f" {word}"
-        elif len(lines) == 1:
-            lines.append(word)
-        else:
-            cues.append("\n".join(lines))
-            lines = [word]
-    if lines:
-        cues.append("\n".join(lines))
-    if any(len(cue.replace("\n", " ")) > 60 or cue.count("\n") > 1 for cue in cues):
-        raise ValueError("Subtitle cue exceeds its line or character bound")
-    return tuple(cues)
-
-
-def subtitle_timing_requests(
-    screenplay: ScreenplayPlan, assembled: AssembledEdition
-) -> tuple[tuple[tuple[str, ...], ...], tuple[SubtitleTimingRequest, ...]]:
-    cue_texts = tuple(_subtitle_cue_texts(story.narration) for story in screenplay.stories)
-    if len(assembled.clip_durations_ms) != len(screenplay.stories):
-        raise ValueError("Subtitle story windows must cover every story")
-    cursor = 0
-    windows = []
-    for duration_ms in assembled.clip_durations_ms:
-        if duration_ms <= 0:
-            raise ValueError("Subtitle story window must have positive duration")
-        windows.append((cursor, cursor + duration_ms))
-        cursor += duration_ms
-    if abs(cursor - assembled.duration_ms) > 100:
-        raise ValueError("Subtitle story windows differ from assembled duration")
-    requests = tuple(
-        SubtitleTimingRequest(
-            story_position=position,
-            cue_count=len(texts),
-            approved_text=screenplay.stories[position].narration,
-            start_ms=windows[position][0],
-            end_ms=windows[position][1],
-        )
-        for position, texts in enumerate(cue_texts)
-    )
-    return cue_texts, requests
-
-
-def _webvtt(
-    screenplay: ScreenplayPlan,
-    cue_texts: tuple[tuple[str, ...], ...],
-    timings: tuple[tuple[SubtitleTimeSpan, ...], ...],
-    duration_ms: int,
-) -> bytes:
-    if len(timings) != len(cue_texts):
-        raise ValueError("Subtitle timings must cover every story")
-    cues: list[tuple[SubtitleTimeSpan, str]] = []
-    previous_end = 0
-    for texts, spans in zip(cue_texts, timings, strict=True):
-        if len(texts) != len(spans):
-            raise ValueError("Subtitle timings must cover every approved cue")
-        for text, span in zip(texts, spans, strict=True):
-            if span.start_ms < previous_end or span.end_ms > duration_ms:
-                raise ValueError("Subtitle timings overlap or exceed the edition")
-            previous_end = span.end_ms
-            cues.append((span, text))
-    approved = " ".join(story.narration for story in screenplay.stories).split()
-    covered = " ".join(text.replace("\n", " ") for _, text in cues).split()
-    if covered != approved:
-        raise ValueError("Subtitle cues do not exactly cover the approved screenplay")
-    lines = ["WEBVTT", ""]
-    for index, (span, text) in enumerate(cues, start=1):
-        lines.extend(
-            (
-                str(index),
-                f"{_webvtt_timestamp(span.start_ms)} --> {_webvtt_timestamp(span.end_ms)}",
-                text,
-                "",
-            )
-        )
-    return "\n".join(lines).encode()
-
-
-def _webvtt_timestamp(milliseconds: int) -> str:
-    hours, remainder = divmod(milliseconds, 3_600_000)
-    minutes, remainder = divmod(remainder, 60_000)
-    seconds, millis = divmod(remainder, 1000)
-    return f"{hours:02}:{minutes:02}:{seconds:02}.{millis:03}"
 
 
 def _now() -> datetime:
