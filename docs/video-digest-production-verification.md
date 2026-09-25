@@ -11,18 +11,29 @@ Verification on 2026-09-25 established these production facts:
 | Boundary | Result | Evidence |
 | --- | --- | --- |
 | Authenticated reader | Pass | `/` returns a `303` to `/login`; `/livez` and `/readyz` return `200` at `https://news.alexlazar.dev` |
-| Reader deployment | Pass | Railway deployed repository commit `abdb3e6` successfully |
+| Reader deployment | Pass | Railway's current successful deployment runs repository commit `74f648b`, the same commit as Dagster |
 | Public media origin | Pass | `romanian-news-public-media` is served at `https://news-media.alexlazar.dev` with active TLS 1.2 or newer |
 | R2 custom-domain probe | Pass | The permanent smoke object returns exact bytes, `Content-Length`, `Accept-Ranges`, and a valid `206` byte range |
-| Dagster deployment | Pass | The code location deployed successfully from the merged H3 reference registry commit |
+| Dagster deployment | Pass | The code location deployed successfully from commit `74f648b`, which rejects generated clips with unapproved English speech |
+| Production catalog | Pass | PlanetScale PostgreSQL migrations through `0018` are applied; the approved English H3 reference pack is registered and configured |
 | Execution ownership | Decided | Dagster owns all background work; the unrelated Railway worker remains untouched |
 | Schedule ownership | Safe, inactive | `scheduled_video_digest` is registered `STOPPED` and excluded from production activation |
-| Subtitle timing | English sample passed, production gate open | The [approved-video QA](video-digest-english-timing-qa.md) produced 12/12 valid cues with per-story fallback; an exact generated edition still needs reader playback review |
+| Subtitle timing | English sample passed, production cut failed QA | The [approved-video QA](video-digest-english-timing-qa.md) produced 12/12 valid cues with per-story fallback. The September 25 cut exhausted all three subtitle strategies because generated speech diverged from its screenplay |
+| First production video | Failed release gate | Five English H3 clips assembled, but four spoke prompt or visual directions and the last story was cut off. The 45,463,207-byte public object passed exact byte and range checks after PR #91; its catalog intent remains unpublished |
+| Fal generation | Blocked on account credit | A revised prompt still spoke its instruction; the next probe returned `403 TOP_UP`. No replacement clip can be tested until the account is funded |
 | Incident delivery | Deferred by owner | Terminal failure and deadline payloads are wired to an optional incoming webhook. The incident monitor remains stopped; Better Stack configuration is not an activation gate |
 | Video heartbeat | Deferred by owner | Successful publication can ping an optional heartbeat. A dedicated video heartbeat is not an activation gate |
 
 The Railway service named `romanian-news-worker` is unrelated. Its observed deployments target
 `mauricedesaxe/chartly`, not this repository. Video work executes only in Dagster.
+
+The September 25 manual run `879b1ef1-9f39-4981-ac8a-ec53ad56280e` proved receipt recovery,
+bounded candidate retry, five accepted clips, assembly, subtitle exhaustion, and a public R2 upload.
+Cloudflare inserted spaces into `Cache-Control`, which the old verifier treated as a conflict; PR #91
+fixed that comparison. Audio QA then found spoken prompt text and a truncated story, so the one-time
+publication recovery in closed PR #92 was never applied. PR #93 added a bounded screenplay check
+before candidate acceptance. Both video schedules remain stopped, and the failed edition remains
+absent from the authenticated reader.
 
 The owner deferred dedicated video incidents and heartbeat for this personal-use release. Keep
 `scheduled_video_digest_incident_monitor` stopped. Durable slot and publication records remain
@@ -64,9 +75,11 @@ The production reader has `NEWS_PUBLIC_MEDIA_R2_BUCKET=romanian-news-public-medi
    `93bfad318192125019bbe48a99b1efeb6deb000e99c036aecd631c21020dd382`, with its exact
    approved English screenplay. Run all three subtitle strategies through the production `base.en`
    timing adapter. Record word and cue coverage, match rate, and fallback rate. Require a valid VTT
-   before marking subtitle timing verified.
-   Confirm reader playback, transcript order, clean-video fallback after subtitle exhaustion, and
-   feedback persistence for that edition.
+   before marking subtitle timing verified. For a newly generated edition, verify every spoken
+   English line against the approved screenplay before accepting its clip. Spoken prompt text or a
+   truncated line fails the release even if the media profile and public object pass. Confirm reader
+   playback, transcript order, clean-video fallback after subtitle exhaustion, and feedback
+   persistence for the new edition.
 8. Start `scheduled_video_digest` only after all preceding checks pass.
 
 ## Verification commands
@@ -104,6 +117,8 @@ logs, screenshots, or issue comments.
 - Subtitles: three ordered strategies; exhaustion publishes the clean video.
 - Publication: at most five durable attempts.
 - Generated candidates: private, seven-day retention class.
+- Candidate narration check: bounded at 120 seconds; failed transcription records a retryable
+  candidate failure rather than accepting unverified speech.
 - Accepted clips and published media: permanent retention classes.
 
 ## Rollback
