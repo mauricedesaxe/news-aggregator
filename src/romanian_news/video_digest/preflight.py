@@ -12,18 +12,22 @@ from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.attempts import record_model_attempt
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json, sha256
 from romanian_news.catalog.video_digest import (
+    AcceptedPlanReference,
     PlanningAttemptReference,
     checkpoint_edition_verification,
     checkpoint_planning_attempt,
     checkpoint_story_verification,
+    read_accepted_plan_reference,
+    read_generation_preparation,
     read_planning_attempts,
     record_policy_bundle,
 )
 from romanian_news.reports import DailyReport, DailyReportSection
 from romanian_news.storage import publish_immutable_r2_objects, read_verified_r2_object
-from romanian_news.video_digest.models import DigestPlan, SlotLease, edition_id
+from romanian_news.video_digest.models import DigestPlan, EditionId, SlotLease, edition_id
 from romanian_news.video_digest.planning import (
     GenerationAuthorization,
     PlanningFailure,
@@ -143,6 +147,61 @@ class PreparedPaidGeneration(NewsModel):
     authorization: GenerationAuthorization
     plan: DigestPlan
     verified_plan: VerifiedDigestPlan
+
+
+def read_prepared_paid_generation(lease: SlotLease) -> PreparedPaidGeneration:
+    reference = read_generation_preparation(lease)
+    verified, plan = _read_verified_plan(
+        lease.edition_id,
+        AcceptedPlanReference(
+            daily_report_version_id=reference.daily_report_version_id,
+            policy_bundle_version_id=reference.policy_bundle_version_id,
+            plan=reference.plan,
+        ),
+    )
+    authorization = GenerationAuthorization.model_validate_json(
+        read_verified_r2_object(
+            reference.authorization.r2_key, reference.authorization.content_digest
+        ),
+        strict=True,
+    )
+    expected = authorize_generation(verified)
+    if authorization != expected:
+        raise ValueError("Generation authorization does not match the verified plan")
+    _require_artifact_reference(reference.authorization, _authorization_manifest_file(expected))
+    return PreparedPaidGeneration(authorization=authorization, plan=plan, verified_plan=verified)
+
+
+def read_accepted_digest_plan(edition_id: EditionId) -> tuple[VerifiedDigestPlan, DigestPlan]:
+    return _read_verified_plan(edition_id, read_accepted_plan_reference(edition_id))
+
+
+def _read_verified_plan(
+    edition_id: EditionId, reference: AcceptedPlanReference
+) -> tuple[VerifiedDigestPlan, DigestPlan]:
+    verified = VerifiedDigestPlan.model_validate_json(
+        read_verified_r2_object(reference.plan.r2_key, reference.plan.content_digest),
+        strict=True,
+    )
+    plan_file, plan = verified_plan_file(verified)
+    _require_artifact_reference(reference.plan, plan_file)
+    if (
+        plan.edition_id != edition_id
+        or verified.plan.daily_report_version_id != reference.daily_report_version_id
+        or verified.plan.policy_bundle_version_id != reference.policy_bundle_version_id
+    ):
+        raise ValueError("Verified generation plan does not match its catalog edition")
+    return verified, plan
+
+
+def _require_artifact_reference(reference: ArtifactReference, file: ArtifactFile) -> None:
+    if reference != ArtifactReference(
+        artifact_id=file.artifact_id,
+        version_id=file.version_id,
+        content_digest=file.content_digest,
+        r2_key=file.r2_key,
+    ):
+        raise ValueError("Verified generation artifact does not match its catalog reference")
 
 
 class PlanningExhaustion(NewsModel):
@@ -425,21 +484,27 @@ def _checkpoint_evidence_and_manifest(
             lease, story.story_id, evidence_file=file, recorded_at=datetime.now(UTC)
         )
     authorization = authorize_generation(verified)
-    content = canonical_json(authorization.model_dump(mode="json"))
-    manifest = artifact_file(
-        artifact_id=f"{lease.edition_id}:verification-manifest",
-        artifact_kind="video_digest_verification_manifest",
-        title=f"Verification manifest for video digest edition {lease.edition_id}",
-        content=content,
-        r2_key=f"news/video-digest/{lease.edition_id}/verification/{sha256(content)}.json",
-        media_type="application/json",
-    )
+    manifest = _authorization_manifest_file(authorization)
     publish_immutable_r2_objects(((manifest.r2_key, manifest.content),))
     checkpoint_edition_verification(lease, manifest_file=manifest, recorded_at=datetime.now(UTC))
     return PreparedPaidGeneration(
         authorization=authorization,
         plan=plan,
         verified_plan=verified,
+    )
+
+
+def _authorization_manifest_file(authorization: GenerationAuthorization) -> ArtifactFile:
+    content = canonical_json(authorization.model_dump(mode="json"))
+    return artifact_file(
+        artifact_id=f"{authorization.edition_id}:verification-manifest",
+        artifact_kind="video_digest_verification_manifest",
+        title=f"Verification manifest for video digest edition {authorization.edition_id}",
+        content=content,
+        r2_key=(
+            f"news/video-digest/{authorization.edition_id}/verification/{sha256(content)}.json"
+        ),
+        media_type="application/json",
     )
 
 

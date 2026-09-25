@@ -12,11 +12,16 @@ from romanian_news.analysis.attempts import model_attempt_from_payload
 from romanian_news.analysis.tracing import ProviderChatRequest
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import (
+    ArtifactFile,
     artifact_file,
     canonical_json,
     sha256,
 )
-from romanian_news.catalog.video_digest import PlanningAttemptReference
+from romanian_news.catalog.video_digest import (
+    AcceptedPlanReference,
+    GenerationPreparationReference,
+    PlanningAttemptReference,
+)
 from romanian_news.reports import (
     DailyReport,
     DailyReportSection,
@@ -110,6 +115,77 @@ def _lease() -> SlotLease:
         expires_at=datetime.now(UTC) + timedelta(minutes=10),
         claim_count=1,
     )
+
+
+def _reference(file: ArtifactFile) -> ArtifactReference:
+    return ArtifactReference(
+        artifact_id=file.artifact_id,
+        version_id=file.version_id,
+        content_digest=file.content_digest,
+        r2_key=file.r2_key,
+    )
+
+
+def test_read_prepared_generation_rehydrates_immutable_plan_and_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lease = _lease()
+    report = _report()
+    harness = _Harness(monkeypatch)
+    provider_calls = 0
+
+    def provider(request: ProviderChatRequest) -> ChatCompletion:
+        nonlocal provider_calls
+        provider_calls += 1
+        content = (
+            _plan_content()
+            if _system_prompt(request) == preflight.PLANNING_PROMPT
+            else '{"status":"accepted","failures":[]}'
+        )
+        return _response(f"response-{provider_calls}", content, request["model"])
+
+    prepared = preflight.prepare_paid_generation(lease, report, provider=provider)
+    plan_file, _plan = preflight.verified_plan_file(prepared.verified_plan)
+    manifest = harness.manifest_file
+    reference = GenerationPreparationReference(
+        daily_report_version_id=report.version_id,
+        policy_bundle_version_id=preflight.PRODUCTION_POLICY.artifact.version_id,
+        plan=_reference(plan_file),
+        authorization=_reference(manifest),
+    )
+    monkeypatch.setattr(preflight, "read_generation_preparation", lambda _lease: reference)
+
+    assert preflight.read_prepared_paid_generation(lease) == prepared
+
+    accepted = AcceptedPlanReference(
+        daily_report_version_id=reference.daily_report_version_id,
+        policy_bundle_version_id=reference.policy_bundle_version_id,
+        plan=reference.plan,
+    )
+    monkeypatch.setattr(preflight, "read_accepted_plan_reference", lambda _edition: accepted)
+    assert preflight.read_accepted_digest_plan(lease.edition_id) == (
+        prepared.verified_plan,
+        prepared.plan,
+    )
+
+    wrong = reference.model_copy(update={"authorization": _reference(plan_file)})
+    monkeypatch.setattr(preflight, "read_generation_preparation", lambda _lease: wrong)
+    with pytest.raises(ValueError):
+        preflight.read_prepared_paid_generation(lease)
+
+    wrong = reference.model_copy(
+        update={
+            "authorization": reference.authorization.model_copy(update={"version_id": "b" * 64})
+        }
+    )
+    monkeypatch.setattr(preflight, "read_generation_preparation", lambda _lease: wrong)
+    with pytest.raises(ValueError, match="catalog reference"):
+        preflight.read_prepared_paid_generation(lease)
+
+    wrong = reference.model_copy(update={"daily_report_version_id": "a" * 64})
+    monkeypatch.setattr(preflight, "read_generation_preparation", lambda _lease: wrong)
+    with pytest.raises(ValueError, match="catalog edition"):
+        preflight.read_prepared_paid_generation(lease)
 
 
 def test_planning_report_rejects_a_version_for_different_content() -> None:
