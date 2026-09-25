@@ -657,10 +657,21 @@ def _fal_arguments(
     request: H3GenerationRequest,
     signer: Callable[[ArtifactReference], str],
 ) -> dict[str, object]:
+    if len(request.references.videos) != 1 or len(request.references.audio) != 1:
+        raise ValueError("H3 English prompt requires one video and one audio reference")
+    spoken_line = request.story.narration.replace('"', "'")
     prompt = (
-        f"{request.story.visual_direction}\n\n"
-        f'The hosts say exactly once in English: "{request.story.narration}" '
-        "No other speech, captions, subtitles, logos, title cards, or readable text."
+        "One continuous 15-second adult animated pirate-news sequence with native synchronized "
+        "English speech, sound effects, and low music beneath the voice. Video 1 is the approved "
+        "visual reference for the lead scientist, the silent three-eyed alien co-host, the narrow "
+        "broadcast booth, and their stable appearance and blocking. Audio 1 is the approved English "
+        "voice reference for the scientist. Keep the alien visible and silent. "
+        f"Exact action during the story: {request.story.visual_direction} "
+        "The scientist says exactly once, rapidly and clearly in English: "
+        f'"{spoken_line}" '
+        "The first vocal sound must be the first syllable of that quoted line. Finish the entire "
+        "line before the clip ends. No spoken introduction, visual directions, instructions, "
+        "muttering, repeated dialogue, captions, subtitles, logos, title cards, or readable text."
     )
     seed_source = sha256(
         canonical_json(

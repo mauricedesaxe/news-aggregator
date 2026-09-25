@@ -107,8 +107,44 @@ def test_fal_prompt_requires_english_speech() -> None:
     prompt = generation._fal_arguments(request, lambda _: "https://r2.example/reference")["prompt"]
 
     assert isinstance(prompt, str)
+    assert "Video 1 is the approved visual reference" in prompt
+    assert "Audio 1 is the approved English voice reference" in prompt
     assert f'in English: "{request.story.narration}"' in prompt
+    assert "The first vocal sound must be the first syllable" in prompt
     assert "in Romanian" not in prompt
+
+
+def test_fal_prompt_requires_unambiguous_reference_positions() -> None:
+    request, _, _ = generation._generation_request(
+        _prepared(), _references(), generation.PRODUCTION_GENERATION_POLICY, 0, 0
+    )
+    extra_video = _artifact_reference("other-video", "8" * 64)
+    request = request.model_copy(
+        update={
+            "references": request.references.model_copy(
+                update={"videos": (*request.references.videos, extra_video)}
+            )
+        }
+    )
+
+    with pytest.raises(ValueError, match="one video and one audio reference"):
+        generation._fal_arguments(request, lambda _: "https://r2.example/reference")
+
+
+def test_fal_prompt_keeps_quoted_narration_inside_spoken_line() -> None:
+    request, _, _ = generation._generation_request(
+        _prepared(), _references(), generation.PRODUCTION_GENERATION_POLICY, 0, 0
+    )
+    request = request.model_copy(
+        update={
+            "story": request.story.model_copy(update={"narration": 'The scientist says "hello".'})
+        }
+    )
+
+    prompt = generation._fal_arguments(request, lambda _: "https://r2.example/reference")["prompt"]
+
+    assert isinstance(prompt, str)
+    assert "in English: \"The scientist says 'hello'.\"" in prompt
 
 
 def _section(subject: str, article: str, position: int) -> DailyReportSection:
