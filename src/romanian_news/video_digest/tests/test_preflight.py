@@ -221,6 +221,18 @@ def test_production_policy_uses_independent_model_families() -> None:
         )
 
 
+def test_verification_request_uses_supported_openrouter_parameters() -> None:
+    request = preflight._provider_request(
+        preflight.VERIFICATION_MODEL,
+        preflight.VERIFICATION_PROMPT,
+        {},
+        {"type": "object"},
+        "verification",
+    )
+
+    assert request["extra_body"] == {"provider": {"require_parameters": True}}
+
+
 def _plan_content() -> str:
     narration = " ".join(f"cuvant{index}" for index in range(30))
     return json.dumps(
