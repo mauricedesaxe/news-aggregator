@@ -85,7 +85,10 @@ def test_story_strategies_extract_exact_windows_and_offset_timestamps(
 
     monkeypatch.setattr(subtitle_timing, "_run", run)
     whisper = FakeWhisper()
-    provider = subtitle_timing.FasterWhisperSubtitleTimingProvider(lambda: whisper)
+    renewals: list[None] = []
+    provider = subtitle_timing.FasterWhisperSubtitleTimingProvider(
+        lambda: whisper, before_transcribe=lambda: renewals.append(None)
+    )
 
     result = provider.timings(strategy, _requests(), Path("edition.mp4"))
 
@@ -96,6 +99,7 @@ def test_story_strategies_extract_exact_windows_and_offset_timestamps(
     assert [command[command.index("-ss") + 1] for command in commands] == ["0.000", "1.000"]
     assert [command[command.index("-t") + 1] for command in commands] == ["1.000", "1.000"]
     assert [call[1] for call in whisper.calls] == [vad_filter, vad_filter]
+    assert len(renewals) == 2
 
 
 def test_transcript_mismatch_cannot_publish_unsynchronized_cues() -> None:
