@@ -210,6 +210,7 @@ NextAction = PlanAction | GenerateAction | AssembleAction | SubtitleAction | Pub
 
 class ActionAdvanced(NewsModel):
     kind: Literal["advanced"] = "advanced"
+    durable_progress: bool = False
 
 
 class ActionWaiting(NewsModel):
@@ -443,7 +444,7 @@ def run_video_digest(
             )
             return outcome, alert_disposition(request.slot.slot_id, outcome)
         reloaded = catalog.read(request.slot.slot_id)
-        if reloaded == state:
+        if reloaded == state and not execution.durable_progress:
             outcome = RunDeferred(
                 reason="durable state did not advance",
                 retry_after_seconds=MAX_RETRY_SECONDS,

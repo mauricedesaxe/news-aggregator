@@ -19,6 +19,7 @@ from romanian_news.video_digest.generation import (
     GenerationComplete,
     GenerationFailed,
     GenerationInProgress,
+    GenerationRetryAvailable,
     H3GenerationRequest,
     H3ReferencePack,
     generate_next_candidate,
@@ -72,11 +73,15 @@ class ProductionH3GenerationPort(GenerationPort):
                 result.story_position
             ].narration
             accept_candidate(action.lease, result, story, approved_narration=approved_narration)
+            return ActionAdvanced(durable_progress=True)
+        if isinstance(result, GenerationRetryAvailable):
+            return ActionAdvanced(durable_progress=True)
         elif isinstance(result, GenerationComplete):
             checkpoint_assembly_ready(action.lease, recorded_at=datetime.now(UTC))
-        elif isinstance(result, GenerationFailed):
-            if not isinstance(read_slot_resume_state(action.lease.slot_id), FailedResume):
-                raise ValueError("Terminal H3 generation failure did not fail its slot")
+        elif isinstance(result, GenerationFailed) and not isinstance(
+            read_slot_resume_state(action.lease.slot_id), FailedResume
+        ):
+            raise ValueError("Terminal H3 generation failure did not fail its slot")
         return ActionAdvanced()
 
 

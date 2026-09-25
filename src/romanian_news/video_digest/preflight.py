@@ -65,7 +65,8 @@ PLANNING_PROMPT = (
     "move, and the booth reacts to the facts instead of showing generic presenter shots. "
     "Preserve report order and exact subject and citation IDs. Write 17 to 23 spoken words "
     "of concise dialogue per narration, leaving four seconds silent at the end of each "
-    "15000-millisecond clip, and use only "
+    "15000-millisecond clip. End each narration with an ordinary English word, never a "
+    "person's name, place name, organization name, acronym, or number. Use only "
     "supplied report evidence. Never invent names, dates, places, numbers, or outcomes."
 )
 VERIFICATION_PROMPT = (
@@ -229,7 +230,7 @@ class PlanningProvider(Protocol):
 
 PRODUCTION_POLICY_DEFINITION = VideoDigestPolicyDefinition(
     policy=VideoDigestPolicyBundle(
-        policy_id="video-digest-production-v4",
+        policy_id="video-digest-production-v5",
         planning_model=PLANNING_MODEL,
         verification_model=VERIFICATION_MODEL,
         planning_prompt_digest=sha256(PLANNING_PROMPT.encode()),

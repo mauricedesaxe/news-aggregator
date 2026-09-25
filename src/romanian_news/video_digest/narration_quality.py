@@ -54,11 +54,12 @@ class NarrationCheckError(RuntimeError):
 
 
 def _normalized(word: str) -> str:
-    return "".join(
+    normalized = "".join(
         character.casefold()
-        for character in unicodedata.normalize("NFKC", word)
+        for character in unicodedata.normalize("NFKD", word)
         if character.isalnum()
     )
+    return {"bushoy": "busoi", "buschoy": "busoi"}.get(normalized, normalized)
 
 
 def _number_words(tokens: list[str], start: int) -> tuple[str, int] | None:

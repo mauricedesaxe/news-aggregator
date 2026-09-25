@@ -56,6 +56,23 @@ def test_tail_cutoff_keeps_the_complete_approved_line() -> None:
     )
 
 
+def test_tail_cutoff_accepts_documented_name_transcription_without_prompt_leak() -> None:
+    approved = (
+        "Low Danube water levels prevent restarting Cernavodă nuclear reactors for ten "
+        "days, delaying any reopening until mid-October, according to Cristian Bușoi."
+    )
+    spoken = (
+        "Low Danube water levels prevent restarting Cernavoda nuclear reactors for 10 "
+        "days, delaying any reopening until mid October, according to Christian Bushoy. "
+        "Read the full sentence once at a measured pace."
+    ).split()
+    timed = tuple((word, index * 0.3, index * 0.3 + 0.2) for index, word in enumerate(spoken))
+
+    assert narration_matches(approved, tuple(spoken[: spoken.index("Read")]))
+    assert not narration_matches(approved, tuple(spoken))
+    assert narration_tail_cutoff_ms(approved, timed) is not None
+
+
 NUMERIC_APPROVED = (
     "The National Bank of Romania established the official reference exchange rate "
     "at five point two seven seven zero lei per euro, as the continental currency "
