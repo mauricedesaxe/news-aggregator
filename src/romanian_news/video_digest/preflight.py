@@ -675,7 +675,6 @@ def _provider_request(
         },
         "extra_body": {
             "provider": {"require_parameters": True},
-            "reasoning": {"effort": "low"},
         },
     }
 
