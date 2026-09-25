@@ -53,6 +53,7 @@ MEDIA_POLICY_VERSION = "video-digest-media-v1"
 SUBTITLE_POLICY_VERSION = "approved-screenplay-webvtt-v1"
 LOUDNESS_POLICY_VERSION = "ebu-r128-minus-16-v1"
 FADE_SECONDS = Decimal("0.25")
+AAC_FRAME_DURATION_MS = 32
 MEDIA_PROCESS_TIMEOUT_SECONDS = 900
 
 
@@ -395,14 +396,21 @@ def validate_media_file(
         json.JSONDecodeError,
     ) as error:
         raise MediaValidationError("unusable_probe", "Candidate probe is unusable") from error
-    if any(
-        abs(duration_ms - requested_duration_ms) > 100
+    within_duration_tolerance = all(
+        abs(duration_ms - requested_duration_ms) <= 100
         for duration_ms in (
             probe.duration_ms,
             probe.video_duration_ms,
             probe.audio_duration_ms,
         )
-    ):
+    )
+    aac_tail_ms = probe.audio_duration_ms - probe.video_duration_ms
+    within_aac_padding_tolerance = (
+        0 < aac_tail_ms <= AAC_FRAME_DURATION_MS
+        and abs(probe.video_duration_ms - requested_duration_ms) <= 100
+        and abs(probe.duration_ms - aac_tail_ms - requested_duration_ms) <= 100
+    )
+    if not (within_duration_tolerance or within_aac_padding_tolerance):
         raise MediaValidationError(
             "duration_mismatch", "Candidate duration differs from the requested duration"
         )
