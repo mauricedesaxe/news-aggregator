@@ -305,6 +305,7 @@ class _Harness:
         self.classifications: list[tuple[str, str, str]] = []
         self.attempts: list[generation.GenerationAttemptReference] = []
         self.admissions: list[GenerationAdmission] = []
+        self.queue_statuses: list[str] = []
         self.failed_slot = False
         self.deny_admission = False
         self.deadline = datetime(2027, 1, 1, tzinfo=UTC)
@@ -330,12 +331,25 @@ class _Harness:
         monkeypatch.setattr(
             generation, "checkpoint_generation_submission", self.checkpoint_submission
         )
+        monkeypatch.setattr(generation, "checkpoint_fal_queue_state", self.checkpoint_queue_state)
         monkeypatch.setattr(generation, "checkpoint_generation_response", self.checkpoint_response)
         monkeypatch.setattr(generation, "checkpoint_generation_failure", self.checkpoint_failure)
         monkeypatch.setattr(generation, "fail_slot", self.fail_slot)
 
     def publish(self, objects) -> None:
         self.objects.update(objects)
+
+    def checkpoint_queue_state(
+        self,
+        _lease: SlotLease,
+        _request_id: str,
+        *,
+        provider_receipt_id: str,
+        provider_status: str,
+        recorded_at: datetime,
+    ) -> None:
+        del provider_receipt_id, recorded_at
+        self.queue_statuses.append(provider_status)
 
     def publish_policy(self, _policy: generation.GenerationPolicyArtifact) -> str:
         self.policy_publications += 1
@@ -857,6 +871,7 @@ def test_in_progress_status_reports_progress_without_new_spend(
 
     assert isinstance(outcome, generation.GenerationInProgress)
     assert outcome.provider_status == "IN_PROGRESS"
+    assert harness.queue_statuses == ["IN_PROGRESS"]
     assert provider.submitted_positions == [0]
     assert harness.attempts[0].stage is GenerationStage.SUBMITTED
     assert harness.failed_slot is False
@@ -878,6 +893,7 @@ def test_completed_status_with_an_error_fails_the_attempt_and_allows_retry(
 
     assert isinstance(outcome, generation.GenerationRetryAvailable)
     assert outcome.reason == "model refused the prompt"
+    assert harness.queue_statuses == ["COMPLETED"]
     assert harness.attempts[0].stage is GenerationStage.FAILED
     assert harness.failed_slot is False
 

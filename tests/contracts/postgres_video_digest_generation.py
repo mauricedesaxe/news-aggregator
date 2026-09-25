@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -1334,6 +1338,158 @@ def test_generation_submission_persists_the_provider_receipt_and_estimate(
         "FROM video_digest_generation_requests WHERE request_id = %s",
         (pipeline.request_id(0),),
     ) == ("submitted", f"fal-{pipeline.request_id(0)}", "estimated", "1.2500")
+
+
+def _submitted_queue_pipeline(seed: int) -> _GenerationPipeline:
+    pipeline = _GenerationPipeline(seed=seed)
+    pipeline.checkpoint_plan()
+    pipeline.verify_story(0)
+    pipeline.start_request(0)
+    pipeline.submit(0)
+    return pipeline
+
+
+def test_fal_queue_state_replay_preserves_the_original_status_entry_time(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _submitted_queue_pipeline(104)
+    request_id = pipeline.request_id(0)
+    receipt_id = f"fal-{request_id}"
+    first = video_digest_catalog.checkpoint_fal_queue_state(
+        pipeline.lease,
+        request_id,
+        provider_receipt_id=receipt_id,
+        provider_status="IN_QUEUE",
+        recorded_at=pipeline.recorded_at,
+    )
+    repeated = video_digest_catalog.checkpoint_fal_queue_state(
+        pipeline.lease,
+        request_id,
+        provider_receipt_id=receipt_id,
+        provider_status="IN_QUEUE",
+        recorded_at=pipeline.recorded_at + timedelta(minutes=19),
+    )
+
+    assert first.provider_status == repeated.provider_status == "IN_QUEUE"
+    assert first.entered_at == repeated.entered_at
+    assert first.transition_index == repeated.transition_index
+    assert (
+        video_digest_catalog.read_stalled_fal_queue_incidents(
+            as_of=first.entered_at + timedelta(minutes=19, seconds=59)
+        )
+        == ()
+    )
+    incidents = video_digest_catalog.read_stalled_fal_queue_incidents(
+        as_of=first.entered_at + timedelta(minutes=20)
+    )
+    assert len(incidents) == 1
+    assert incidents[0].request_id == request_id
+    assert incidents[0].provider_receipt_id == receipt_id
+    assert incidents[0].provider_status == "IN_QUEUE"
+    assert incidents[0].entered_at == first.entered_at
+    assert incidents[0].stalled_at == first.entered_at + timedelta(minutes=20)
+
+
+def test_fal_queue_transition_resets_timer_and_completed_status_excludes_incident(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _submitted_queue_pipeline(105)
+    request_id = pipeline.request_id(0)
+    receipt_id = f"fal-{request_id}"
+    in_queue = video_digest_catalog.checkpoint_fal_queue_state(
+        pipeline.lease,
+        request_id,
+        provider_receipt_id=receipt_id,
+        provider_status="IN_QUEUE",
+        recorded_at=pipeline.recorded_at,
+    )
+    queued_incident = video_digest_catalog.read_stalled_fal_queue_incidents(
+        as_of=in_queue.entered_at + timedelta(minutes=20)
+    )[0]
+
+    processing = video_digest_catalog.checkpoint_fal_queue_state(
+        pipeline.lease,
+        request_id,
+        provider_receipt_id=receipt_id,
+        provider_status="IN_PROGRESS",
+        recorded_at=pipeline.recorded_at + timedelta(minutes=21),
+    )
+
+    assert processing.entered_at > in_queue.entered_at
+    assert processing.transition_index == in_queue.transition_index + 1
+    assert (
+        video_digest_catalog.read_stalled_fal_queue_incidents(
+            as_of=processing.entered_at + timedelta(minutes=19)
+        )
+        == ()
+    )
+    incidents = video_digest_catalog.read_stalled_fal_queue_incidents(
+        as_of=processing.entered_at + timedelta(minutes=20)
+    )
+    assert len(incidents) == 1
+    assert incidents[0].provider_status == "IN_PROGRESS"
+    assert incidents[0].entered_at == processing.entered_at
+    assert incidents[0].alert_id != queued_incident.alert_id
+
+    completed = video_digest_catalog.checkpoint_fal_queue_state(
+        pipeline.lease,
+        request_id,
+        provider_receipt_id=receipt_id,
+        provider_status="COMPLETED",
+        recorded_at=pipeline.recorded_at + timedelta(minutes=42),
+    )
+    assert completed.provider_status == "COMPLETED"
+    assert completed.entered_at > processing.entered_at
+    assert completed.transition_index == processing.transition_index + 1
+    assert (
+        video_digest_catalog.read_stalled_fal_queue_incidents(
+            as_of=completed.entered_at + timedelta(hours=1)
+        )
+        == ()
+    )
+
+
+def test_fal_stalled_incident_is_rebuilt_after_process_restart(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    pipeline = _submitted_queue_pipeline(106)
+    request_id = pipeline.request_id(0)
+    receipt_id = f"fal-{request_id}"
+    state = video_digest_catalog.checkpoint_fal_queue_state(
+        pipeline.lease,
+        request_id,
+        provider_receipt_id=receipt_id,
+        provider_status="IN_QUEUE",
+        recorded_at=pipeline.recorded_at,
+    )
+    as_of = state.entered_at + timedelta(minutes=20)
+    expected = [
+        candidate.model_dump(mode="json")
+        for candidate in video_digest_catalog.read_stalled_fal_queue_incidents(as_of=as_of)
+    ]
+    assert len(expected) == 1
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+
+    child = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import json, sys; from datetime import datetime; "
+            "from romanian_news.catalog.video_digest import read_stalled_fal_queue_incidents; "
+            "print(json.dumps([item.model_dump(mode='json') for item in "
+            "read_stalled_fal_queue_incidents(as_of=datetime.fromisoformat(sys.argv[1]))]))",
+            as_of.isoformat(),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "NEWS_POSTGRES_DSN": news_schema.NEWS_POSTGRES_DSN},
+    )
+
+    assert json.loads(child.stdout) == expected
 
 
 def test_generation_submission_replays_the_stored_receipt_after_processing(
