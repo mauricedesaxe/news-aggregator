@@ -10,13 +10,16 @@ from romanian_news.config import (
     BETTERSTACK_MORNING_REPORT_HEARTBEAT_URL,
     BETTERSTACK_REPORT_HEARTBEAT_URL,
     BETTERSTACK_RESEARCH_TRIGGER_HEARTBEAT_URL,
+    BETTERSTACK_VIDEO_DIGEST_HEARTBEAT_URL,
 )
 
 _logger = logging.getLogger(__name__)
 _heartbeat_threads: list[threading.Thread] = []
 
 
-def ping_heartbeat(kind: Literal["report", "research_trigger", "morning_report"]) -> None:
+def ping_heartbeat(
+    kind: Literal["report", "research_trigger", "morning_report", "video_digest"],
+) -> None:
     """Record one successful pipeline pass; silence alerts on pipeline failure.
 
     Alerting is a side channel, so a failed ping logs and moves on instead of
@@ -27,6 +30,7 @@ def ping_heartbeat(kind: Literal["report", "research_trigger", "morning_report"]
         "report": BETTERSTACK_REPORT_HEARTBEAT_URL,
         "research_trigger": BETTERSTACK_RESEARCH_TRIGGER_HEARTBEAT_URL,
         "morning_report": BETTERSTACK_MORNING_REPORT_HEARTBEAT_URL,
+        "video_digest": BETTERSTACK_VIDEO_DIGEST_HEARTBEAT_URL,
     }[kind]
     if not url:
         _logger.warning("No heartbeat URL configured for %s; the check will not page", kind)

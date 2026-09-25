@@ -6,7 +6,7 @@ source of truth; Dagster retries must resume its recorded state rather than repl
 
 ## Current status
 
-Verification on 2026-09-22 established these production facts:
+Verification on 2026-09-25 established these production facts:
 
 | Boundary | Result | Evidence |
 | --- | --- | --- |
@@ -14,15 +14,23 @@ Verification on 2026-09-22 established these production facts:
 | Reader deployment | Pass | Railway deployed repository commit `abdb3e6` successfully |
 | Public media origin | Pass | `romanian-news-public-media` is served at `https://news-media.alexlazar.dev` with active TLS 1.2 or newer |
 | R2 custom-domain probe | Pass | The permanent smoke object returns exact bytes, `Content-Length`, `Accept-Ranges`, and a valid `206` byte range |
-| Dagster deployment | Blocked | PR #42 repairs an invalid annotated tag-object pin, but GitHub still fails every workflow job before assigning a hosted runner |
+| Dagster deployment | Pass | The code location deployed successfully from the merged H3 reference registry commit |
 | Execution ownership | Decided | Dagster owns all background work; the unrelated Railway worker remains untouched |
 | Schedule ownership | Safe, inactive | `scheduled_video_digest` is registered `STOPPED` and excluded from production activation |
-| Subtitle timing | Blocked | No production subtitle timing adapter is installed |
-| Incident delivery | Deferred | The owner deferred a dedicated video incident transport and escalation policy |
-| Video heartbeat | Deferred | The owner deferred a video-specific Better Stack heartbeat |
+| Subtitle timing | Code ready, quality gate open | The production timing provider and fallback are installed; Romanian narration timing still needs a real-sample review |
+| Incident delivery | Configuration pending | Terminal failure and deadline payloads are wired to an incoming webhook; configure and verify `BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL` and the remaining monitor conditions before activation |
+| Video heartbeat | Configuration pending | A successful publication pings `BETTERSTACK_VIDEO_DIGEST_HEARTBEAT_URL`; create the Better Stack heartbeat before activation |
 
 The Railway service named `romanian-news-worker` is unrelated. Its observed deployments target
 `mauricedesaxe/chartly`, not this repository. Video work executes only in Dagster.
+
+For incident delivery, configure a Better Stack incoming webhook that creates on
+`incident.status=alert`, extracts its alert ID from `incident.id`, title from `incident.title`,
+and cause from `incident.description`. Store its URL in Dagster as
+`BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL`. The stable alert ID prevents duplicate incidents when
+Dagster retries. Configure a separate successful-publication heartbeat URL in
+`BETTERSTACK_VIDEO_DIGEST_HEARTBEAT_URL`. Test both with a non-production payload before starting
+the video schedule. See the [Better Stack incoming webhook guide](https://betterstack.com/docs/uptime/incoming-webhooks/).
 
 The production reader has `NEWS_PUBLIC_MEDIA_R2_BUCKET=romanian-news-public-media` and
 `NEWS_PUBLIC_MEDIA_BASE_URL=https://news-media.alexlazar.dev`. The probe object is

@@ -10,6 +10,7 @@ from romanian_news.video_digest.orchestration import (
     NoAlert,
     RunDeferred,
     RunFailed,
+    RunPublished,
 )
 from romanian_news.worker import video_digest
 from tests.postgres_catalog import TEST_POSTGRES_DSN, PostgresCatalog
@@ -233,6 +234,10 @@ def test_terminal_failure_fails_the_dagster_step_without_retry(
             }
 
     monkeypatch.setattr(video_digest, "runtime_factory", Runtime)
+    delivered: list[IncidentAlert] = []
+    monkeypatch.setattr(
+        video_digest, "send_slot_failure_alert", lambda value: delivered.append(value)
+    )
     compute_fn = video_digest.orchestrate_video_digest.compute_fn
     decorated_fn = getattr(compute_fn, "decorated_fn", None)
     assert callable(decorated_fn)
@@ -242,3 +247,34 @@ def test_terminal_failure_fails_the_dagster_step_without_retry(
 
     assert raised.value.allow_retries is False
     assert raised.value.description == "Video digest slot failed: deadline"
+    assert delivered == [alert]
+
+
+def test_published_video_pings_its_heartbeat(monkeypatch: pytest.MonkeyPatch) -> None:
+    slot = video_digest.scheduled_video_digest_slot(
+        datetime(2026, 9, 21, 8, tzinfo=ZoneInfo("Europe/Bucharest"))
+    )
+
+    class Runtime:
+        def run(self, _slot_id: str, *, owner_token: str) -> tuple[RunPublished, NoAlert]:
+            assert owner_token == "run-1"
+            return RunPublished(), NoAlert()
+
+    class Run:
+        tags = {"news/video_digest_slot_id": slot.slot_id}
+
+    class Context:
+        run = Run()
+        run_id = "run-1"
+
+        def add_output_metadata(self, _metadata: dict[str, object]) -> None:
+            pass
+
+    pings: list[str] = []
+    monkeypatch.setattr(video_digest, "runtime_factory", Runtime)
+    monkeypatch.setattr(video_digest, "ping_heartbeat", pings.append)
+    compute_fn = video_digest.orchestrate_video_digest.compute_fn
+    decorated_fn = getattr(compute_fn, "decorated_fn", None)
+    assert callable(decorated_fn)
+    decorated_fn(Context())
+    assert pings == ["video_digest"]
