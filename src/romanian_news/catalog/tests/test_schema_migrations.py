@@ -109,6 +109,7 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         (15, "video_digest_h3_references"),
         (16, "video_digest_slot_selection"),
         (17, "video_digest_fal_queue_states"),
+        (18, "video_digest_generation_active_slot"),
     )
     assert tuple(migration.version for migration in NEWS_CATALOG_MIGRATIONS) == tuple(
         range(1, len(NEWS_CATALOG_MIGRATIONS) + 1)
@@ -137,4 +138,5 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         "31c8cea32983b1c97da65c31ba88570417338d64744c5a008277fbad58d15b3d",
         "3b135e22c7ee7aa4ff4e50820e3f1743a664b0744885f15a7352e0b96cd574ab",
         "b6ce2bf8a8f2eddddfe99ad5ecf0e8cdcdaa74902adec6344bceb2f2b946c0b3",
+        "2f066c1148cb9eadfa227cd4feb947bf6e9bea2b4b2437d83cbdf9af8cc13f5a",
     )

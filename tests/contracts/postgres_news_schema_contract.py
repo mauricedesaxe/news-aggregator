@@ -379,6 +379,7 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         (15, "video_digest_h3_references", news_schema.NEWS_CATALOG_MIGRATIONS[14].sha256),
         (16, "video_digest_slot_selection", news_schema.NEWS_CATALOG_MIGRATIONS[15].sha256),
         (17, "video_digest_fal_queue_states", news_schema.NEWS_CATALOG_MIGRATIONS[16].sha256),
+        (18, "video_digest_generation_active_slot", news_schema.NEWS_CATALOG_MIGRATIONS[17].sha256),
     ]
 
 
@@ -1400,6 +1401,24 @@ def test_video_digest_generation_checkpoints_complete_atomically(
         daily_report_version_id=report,
         policy_bundle_version_id=policy,
     )
+    prior_at = recorded_at - timedelta(hours=2)
+    prior_slot = ScheduledSlot(
+        slot_id=scheduled_slot_id(SlotName.MIDDAY, prior_at),
+        name=SlotName.MIDDAY,
+        scheduled_at=prior_at,
+        bucharest_day=prior_at.astimezone(BUCHAREST).date(),
+    )
+    video_digest_catalog.schedule_slot(prior_slot, recorded_at=recorded_at)
+    prior_claim = video_digest_catalog.claim_slot(
+        prior_slot.slot_id,
+        identity,
+        owner_token="prior-generation-contract",
+        now=recorded_at,
+        lease_duration=timedelta(hours=1),
+    )
+    assert isinstance(prior_claim, ClaimedSlot)
+    video_digest_catalog.fail_slot_deadline(prior_claim.lease, recorded_at=recorded_at)
+
     slot = ScheduledSlot(
         slot_id=scheduled_slot_id(SlotName.MORNING, recorded_at),
         name=SlotName.MORNING,
@@ -1750,8 +1769,9 @@ def test_video_digest_generation_checkpoints_complete_atomically(
             "JOIN video_digest_publication_attempts AS attempt "
             "  ON attempt.publication_id = publication.publication_id "
             "JOIN video_digest_slots AS slot ON slot.edition_id = publication.edition_id "
-            "WHERE publication.publication_id = %s AND attempt.attempt_index = 0",
-            (publication_id_value,),
+            "WHERE publication.publication_id = %s AND attempt.attempt_index = 0 "
+            "AND slot.slot_id = %s",
+            (publication_id_value, slot.slot_id),
         ).fetchone() == ("verified", "started", "publishing")
         connection.execute("DROP TRIGGER contract_reject_slot_publication ON video_digest_slots")
         connection.execute("DROP FUNCTION reject_contract_slot_publication()")
@@ -1791,21 +1811,17 @@ def test_video_digest_generation_checkpoints_complete_atomically(
             (clip_file.artifact_id, slot.slot_id),
         ).fetchone()
         second_request_version = _record_artifact_versions(connection, 503, 1)[0]
-        _insert_generation_request(
-            connection,
-            _sha256_id(504),
-            identity.edition_id,
-            second_request_version,
-            admission=admission,
-            attempt_index=1,
-        )
-        with pytest.raises(psycopg.errors.UniqueViolation):
-            connection.execute(
-                "UPDATE video_digest_generation_requests "
-                "SET stage = 'submitted', provider_receipt_id = %s, "
-                "cost_kind = 'estimated', cost_usd = 1, updated_at = CURRENT_TIMESTAMP "
-                "WHERE request_id = %s",
-                (receipt_id, _sha256_id(504)),
+        with pytest.raises(
+            psycopg.errors.ForeignKeyViolation,
+            match="requires an active slot",
+        ):
+            _insert_generation_request(
+                connection,
+                _sha256_id(504),
+                identity.edition_id,
+                second_request_version,
+                admission=admission,
+                attempt_index=1,
             )
     assert row == ("published", "accepted", "accepted", clip_file.version_id)
 
