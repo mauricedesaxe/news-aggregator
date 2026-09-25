@@ -56,7 +56,9 @@ from romanian_news.video_digest.planning_artifacts import (
 )
 
 PLANNING_PROMPT = (
-    "Write one complete Romanian-language video screenplay for every supplied main story. "
+    "Write one complete English-language video screenplay for every supplied main story. "
+    "Write all spoken narration in natural English, translating source evidence faithfully "
+    "when it is in another language. "
     "The recurring lead scientist and three-eyed pear-shaped alien co-host deliver each story "
     "inside a narrow retro-futurist broadcast booth. Keep both hosts visually stable, but make "
     "the action fast, strange, physical, and specific to the news: props transform, diagrams "
@@ -67,8 +69,9 @@ PLANNING_PROMPT = (
 )
 VERIFICATION_PROMPT = (
     "Verify one screenplay story independently against only the supplied matching report story. "
-    "Reject unsupported claims, citation changes, misleading emphasis, or narration outside the "
-    "supplied evidence. Return structured failures and no editorial rewrite."
+    "Reject non-English narration, unsupported claims, citation changes, misleading emphasis, "
+    "or narration outside the supplied evidence. Check translations against the supplied evidence. "
+    "Return structured failures and no editorial rewrite."
 )
 PLANNING_MODEL = "google/gemini-3.8-flash"
 VERIFICATION_MODEL = "openai/gpt-4.1-mini"

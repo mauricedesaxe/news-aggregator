@@ -97,6 +97,19 @@ def _prepared() -> preflight.PreparedPaidGeneration:
     )
 
 
+def test_fal_prompt_requires_english_speech() -> None:
+    prepared = _prepared()
+    request, _, _ = generation._generation_request(
+        prepared, _references(), generation.PRODUCTION_GENERATION_POLICY, 0, 0
+    )
+
+    prompt = generation._fal_arguments(request, lambda _: "https://r2.example/reference")["prompt"]
+
+    assert isinstance(prompt, str)
+    assert f'in English: "{request.story.narration}"' in prompt
+    assert "in Romanian" not in prompt
+
+
 def _section(subject: str, article: str, position: int) -> DailyReportSection:
     return DailyReportSection(
         theme_id=subject,
