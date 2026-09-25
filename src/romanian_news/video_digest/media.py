@@ -47,6 +47,10 @@ from romanian_news.video_digest.models import (
     SlotLease,
     SubtitleOutcome,
 )
+from romanian_news.video_digest.narration_quality import (
+    NarrationCheckError,
+    clip_narration_matches,
+)
 from romanian_news.video_digest.planning import ScreenplayPlan
 
 MEDIA_POLICY_VERSION = "video-digest-media-v1"
@@ -427,6 +431,8 @@ def accept_candidate(
     lease: SlotLease,
     candidate: CandidateReady,
     story: PlannedStory,
+    *,
+    approved_narration: str,
 ) -> AcceptedCandidate | GenerationRetryAvailable | GenerationFailed:
     attempt = _matching_attempt(lease, candidate)
     if story.position != candidate.story_position or story.story_id != candidate.story_id:
@@ -458,6 +464,14 @@ def accept_candidate(
                 expected_size=candidate.candidate.byte_size,
                 requested_duration_ms=story.requested_duration_ms,
             )
+            try:
+                matches_narration = clip_narration_matches(path, approved_narration)
+            except NarrationCheckError as error:
+                raise MediaValidationError("narration_check_failed", str(error)) from error
+            if not matches_narration:
+                raise MediaValidationError(
+                    "narration_mismatch", "Candidate speech differs from the approved screenplay"
+                )
     except (
         MediaValidationError,
         ResearchObjectIntegrityError,
@@ -814,7 +828,7 @@ def _reject_candidate(
         code = "stored_digest_mismatch"
     else:
         code = "media_tool_timeout"
-    reason = f"Technical media validation failed: {code}"
+    reason = f"Candidate validation failed: {code}"
     content = canonical_json({"request_id": candidate.request_id, "code": code})
     failure_file = artifact_file(
         artifact_id=f"{candidate.request_id}:failure",

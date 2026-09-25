@@ -68,7 +68,10 @@ class ProductionH3GenerationPort(GenerationPort):
             )
         if isinstance(result, CandidateReady):
             story = prepared.plan.stories[result.story_position]
-            accept_candidate(action.lease, result, story)
+            approved_narration = prepared.verified_plan.plan.stories[
+                result.story_position
+            ].narration
+            accept_candidate(action.lease, result, story, approved_narration=approved_narration)
         elif isinstance(result, GenerationComplete):
             checkpoint_assembly_ready(action.lease, recorded_at=datetime.now(UTC))
         elif isinstance(result, GenerationFailed):

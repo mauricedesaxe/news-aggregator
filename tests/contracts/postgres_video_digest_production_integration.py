@@ -180,6 +180,7 @@ def test_production_runtime_reacquires_queued_generation_and_accepts_candidate(
         return subprocess.CompletedProcess(arguments, 0, stdout=output, stderr="")
 
     monkeypatch.setattr(media, "_run", media_process)
+    monkeypatch.setattr(media, "clip_narration_matches", lambda _path, text: bool(text))
 
     calls = 0
 

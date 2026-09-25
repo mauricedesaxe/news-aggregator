@@ -28,10 +28,22 @@ from romanian_news.video_digest.models import (
     generation_request_id,
     planned_story_id,
 )
+from romanian_news.video_digest.narration_quality import NarrationCheckError
 from romanian_news.video_digest.planning import ScreenplayPlan, ScreenplayStory
 
 FFMPEG_AVAILABLE = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 requires_ffmpeg = pytest.mark.skipif(not FFMPEG_AVAILABLE, reason="ffmpeg and ffprobe are required")
+
+
+@pytest.fixture(autouse=True)
+def _accept_synthetic_audio(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(media, "clip_narration_matches", lambda _path, _text: True)
+
+
+def _accept_candidate(lease: SlotLease, candidate: CandidateReady, story: PlannedStory):
+    return media.accept_candidate(
+        lease, candidate, story, approved_narration="Approved English narration"
+    )
 
 
 def _synthetic_clip(
@@ -439,7 +451,7 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
     monkeypatch.setattr(media, "publish_private_video_object", publish_clip)
     monkeypatch.setattr(media, "checkpoint_generation_acceptance", checkpoint)
 
-    result = media.accept_candidate(_lease(edition), candidate, story)
+    result = _accept_candidate(_lease(edition), candidate, story)
 
     assert isinstance(result, media.AcceptedCandidate)
     assert events == ["private", "evidence", "checkpoint"]
@@ -453,7 +465,7 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
         lambda *_args: pytest.fail("accepted candidates must replay stored evidence"),
     )
 
-    replayed = media.accept_candidate(_lease(edition), candidate, story)
+    replayed = _accept_candidate(_lease(edition), candidate, story)
 
     assert accepted_attempt.accepted_clip is not None
     assert accepted_attempt.validation_evidence is not None
@@ -475,7 +487,7 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
         lambda *_args, **_kwargs: events.append("failure-checkpoint"),
     )
 
-    rejected = media.accept_candidate(_lease(edition), candidate, story)
+    rejected = _accept_candidate(_lease(edition), candidate, story)
 
     assert isinstance(rejected, media.GenerationRetryAvailable)
     assert events == ["evidence", "failure-checkpoint"]
@@ -508,6 +520,59 @@ def _processing_attempt(
         cost=UnknownAttemptCost(reason="test fixture"),
     )
     return attempt, candidate
+
+
+@requires_ffmpeg
+@pytest.mark.parametrize(
+    ("check_result", "expected_code"),
+    [
+        (False, "narration_mismatch"),
+        (NarrationCheckError("transcription failed"), "narration_check_failed"),
+    ],
+)
+def test_candidate_narration_failure_is_recorded_before_acceptance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    check_result: bool | NarrationCheckError,
+    expected_code: str,
+) -> None:
+    content = _synthetic_clip(tmp_path / "candidate.mp4", "red")
+    edition = EditionId("e" * 64)
+    story = _story(edition, 0)
+    attempt, candidate = _processing_attempt(story, content, "spoken-prompt")
+    events: list[str] = []
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
+    monkeypatch.setattr(media, "read_verified_r2_object", lambda _key, _digest: content)
+
+    def check_narration(_path: Path, _text: str) -> bool:
+        if isinstance(check_result, NarrationCheckError):
+            raise check_result
+        return check_result
+
+    monkeypatch.setattr(media, "clip_narration_matches", check_narration)
+    monkeypatch.setattr(
+        media,
+        "publish_private_video_object",
+        lambda *_args, **_kwargs: pytest.fail("bad narration was accepted"),
+    )
+    monkeypatch.setattr(
+        media,
+        "publish_immutable_r2_objects",
+        lambda _objects: events.append("failure-evidence"),
+    )
+    monkeypatch.setattr(
+        media,
+        "checkpoint_generation_failure",
+        lambda *_args, **_kwargs: events.append("failure-checkpoint"),
+    )
+
+    result = media.accept_candidate(
+        _lease(edition), candidate, story, approved_narration="Approved English line"
+    )
+
+    assert isinstance(result, media.GenerationRetryAvailable)
+    assert result.reason == f"Candidate validation failed: {expected_code}"
+    assert events == ["failure-evidence", "failure-checkpoint"]
 
 
 def test_byte_identical_candidates_share_stable_accepted_object_lineage(
@@ -558,7 +623,7 @@ def test_byte_identical_candidates_share_stable_accepted_object_lineage(
     outcomes = []
     for attempt, candidate in attempts:
         active[:] = [attempt]
-        outcomes.append(media.accept_candidate(_lease(edition), candidate, story))
+        outcomes.append(_accept_candidate(_lease(edition), candidate, story))
 
     assert all(isinstance(outcome, media.AcceptedCandidate) for outcome in outcomes)
     assert accepted_requests == [candidate.request_id for _, candidate in attempts]
@@ -591,10 +656,10 @@ def test_acceptance_replay_rejects_a_candidate_that_differs_from_stored_media(
     )
 
     with pytest.raises(ValueError, match="does not match stored media evidence"):
-        media.accept_candidate(_lease(edition), tampered, story)
+        _accept_candidate(_lease(edition), tampered, story)
 
     with pytest.raises(ValueError, match="does not match stored media evidence"):
-        media.accept_candidate(
+        _accept_candidate(
             _lease(edition),
             candidate.model_copy(
                 update={
@@ -625,7 +690,7 @@ def test_candidate_matching_rejects_inactive_attempts(
     )
 
     with pytest.raises(ValueError, match="does not match one active generation request"):
-        media.accept_candidate(_lease(edition), candidate, story)
+        _accept_candidate(_lease(edition), candidate, story)
 
 
 def test_candidate_matching_rejects_a_divergent_response_version(
@@ -645,7 +710,7 @@ def test_candidate_matching_rejects_a_divergent_response_version(
     )
 
     with pytest.raises(ValueError, match="does not match its exact generation request"):
-        media.accept_candidate(_lease(edition), divergent, story)
+        _accept_candidate(_lease(edition), divergent, story)
 
 
 def test_media_tool_timeout_fails_the_attempt_for_a_retry(
@@ -670,7 +735,7 @@ def test_media_tool_timeout_fails_the_attempt_for_a_retry(
     monkeypatch.setattr(media, "ffprobe_command", lambda _path: ("sleep", "30"))
     monkeypatch.setattr(media, "MEDIA_PROCESS_TIMEOUT_SECONDS", 1)
 
-    outcome = media.accept_candidate(_lease(edition), candidate, story)
+    outcome = _accept_candidate(_lease(edition), candidate, story)
 
     assert isinstance(outcome, media.GenerationRetryAvailable)
     assert "media_tool_timeout" in outcome.reason
