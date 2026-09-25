@@ -18,7 +18,7 @@ Verification on 2026-09-25 established these production facts:
 | Execution ownership | Decided | Dagster owns all background work; the unrelated Railway worker remains untouched |
 | Schedule ownership | Safe, inactive | `scheduled_video_digest` is registered `STOPPED` and excluded from production activation |
 | Subtitle timing | Code ready, quality gate open | The production timing provider and fallback are installed; Romanian narration timing still needs a real-sample review |
-| Incident delivery | Configuration pending | Terminal failure and deadline payloads are wired to an incoming webhook; configure and verify `BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL` and the remaining monitor conditions before activation |
+| Incident delivery | Configuration pending | Terminal failure and deadline payloads are wired to an incoming webhook. The stopped five-minute monitor also reads durable publication, budget, and success-gap state. Configure and verify `BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL` before activation |
 | Video heartbeat | Configuration pending | A successful publication pings `BETTERSTACK_VIDEO_DIGEST_HEARTBEAT_URL`; create the Better Stack heartbeat before activation |
 
 The Railway service named `romanian-news-worker` is unrelated. Its observed deployments target
@@ -32,16 +32,17 @@ Dagster retries. Configure a separate successful-publication heartbeat URL in
 `BETTERSTACK_VIDEO_DIGEST_HEARTBEAT_URL`. Test both with a non-production payload before starting
 the video schedule. See the [Better Stack incoming webhook guide](https://betterstack.com/docs/uptime/incoming-webhooks/).
 
+`scheduled_video_digest_incident_monitor` is also registered `STOPPED`. Once incident delivery is
+verified, start it alongside the video schedule. Every five minutes it reports durable slot failures,
+unpublished editions 60 minutes after their slot, publication integrity conflicts, daily or monthly
+reservations at 80% of their budget, and a 24-hour gap after selected source changes without a
+successful publication. A stalled Fal queue is reported after 20 minutes in one observed queue
+state. Map `incident.id` as the Better Stack alert ID so repeated polls update the same incident.
+
 The production reader has `NEWS_PUBLIC_MEDIA_R2_BUCKET=romanian-news-public-media` and
 `NEWS_PUBLIC_MEDIA_BASE_URL=https://news-media.alexlazar.dev`. The probe object is
 `verification/production-smoke-v1.txt`; its body SHA-256 is
 `9767a285d5f6e4d8ce4c2ea2f1afdcc3b6073c92d93e235035bfcfcf61a46716`.
-
-GitHub Actions run `35725377121` proves the remaining deployment failure is outside the workflow.
-The definition job received no runner ID or runner name and executed zero steps. The same failure
-affects every job in the independent CI workflow. Repository Actions are enabled, all actions are
-allowed, and the production environment has no reviewer or branch-policy gate. Check the account's
-hosted-runner billing, spending limit, and Actions entitlement before changing workflow YAML again.
 
 ## Activation prerequisites
 
