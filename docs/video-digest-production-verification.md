@@ -18,22 +18,24 @@ Verification on 2026-09-25 established these production facts:
 | Execution ownership | Decided | Dagster owns all background work; the unrelated Railway worker remains untouched |
 | Schedule ownership | Safe, inactive | `scheduled_video_digest` is registered `STOPPED` and excluded from production activation |
 | Subtitle timing | English sample passed, production gate open | The [approved-video QA](video-digest-english-timing-qa.md) produced 12/12 valid cues with per-story fallback; an exact generated edition still needs reader playback review |
-| Incident delivery | Configuration pending | Terminal failure and deadline payloads are wired to an incoming webhook. The stopped five-minute monitor also reads durable publication, budget, and success-gap state. Configure and verify `BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL` before activation |
-| Video heartbeat | Configuration pending | A successful publication pings `BETTERSTACK_VIDEO_DIGEST_HEARTBEAT_URL`; create the Better Stack heartbeat before activation |
+| Incident delivery | Deferred by owner | Terminal failure and deadline payloads are wired to an optional incoming webhook. The incident monitor remains stopped; Better Stack configuration is not an activation gate |
+| Video heartbeat | Deferred by owner | Successful publication can ping an optional heartbeat. A dedicated video heartbeat is not an activation gate |
 
 The Railway service named `romanian-news-worker` is unrelated. Its observed deployments target
 `mauricedesaxe/chartly`, not this repository. Video work executes only in Dagster.
 
-For incident delivery, configure a Better Stack incoming webhook that creates on
+The owner deferred dedicated video incidents and heartbeat for this personal-use release. Keep
+`scheduled_video_digest_incident_monitor` stopped. Durable slot and publication records remain
+available for manual diagnosis, and the video schedule can be activated without Better Stack video
+URLs. If dedicated alerts are enabled later, configure a Better Stack incoming webhook that creates on
 `incident.status=alert`, extracts its alert ID from `incident.id`, title from `incident.title`,
 and cause from `incident.description`. Store its URL in Dagster as
 `BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL`. The stable alert ID prevents duplicate incidents when
 Dagster retries. Configure a separate successful-publication heartbeat URL in
 `BETTERSTACK_VIDEO_DIGEST_HEARTBEAT_URL`. Test both with a non-production payload before starting
-the video schedule. See the [Better Stack incoming webhook guide](https://betterstack.com/docs/uptime/incoming-webhooks/).
+the incident monitor. See the [Better Stack incoming webhook guide](https://betterstack.com/docs/uptime/incoming-webhooks/).
 
-`scheduled_video_digest_incident_monitor` is also registered `STOPPED`. Once incident delivery is
-verified, start it alongside the video schedule. Every five minutes it reports durable slot failures,
+If incident delivery is enabled later, the monitor reports durable slot failures every five minutes,
 unpublished editions 60 minutes after their slot, publication integrity conflicts, daily or monthly
 reservations at 80% of their budget, and a 24-hour gap after selected source changes without a
 successful publication. A stalled Fal queue is reported after 20 minutes in one observed queue
