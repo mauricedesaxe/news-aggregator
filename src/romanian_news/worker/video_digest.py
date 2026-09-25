@@ -8,6 +8,7 @@ from dagster import OpExecutionContext
 
 from romanian_news import BUCHAREST
 from romanian_news.catalog.video_digest import schedule_slot, skip_slot
+from romanian_news.video_digest.generation_port import ProductionH3GenerationPort
 from romanian_news.video_digest.models import (
     ScheduledSlot,
     SlotId,
@@ -22,6 +23,7 @@ from romanian_news.video_digest.orchestration import (
     VideoDigestRunOutcome,
 )
 from romanian_news.worker.assets import BUCHAREST_TIMEZONE
+from romanian_news.worker.video_digest_runtime import ProductionVideoDigestRuntime
 
 VIDEO_DIGEST_CRON = "0 8,13,20 * * *"
 VIDEO_DIGEST_JOB_NAME = "video_digest"
@@ -36,7 +38,11 @@ class VideoDigestRuntime(Protocol):
     ) -> tuple[VideoDigestRunOutcome, AlertDisposition]: ...
 
 
-runtime_factory: Callable[[], VideoDigestRuntime] | None = None
+def _production_runtime_factory() -> VideoDigestRuntime:
+    return ProductionVideoDigestRuntime(ProductionH3GenerationPort())
+
+
+runtime_factory: Callable[[], VideoDigestRuntime] | None = _production_runtime_factory
 
 
 def scheduled_video_digest_slot(scheduled_at: datetime) -> ScheduledSlot:

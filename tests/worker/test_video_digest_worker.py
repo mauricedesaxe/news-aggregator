@@ -33,11 +33,27 @@ def test_schedule_contract_and_deterministic_slot_mapping() -> None:
     assert video_digest.orchestrate_video_digest.retry_policy.max_retries == 95
     assert video_digest.orchestrate_video_digest.retry_policy.delay == 60
 
+    assert video_digest.runtime_factory is not None
+
     for hour, expected in ((8, "morning"), (13, "midday"), (20, "evening")):
         slot = video_digest.scheduled_video_digest_slot(
             datetime(2026, 9, 21, hour, tzinfo=ZoneInfo("Europe/Bucharest"))
         )
         assert slot.name.value == expected
+
+
+def test_runtime_factory_wires_the_h3_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    generation = object()
+    runtime = object()
+
+    def make_runtime(port: object) -> object:
+        assert port is generation
+        return runtime
+
+    monkeypatch.setattr(video_digest, "ProductionH3GenerationPort", lambda: generation)
+    monkeypatch.setattr(video_digest, "ProductionVideoDigestRuntime", make_runtime)
+    assert video_digest.runtime_factory is not None
+    assert video_digest.runtime_factory() is runtime
 
 
 @pytest.mark.parametrize(
