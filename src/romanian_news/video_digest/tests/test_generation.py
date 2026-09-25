@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -1062,6 +1063,30 @@ def test_fal_receipt_url_cannot_exfiltrate_authorization(
         generation.FalH3Client("secret").status(receipt)
 
     assert requested is False
+
+
+@pytest.mark.parametrize("logs", [None, [{"message": "queued"}]])
+def test_fal_status_accepts_nullable_or_list_logs(
+    monkeypatch: pytest.MonkeyPatch,
+    logs: list[dict[str, object]] | None,
+) -> None:
+    response = requests.Response()
+    response.status_code = 200
+    response.url = "https://queue.fal.run/minimax/h3-max/reference-to-video/requests/receipt/status"
+    response._content = json.dumps(
+        {"status": "IN_QUEUE", "request_id": "receipt", "logs": logs}
+    ).encode()
+    monkeypatch.setattr(generation.requests, "get", lambda *args, **kwargs: response)
+    receipt = generation.FalSubmissionReceipt.model_validate(
+        {
+            "request_id": "receipt",
+            "status_url": response.url,
+            "response_url": "https://queue.fal.run/response",
+        },
+        strict=True,
+    )
+
+    assert generation.FalH3Client("secret").status(receipt).logs == logs
 
 
 def test_fal_download_rejects_oversized_response(monkeypatch: pytest.MonkeyPatch) -> None:

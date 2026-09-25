@@ -157,7 +157,7 @@ class FalQueueStatus(NewsModel):
     queue_position: int | None = None
     error: str | None = None
     error_type: str | None = None
-    logs: tuple[dict[str, object], ...] = ()
+    logs: list[dict[str, object]] | None = None
     metrics: dict[str, object] | None = None
 
 
