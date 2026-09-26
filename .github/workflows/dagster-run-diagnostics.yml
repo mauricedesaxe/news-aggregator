@@ -31,8 +31,10 @@ jobs:
           from urllib.request import Request, urlopen
 
           endpoint = os.environ["DAGSTER_CLOUD_URL"].rstrip("/")
-          if not endpoint.endswith("/graphql"):
-              endpoint += "/graphql"
+          deployment = os.environ["DAGSTER_CLOUD_DEPLOYMENT"]
+          if not endpoint.endswith(f"/{deployment}"):
+              endpoint += f"/{deployment}"
+          endpoint += "/graphql"
           query = """query RunErrors($runId: ID!) {
             logsForRun(runId: $runId) {
               __typename
