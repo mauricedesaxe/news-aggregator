@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from romanian_news import themes as construction_module
+from romanian_news.analysis import corrected_structured
 from romanian_news.analysis.groups.models import GroupSummary
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog import themes
@@ -154,8 +155,9 @@ def _sparse_output(monkeypatch, *, merged: bool) -> DailyThemeOutput:
         )
     response_iterator = iter(responses)
     monkeypatch.setattr(construction_module.time, "monotonic", lambda: 0.0)
+    monkeypatch.setattr(corrected_structured.time, "monotonic", lambda: 0.0)
     monkeypatch.setattr(
-        construction_module,
+        corrected_structured,
         "openrouter_client",
         lambda: SimpleNamespace(
             chat=SimpleNamespace(
@@ -164,7 +166,7 @@ def _sparse_output(monkeypatch, *, merged: bool) -> DailyThemeOutput:
         ),
     )
     monkeypatch.setattr(
-        construction_module,
+        corrected_structured,
         "record_model_attempt",
         lambda response, **_kwargs: SimpleNamespace(
             attempt_id=hashlib.sha256(response.id.encode()).hexdigest(),

@@ -5,13 +5,14 @@ import time
 from datetime import date
 from typing import Annotated, Literal
 
-from openai.types.chat import ChatCompletionMessageParam
-from pydantic import Field, ValidationError, model_validator
+from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.attempts import ModelCall, record_model_attempt
-from romanian_news.analysis.client import openrouter_client
-from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
+from romanian_news.analysis.attempts import ModelCall
+from romanian_news.analysis.corrected_structured import (
+    StructuredMessage,
+    run_corrected_structured_openrouter,
+)
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.identity import canonical_json as _canonical_json
 from romanian_news.identity import sha256 as _sha256
@@ -268,114 +269,59 @@ def construct_daily_research_triggers(
             )
         )
     response_schema = _response_schema()
-    messages = [
+    messages = (
         TriggerMessage(role="system", content=TRIGGER_PROMPT),
         TriggerMessage(role="user", content=_trigger_context(value)),
-    ]
-    attempts: list[TriggerAttemptEvidence] = []
-    responses = []
-    accepted: _TriggerResponse | None = None
+    )
     started = time.monotonic()
     model_request_id = _model_request_id(
-        research_trigger_request_id(value, policy), tuple(messages), response_schema, policy
+        research_trigger_request_id(value, policy), messages, response_schema, policy
     )
-    for attempt_index in range(2):
-        provider_inputs: ProviderChatRequest = {
-            "model": policy.model,
-            "messages": [_message_param(message) for message in messages],
-            "temperature": policy.temperature,
-            "max_tokens": policy.max_tokens,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "romanian_news_daily_research_triggers",
-                    "strict": True,
-                    "schema": response_schema,
-                },
-            },
-            "extra_body": {
-                "provider": {"require_parameters": True},
-                "reasoning": {"effort": "low"},
-            },
-        }
-        attempt_started = time.monotonic()
-        provider_call = trace_provider_call(
-            TRIGGER_OPERATION,
-            model_request_id,
-            provider_inputs,
-            lambda provider_inputs=provider_inputs: (
-                openrouter_client().chat.completions.create(**provider_inputs)
-            ),
-        )
-        response = provider_call.response
-        responses.append(response)
-        content = response.choices[0].message.content or ""
-        error_text = None
-        rejection: ValidationError | ValueError | None = None
-        try:
-            accepted = parse_research_trigger_response(content, value)
-        except (ValidationError, ValueError) as error:
-            rejection = error
-            error_text = str(error)
-        status: Literal["accepted", "rejected"] = "accepted" if error_text is None else "rejected"
-        recorded = record_model_attempt(
-            response,
-            request_id=model_request_id,
-            operation_key=TRIGGER_OPERATION,
-            attempt_index=attempt_index,
-            latency_ms=round((time.monotonic() - attempt_started) * 1000),
-            status=status,
-            error=error_text,
-            fallback_response_id=str(provider_call.call_id),
-            trace=provider_call.trace,
-        )
-        attempts.append(
-            TriggerAttemptEvidence(
-                attempt_id=recorded.attempt_id,
-                response_id=recorded.response_id,
-                status=status,
-                error=error_text,
-                response_content=content,
-                response_content_digest=_sha256(content.encode()),
-                provider_response=response.model_dump(mode="json"),
-            )
-        )
-        if accepted is not None and error_text is None:
-            break
-        if attempt_index == 1:
-            assert rejection is not None
-            raise ResearchTriggerCorrectionExhausted(
-                f"Research trigger response remained invalid after correction: {error_text}"
-            ) from rejection
-        messages.extend(
-            (
-                TriggerMessage(role="assistant", content=content),
-                TriggerMessage(
-                    role="user",
-                    content=(
-                        "The response was invalid. Rate every supplied subject exactly once. "
-                        f"Validation error: {error_text}"
-                    ),
-                ),
-            )
-        )
-    if accepted is None:
-        raise RuntimeError("Research trigger correction loop did not return")
+    run = run_corrected_structured_openrouter(
+        operation=TRIGGER_OPERATION,
+        request_id=model_request_id,
+        model=policy.model,
+        temperature=policy.temperature,
+        max_tokens=policy.max_tokens,
+        reasoning_effort="low",
+        schema_name="romanian_news_daily_research_triggers",
+        response_schema=response_schema,
+        initial_messages=(
+            StructuredMessage(role=messages[0].role, content=messages[0].content),
+            StructuredMessage(role=messages[1].role, content=messages[1].content),
+        ),
+        parse=lambda content: parse_research_trigger_response(content, value),
+        correction_message=lambda error: (
+            "The response was invalid. Rate every supplied subject exactly once. "
+            f"Validation error: {error}"
+        ),
+        exhausted_error=lambda error: ResearchTriggerCorrectionExhausted(
+            f"Research trigger response remained invalid after correction: {error}"
+        ),
+        unreachable_error="Research trigger correction loop did not return",
+        started_at=started,
+    )
+    construction_messages = tuple(
+        TriggerMessage(role=message.role, content=message.content) for message in run.messages
+    )
     construction = ModelResearchTriggerConstruction(
         request_id=model_request_id,
-        messages=tuple(messages),
-        input_digest=_messages_digest(tuple(messages)),
+        messages=construction_messages,
+        input_digest=_messages_digest(construction_messages),
         response_schema_digest=_sha256(_canonical_json(response_schema)),
-        call=ModelCall(
-            response_id=attempts[-1].response_id,
-            model=str(responses[-1].model),
-            input_tokens=sum(item.usage.prompt_tokens if item.usage else 0 for item in responses),
-            output_tokens=sum(
-                item.usage.completion_tokens if item.usage else 0 for item in responses
-            ),
-            latency_ms=round((time.monotonic() - started) * 1000),
+        call=run.call,
+        attempts=tuple(
+            TriggerAttemptEvidence(
+                attempt_id=attempt.attempt_id,
+                response_id=attempt.response_id,
+                status=attempt.status,
+                error=attempt.error,
+                response_content=attempt.response_content,
+                response_content_digest=attempt.response_content_digest,
+                provider_response=attempt.provider_response,
+            )
+            for attempt in run.attempts
         ),
-        attempts=tuple(attempts),
     )
     return _output(
         DailyResearchTriggerSet(
@@ -385,7 +331,7 @@ def construct_daily_research_triggers(
             policy_digest=research_trigger_policy_digest(policy),
             report=value.report,
             construction=construction,
-            triggers=_freeze_triggers(accepted, value, policy),
+            triggers=_freeze_triggers(run.value, value, policy),
         )
     )
 
@@ -512,14 +458,6 @@ def _model_request_id(
 
 def _messages_digest(messages: tuple[TriggerMessage, ...]) -> Sha256:
     return _sha256(_canonical_json([message.model_dump(mode="json") for message in messages]))
-
-
-def _message_param(message: TriggerMessage) -> ChatCompletionMessageParam:
-    if message.role == "system":
-        return {"role": "system", "content": message.content}
-    if message.role == "assistant":
-        return {"role": "assistant", "content": message.content}
-    return {"role": "user", "content": message.content}
 
 
 def _output(trigger_set: DailyResearchTriggerSet) -> DailyResearchTriggerOutput:

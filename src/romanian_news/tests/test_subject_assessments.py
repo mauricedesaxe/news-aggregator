@@ -25,6 +25,7 @@ from romanian_news.subject_assessments import (
     EmptySubjectAssessmentConstruction,
     ModelSubjectAssessmentConstruction,
     SubjectAssessment,
+    SubjectAssessmentCorrectionExhausted,
     SubjectAssessmentEvidence,
     SubjectEvidenceInput,
     SubjectSummaryInput,
@@ -70,13 +71,13 @@ def test_schema_v2_input_validates_strictly_and_scores_without_substitution(monk
         }
     )
     monkeypatch.setattr(
-        "romanian_news.themes.openrouter_client",
+        "romanian_news.analysis.corrected_structured.openrouter_client",
         lambda: SimpleNamespace(
             chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response))
         ),
     )
     monkeypatch.setattr(
-        "romanian_news.themes.record_model_attempt",
+        "romanian_news.analysis.corrected_structured.record_model_attempt",
         lambda response, **_kwargs: SimpleNamespace(
             attempt_id=hashlib.sha256(response.id.encode()).hexdigest(),
             response_id=response.id,
@@ -172,7 +173,7 @@ def test_response_requires_exact_subject_coverage_and_subject_evidence() -> None
 def test_empty_day_skips_inference_and_retains_exact_identity(monkeypatch) -> None:
     value = _input(empty=True)
     monkeypatch.setattr(
-        "romanian_news.subject_assessments.openrouter_client",
+        "romanian_news.analysis.corrected_structured.openrouter_client",
         lambda: (_ for _ in ()).throw(AssertionError("unexpected model call")),
     )
 
@@ -185,6 +186,95 @@ def test_empty_day_skips_inference_and_retains_exact_identity(monkeypatch) -> No
     assert DailySubjectAssessmentSet.model_validate_json(output.content, strict=True) == (
         output.assessment_set
     )
+
+
+def test_nonempty_assessment_preserves_model_evidence(monkeypatch) -> None:
+    value = _input()
+    response = _assessment_response(
+        {
+            "main": [
+                {
+                    "subject": "subject_01",
+                    "rationale": "National consequence.",
+                    "evidence_articles": ["article_01"],
+                }
+            ],
+            "worth_knowing": [
+                {
+                    "subject": "subject_02",
+                    "rationale": "Useful context.",
+                    "evidence_articles": ["article_02"],
+                }
+            ],
+            "excluded": [],
+        }
+    )
+    _assessment_provider(monkeypatch, (response,))
+
+    output = construct_daily_subject_assessments(value)
+
+    construction = output.assessment_set.construction
+    assert isinstance(construction, ModelSubjectAssessmentConstruction)
+    assert tuple(attempt.status for attempt in construction.attempts) == ("accepted",)
+    assert construction.call.input_tokens == 10
+    assert DailySubjectAssessmentSet.model_validate_json(output.content, strict=True) == (
+        output.assessment_set
+    )
+
+
+def test_subject_assessment_correction_preserves_domain_message(monkeypatch) -> None:
+    value = _input()
+    valid = _assessment_response(
+        {
+            "main": [
+                {
+                    "subject": "subject_01",
+                    "rationale": "National consequence.",
+                    "evidence_articles": ["article_01"],
+                }
+            ],
+            "worth_knowing": [
+                {
+                    "subject": "subject_02",
+                    "rationale": "Useful context.",
+                    "evidence_articles": ["article_02"],
+                }
+            ],
+            "excluded": [],
+        }
+    )
+    calls = _assessment_provider(monkeypatch, (_raw_assessment_response("{"), valid))
+
+    output = construct_daily_subject_assessments(value)
+
+    construction = output.assessment_set.construction
+    assert isinstance(construction, ModelSubjectAssessmentConstruction)
+    assert tuple(attempt.status for attempt in construction.attempts) == (
+        "rejected",
+        "accepted",
+    )
+    messages = calls[1]["messages"]
+    assert isinstance(messages, list)
+    correction = messages[-1]
+    assert isinstance(correction, dict)
+    content = correction["content"]
+    assert isinstance(content, str)
+    assert "complete three-tier assessment" in content
+
+
+def test_subject_assessment_exhaustion_preserves_domain_error(monkeypatch) -> None:
+    _assessment_provider(
+        monkeypatch,
+        (_raw_assessment_response("{"), _raw_assessment_response("{")),
+    )
+
+    with pytest.raises(
+        SubjectAssessmentCorrectionExhausted,
+        match="remained invalid after correction",
+    ) as raised:
+        construct_daily_subject_assessments(_input())
+
+    assert isinstance(raised.value.__cause__, ValidationError)
 
 
 def test_assessment_set_rejects_missing_subject_and_nonsemantic_tie() -> None:
@@ -606,13 +696,13 @@ def _sparse_input(monkeypatch) -> DailySubjectAssessmentInput:
         }
     )
     monkeypatch.setattr(
-        "romanian_news.themes.openrouter_client",
+        "romanian_news.analysis.corrected_structured.openrouter_client",
         lambda: SimpleNamespace(
             chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response))
         ),
     )
     monkeypatch.setattr(
-        "romanian_news.themes.record_model_attempt",
+        "romanian_news.analysis.corrected_structured.record_model_attempt",
         lambda response, **_kwargs: SimpleNamespace(
             attempt_id=hashlib.sha256(response.id.encode()).hexdigest(),
             response_id=response.id,
@@ -655,6 +745,50 @@ def _theme_response(payload: dict[str, object]) -> SimpleNamespace:
         choices=(SimpleNamespace(message=SimpleNamespace(content=content)),),
         model_dump=lambda *, mode: provider_payload,
     )
+
+
+def _assessment_response(payload: dict[str, object]) -> SimpleNamespace:
+    return _raw_assessment_response(json.dumps(payload))
+
+
+def _raw_assessment_response(content: str) -> SimpleNamespace:
+    response_id = f"subject-assessment-{hashlib.sha256(content.encode()).hexdigest()[:8]}"
+    provider_payload = {
+        "id": response_id,
+        "model": "google/gemini-3.8-flash",
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.01},
+        "choices": [{"message": {"content": content}}],
+    }
+    return SimpleNamespace(
+        id=response_id,
+        model="google/gemini-3.8-flash",
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5),
+        choices=(SimpleNamespace(message=SimpleNamespace(content=content)),),
+        model_dump=lambda *, mode: provider_payload,
+    )
+
+
+def _assessment_provider(monkeypatch, responses) -> list[dict[str, object]]:
+    calls: list[dict[str, object]] = []
+    response_iterator = iter(responses)
+    monkeypatch.setattr(
+        "romanian_news.analysis.corrected_structured.openrouter_client",
+        lambda: SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(
+                    create=lambda **kwargs: calls.append(kwargs) or next(response_iterator)
+                )
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "romanian_news.analysis.corrected_structured.record_model_attempt",
+        lambda response, **_kwargs: SimpleNamespace(
+            attempt_id=hashlib.sha256(response.id.encode()).hexdigest(),
+            response_id=response.id,
+        ),
+    )
+    return calls
 
 
 def test_stored_summary_payload_parses_json_lists(monkeypatch) -> None:
