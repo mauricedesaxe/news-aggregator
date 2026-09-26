@@ -55,6 +55,10 @@ from romanian_news.worker.video_digest_monitor import (
     scheduled_video_digest_incident_monitor,
     video_digest_incident_monitor_job,
 )
+from romanian_news.worker.weekly_status import (
+    scheduled_weekly_status,
+    weekly_status_refresh,
+)
 from romanian_news.youtube.models import YOUTUBE_SOURCES
 
 WEEKLY_ASSETS = dg.AssetSelection.groups("romanian_news_weekly")
@@ -450,6 +454,7 @@ defs = dg.Definitions(
         video_digest_job,
         video_digest_incident_monitor_job,
         jev_relevance_evaluation,
+        weekly_status_refresh,
     ],
     schedules=[
         hourly_registered_feed_poll,
@@ -459,6 +464,7 @@ defs = dg.Definitions(
         quarter_hourly_news_feedback_sync,
         scheduled_video_digest,
         scheduled_video_digest_incident_monitor,
+        scheduled_weekly_status,
     ],
     sensors=[
         article_batch_controller,

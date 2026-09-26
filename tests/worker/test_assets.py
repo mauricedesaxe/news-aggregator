@@ -65,6 +65,7 @@ def test_weekly_partitions_start_on_monday() -> None:
 def test_automation_starts_running_and_uses_bucharest_time() -> None:
     assert hourly_registered_feed_poll.default_status == dg.DefaultScheduleStatus.RUNNING
     assert daily_morning_report_check.default_status == dg.DefaultScheduleStatus.RUNNING
+    assert definitions.scheduled_weekly_status.default_status == dg.DefaultScheduleStatus.RUNNING
     assert weekly_freshness.default_status == dg.DefaultSensorStatus.RUNNING
     assert weekly_freshness.minimum_interval_seconds == 3600
     assert scheduled_video_digest.default_status == dg.DefaultScheduleStatus.STOPPED
@@ -84,6 +85,7 @@ def test_automation_starts_running_and_uses_bucharest_time() -> None:
         "quarter_hourly_news_feedback_sync",
         "scheduled_video_digest",
         "scheduled_video_digest_incident_monitor",
+        "scheduled_weekly_status",
     }
     assert defs.resolve_job_def("morning_report_check").name == morning_report_check.name
     assert defs.resolve_job_def("weekly_report").name == weekly_report_job.name

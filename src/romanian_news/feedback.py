@@ -80,13 +80,15 @@ class DailyReportSummary(NewsModel):
     day: date
 
 
-def list_daily_reports(limit: int = 30) -> tuple[DailyReportSummary, ...]:
+def list_daily_reports(limit: int = 30, offset: int = 0) -> tuple[DailyReportSummary, ...]:
     """List current daily reports in reverse chronological order."""
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         raise ValueError("Daily report limit must be a positive integer")
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        raise ValueError("Daily report offset must be a non-negative integer")
     return tuple(
         _daily_report_summary(record)
-        for record in feedback_catalog.list_daily_report_records(limit)
+        for record in feedback_catalog.list_daily_report_records(limit, offset)
     )
 
 
