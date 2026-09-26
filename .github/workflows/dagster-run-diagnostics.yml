@@ -42,8 +42,12 @@ jobs:
                 events {
                   __typename
                   ... on MessageEvent { message }
-                  ... on ExecutionStepFailureEvent { error { message stack } }
-                  ... on RunFailureEvent { error { message stack } }
+                  ... on ExecutionStepFailureEvent {
+                    error { message stack causes { message stack } }
+                  }
+                  ... on RunFailureEvent {
+                    error { message stack causes { message stack } }
+                  }
                 }
               }
             }
