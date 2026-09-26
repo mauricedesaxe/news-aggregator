@@ -28,7 +28,11 @@ from romanian_news.articles.models import (
     ArticleWorkLane,
     MaterializedArticleWorkItem,
 )
-from romanian_news.articles.recovery import ArticleAttemptState, ArticleRecoveryView
+from romanian_news.articles.recovery import (
+    ArticleAttemptState,
+    ArticleRecoveryView,
+    article_work_generation,
+)
 from romanian_news.catalog.articles import ArticleCatalogState
 from romanian_news.catalog_transport import ResearchCatalogError
 from romanian_news.feeds.models import (
@@ -277,7 +281,7 @@ def test_article_recovery_requires_current_generation_and_replays_once(monkeypat
         "romanian_news.articles.acquisition.article_catalog.write_article_recovery_overrides",
         lambda overrides: written.extend(overrides),
     )
-    generation = hashlib.sha256(f"{source.event_id}:unseen".encode()).hexdigest()
+    generation = article_work_generation(source.event_id, None)
     requested_at = datetime.fromisoformat("2026-09-02T13:00:00+00:00")
 
     with pytest.raises(ValueError, match="generation changed"):

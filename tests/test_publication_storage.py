@@ -158,9 +158,18 @@ def test_non_412_precondition_error_is_unavailable() -> None:
         publish_public_r2_object(cast(BaseClient, cast(object, client)), "public-media", value)
 
 
-@pytest.mark.parametrize("retention", ("candidate-7d", "permanent"))
+@pytest.mark.parametrize(
+    ("content_type", "retention"),
+    (
+        ("video/mp4", "candidate-7d"),
+        ("video/mp4", "permanent"),
+        ("audio/wav", "permanent"),
+        ("audio/mpeg", "permanent"),
+    ),
+)
 def test_private_video_classification_is_exact(
     monkeypatch: pytest.MonkeyPatch,
+    content_type: Literal["video/mp4", "audio/wav", "audio/mpeg"],
     retention: Literal["candidate-7d", "permanent"],
 ) -> None:
     value = _value()
@@ -168,15 +177,17 @@ def test_private_video_classification_is_exact(
     monkeypatch.setattr(storage, "_r2_client", lambda: client)
     monkeypatch.setattr(storage, "NEWS_R2_BUCKET", "private-media")
 
-    storage.publish_private_video_object(
-        "news/video-digest/candidates/7d/request/video.mp4",
+    storage.publish_private_reference_media_object(
+        "news/video-digest/candidates/7d/request/media",
         CONTENT,
+        content_type=content_type,
         retention=retention,
         source_lineage="request-id",
     )
 
     put = next(kwargs for operation, kwargs in client.calls if operation == "put")
     assert put["Bucket"] == "private-media"
+    assert put["ContentType"] == content_type
     assert put["CacheControl"] == "private,no-store"
     assert put["Metadata"] == {
         "sha256": DIGEST,

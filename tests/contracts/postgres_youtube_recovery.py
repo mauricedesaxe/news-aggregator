@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from romanian_news.catalog.youtube import claim_youtube_video, reject_youtube_video
+from romanian_news.youtube.errors import YouTubeDeterministicError
 from romanian_news.youtube.models import YOUTUBE_SOURCES, YouTubeVideoState
 from romanian_news.youtube.recovery import (
     inspect_youtube_quarantine,
@@ -163,3 +164,40 @@ def test_stale_release_cannot_reopen_next_quarantine(postgres_catalog) -> None:
     assert inspect_youtube_quarantine(SOURCE, VIDEO).state == "quarantined"
     _release(uuid4(), generation=2)
     assert len(postgres_catalog.query("SELECT request_id FROM youtube_quarantine_releases")) == 2
+
+
+def test_repeated_deterministic_failures_quarantine_with_generation_one(postgres_catalog) -> None:
+    postgres_catalog.execute(
+        "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, "
+        "visibility, created_at) VALUES ('poll', 'youtube_feed_snapshot', 'Poll', "
+        "'source', 'current', 'private', %s)",
+        (REQUESTED_AT,),
+    )
+    poll_version = "5" * 64
+    postgres_catalog.execute(
+        "INSERT INTO artifact_versions (id, artifact_id, schema_version, content_digest, "
+        "created_at) VALUES (%s, 'poll', 1, 'digest', %s)",
+        (poll_version, REQUESTED_AT),
+    )
+    postgres_catalog.execute(
+        "INSERT INTO youtube_videos (source_id, video_id, first_poll_version_id, "
+        "state, published_at, title) VALUES (%s, %s, %s, 'pending', %s, 'Video')",
+        (SOURCE, VIDEO, poll_version, REQUESTED_AT),
+    )
+    source = YOUTUBE_SOURCES.source(SOURCE)
+    error = YouTubeDeterministicError("payload is unusable")
+    now = datetime(2026, 9, 25, 10, tzinfo=UTC)
+
+    states = []
+    for attempt in range(3):
+        at = now + timedelta(hours=attempt)
+        lease = claim_youtube_video(source, "worker-1", at)
+        assert lease is not None
+        states.append(reject_youtube_video(lease, error, at))
+
+    assert states == ["deferred", "deferred", "quarantined"]
+    status = inspect_youtube_quarantine(SOURCE, VIDEO)
+    assert status.state == "quarantined"
+    assert status.quarantine_generation == 1
+    receipt = _release(uuid4())
+    assert receipt.quarantine_generation == 1

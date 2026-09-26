@@ -305,6 +305,47 @@ def test_terminal_repair_rotates_reservation_before_launch(monkeypatch) -> None:
     }
 
 
+@pytest.mark.parametrize("status", ["QUEUED", "STARTED"])
+def test_active_prior_repair_is_reused_without_a_new_launch(monkeypatch, status: str) -> None:
+    _configure(monkeypatch)
+    monkeypatch.setattr(
+        dagster_repair,
+        "reserve_repair",
+        lambda day: RepairReservation(day, UUID(int=1), "prior-run", False),
+    )
+
+    def rotate(*_args: object, **_kwargs: object) -> RepairReservation:
+        raise AssertionError("an active prior repair must not rotate its reservation")
+
+    monkeypatch.setattr(dagster_repair, "replace_terminal_repair", rotate)
+
+    def post(_url: str, **kwargs: Any) -> Response:
+        query = kwargs["json"]["query"]
+        assert "LaunchDailyReportRepair" not in query
+        assert "RepairRepositories" not in query
+        if "ActiveDailyReportRepairs" in query:
+            return Response(_payload({"runsOrError": {"__typename": "Runs", "results": []}}))
+        assert "DailyReportRepairRun" in query
+        return Response(
+            _payload(
+                {
+                    "runOrError": {
+                        "__typename": "Run",
+                        "runId": "prior-run",
+                        "status": status,
+                    }
+                }
+            )
+        )
+
+    monkeypatch.setattr(dagster_repair.requests, "post", post)
+
+    result = dagster_repair.request_daily_report_repair(DAY)
+
+    assert result.run_id == "prior-run"
+    assert result.kind in ("queued", "running")
+
+
 def test_definitive_launch_rejection_releases_reservation(monkeypatch) -> None:
     _configure(monkeypatch)
     released = []
