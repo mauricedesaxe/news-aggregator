@@ -58,5 +58,31 @@ def test_morning_check_reports_the_day_and_pings_on_the_real_catalog(
     assert isinstance(materialization_event.event_specific_data, StepMaterializationData)
     materialization = materialization_event.event_specific_data.materialization
     assert materialization.asset_key == dg.AssetKey("daily_reports")
+    assert materialization.asset_key == dg.AssetKey("daily_reports")
     assert materialization.partition == "2026-09-14"
     assert pings == ["morning_report"]
+
+
+def test_morning_check_fails_without_yesterdays_edition_and_never_pings(
+    postgres_catalog: PostgresCatalog,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        morning_report,
+        "_now",
+        lambda: datetime(2026, 9, 14, 9, 35, tzinfo=ZoneInfo("Europe/Bucharest")),
+    )
+    monkeypatch.setattr(
+        morning_report,
+        "build_and_publish_current_daily_report",
+        lambda day, ref: SimpleNamespace(
+            head=SimpleNamespace(version_id="9" * 64, input_time=datetime(2026, 9, 14, 4, 2))
+        ),
+    )
+    pings: list[str] = []
+    monkeypatch.setattr(morning_report, "ping_heartbeat", lambda kind: pings.append(kind))
+
+    execution = morning_report.morning_report_check.execute_in_process(raise_on_error=False)
+
+    assert not execution.success
+    assert pings == []

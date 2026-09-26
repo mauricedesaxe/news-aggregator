@@ -23,6 +23,7 @@ from romanian_news.video_digest.orchestration import (
     RunSkipped,
     ScheduledResume,
     SkippedResume,
+    SourceUnavailable,
     SubtitlePort,
     VideoDigestRunRequest,
 )
@@ -50,17 +51,10 @@ class _Catalog:
         return self.state
 
 
-def test_resumed_slot_does_not_recheck_current_report(monkeypatch: pytest.MonkeyPatch) -> None:
-    state = SkippedResume(slot=SLOT, reason=SlotSkipReason.UNCHANGED)
-    catalog = _Catalog(state)
-    port = _Port()
-    ports = DomainPorts(
-        planning=cast(PlanningPort, cast(object, port)),
-        generation=cast(GenerationPort, cast(object, port)),
-        assembly=cast(AssemblyPort, cast(object, port)),
-        subtitles=cast(SubtitlePort, cast(object, port)),
-        publication=cast(PublicationPort, cast(object, port)),
-    )
+def test_resumed_slot_skips_source_resolution_and_keeps_its_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = _Catalog(SkippedResume(slot=SLOT, reason=SlotSkipReason.UNCHANGED))
     captured: list[VideoDigestRunRequest] = []
 
     def resolve(*_args: object, **_kwargs: object) -> VideoDigestRunRequest:
@@ -72,15 +66,25 @@ def test_resumed_slot_does_not_recheck_current_report(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(video_digest_runtime, "resolve_video_digest_run_request", resolve)
     monkeypatch.setattr(video_digest_runtime, "run_video_digest", run)
+    port = cast(GenerationPort, cast(object, _Port()))
     runtime = video_digest_runtime.ProductionVideoDigestRuntime(
-        generation=cast(GenerationPort, cast(object, port)),
+        generation=port,
         catalog=cast(CatalogPort, cast(object, catalog)),
-        ports=ports,
+        ports=DomainPorts(
+            planning=cast(PlanningPort, cast(object, port)),
+            generation=port,
+            assembly=cast(AssemblyPort, cast(object, port)),
+            subtitles=cast(SubtitlePort, cast(object, port)),
+            publication=cast(PublicationPort, cast(object, port)),
+        ),
     )
+
     outcome, _ = runtime.run(SLOT.slot_id, owner_token="run-1")
+
     assert isinstance(outcome, RunSkipped)
-    assert outcome.reason == SlotSkipReason.UNCHANGED
     assert captured[0].slot == SLOT
+    assert captured[0].owner_token == "run-1"
+    assert captured[0].source == SourceUnavailable(reason=SlotSkipReason.SOURCE_MISSING)
 
 
 def test_exact_daily_report_file_rejects_missing_or_duplicate_version(
