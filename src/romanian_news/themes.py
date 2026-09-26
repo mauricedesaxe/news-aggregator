@@ -8,14 +8,15 @@ from collections.abc import Callable
 from datetime import date
 from typing import Annotated, Literal, TypeVar
 
-from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
-from pydantic import Field, TypeAdapter, ValidationError, model_validator
+from pydantic import Field, TypeAdapter, model_validator
 
 from romanian_news import GROUP_ANALYSIS_MODEL, NewsModel, Sha256
-from romanian_news.analysis.attempts import ModelCall, record_model_attempt
-from romanian_news.analysis.client import openrouter_client
+from romanian_news.analysis.attempts import ModelCall
+from romanian_news.analysis.corrected_structured import (
+    StructuredMessage,
+    run_corrected_structured_openrouter,
+)
 from romanian_news.analysis.groups.models import GroupSummary
-from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup, parse_daily_cluster_set
 from romanian_news.identity import canonical_json as _canonical_json
@@ -207,14 +208,6 @@ class DailyThemeInput(NewsModel):
 class ThemeModelMessage(NewsModel):
     role: Literal["system", "user", "assistant"]
     content: str
-
-
-def _message_param(message: ThemeModelMessage) -> ChatCompletionMessageParam:
-    if message.role == "system":
-        return {"role": "system", "content": message.content}
-    if message.role == "assistant":
-        return {"role": "assistant", "content": message.content}
-    return {"role": "user", "content": message.content}
 
 
 class ThemeModelAttemptEvidence(NewsModel):
@@ -706,109 +699,52 @@ def _run_theme_stage(
         schema_name,
         policy,
     )
-    messages = list(initial_messages)
-    attempts: list[ThemeModelAttemptEvidence] = []
-    responses: list[ChatCompletion] = []
     started = time.monotonic()
-    accepted: _ParsedStage | None = None
-    for attempt_index in range(2):
-        provider_inputs: ProviderChatRequest = {
-            "model": policy.model,
-            "messages": [_message_param(message) for message in messages],
-            "temperature": policy.temperature,
-            "max_tokens": policy.max_tokens,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": schema_name,
-                    "strict": True,
-                    "schema": response_schema,
-                },
-            },
-            "extra_body": {
-                "provider": {"require_parameters": True},
-                "reasoning": {"effort": policy.reasoning_effort},
-            },
-        }
-        attempt_started = time.monotonic()
-        provider_call = trace_provider_call(
-            operation,
-            request_id,
-            provider_inputs,
-            lambda provider_inputs=provider_inputs: (
-                openrouter_client().chat.completions.create(**provider_inputs)
-            ),
-        )
-        response = provider_call.response
-        responses.append(response)
-        content = response.choices[0].message.content or ""
-        error_text = None
-        rejection_error: ValidationError | ValueError | None = None
-        try:
-            accepted = parse(content)
-        except (ValidationError, ValueError) as error:
-            rejection_error = error
-            error_text = str(error)
-        status: Literal["accepted", "rejected"] = "accepted" if error_text is None else "rejected"
-        recorded = record_model_attempt(
-            response,
-            request_id=request_id,
-            operation_key=operation,
-            attempt_index=attempt_index,
-            latency_ms=round((time.monotonic() - attempt_started) * 1000),
-            status=status,
-            error=error_text,
-            fallback_response_id=str(provider_call.call_id),
-            trace=provider_call.trace,
-        )
-        attempts.append(
-            ThemeModelAttemptEvidence(
-                attempt_id=recorded.attempt_id,
-                response_id=recorded.response_id,
-                status=status,
-                error=error_text,
-                response_content=content,
-                response_content_digest=_sha256(content.encode()),
-                provider_response=response.model_dump(mode="json"),
-            )
-        )
-        if error_text is None and accepted is not None:
-            break
-        if attempt_index == 1:
-            assert rejection_error is not None
-            stage = "assignment" if operation == THEME_ASSIGNMENT_OPERATION else "merged prose"
-            raise error_type(
-                f"Daily theme {stage} stage remained invalid after correction: {error_text}"
-            ) from rejection_error
-        messages.extend(
-            (
-                ThemeModelMessage(role="assistant", content=content),
-                ThemeModelMessage(
-                    role="user",
-                    content=(
-                        f"The response was invalid. {correction_instruction} "
-                        f"Validation error: {error_text}"
-                    ),
-                ),
-            )
-        )
-    if accepted is None:
-        raise RuntimeError("Daily theme correction loop did not return")
-    return accepted, ThemeStageEvidence(
+    stage = "assignment" if operation == THEME_ASSIGNMENT_OPERATION else "merged prose"
+    run = run_corrected_structured_openrouter(
+        operation=operation,
         request_id=request_id,
-        messages=tuple(messages),
-        input_digest=_messages_digest(tuple(messages)),
-        response_schema_digest=_sha256(_canonical_json(response_schema)),
-        call=ModelCall(
-            response_id=attempts[-1].response_id,
-            model=str(responses[-1].model),
-            input_tokens=sum(item.usage.prompt_tokens if item.usage else 0 for item in responses),
-            output_tokens=sum(
-                item.usage.completion_tokens if item.usage else 0 for item in responses
-            ),
-            latency_ms=round((time.monotonic() - started) * 1000),
+        model=policy.model,
+        temperature=policy.temperature,
+        max_tokens=policy.max_tokens,
+        reasoning_effort=policy.reasoning_effort,
+        schema_name=schema_name,
+        response_schema=response_schema,
+        initial_messages=(
+            StructuredMessage(role=initial_messages[0].role, content=initial_messages[0].content),
+            StructuredMessage(role=initial_messages[1].role, content=initial_messages[1].content),
         ),
-        attempts=tuple(attempts),
+        parse=parse,
+        correction_message=lambda error: (
+            f"The response was invalid. {correction_instruction} Validation error: {error}"
+        ),
+        exhausted_error=lambda error: error_type(
+            f"Daily theme {stage} stage remained invalid after correction: {error}"
+        ),
+        unreachable_error="Daily theme correction loop did not return",
+        started_at=started,
+    )
+    messages = tuple(
+        ThemeModelMessage(role=message.role, content=message.content) for message in run.messages
+    )
+    return run.value, ThemeStageEvidence(
+        request_id=request_id,
+        messages=messages,
+        input_digest=_messages_digest(messages),
+        response_schema_digest=_sha256(_canonical_json(response_schema)),
+        call=run.call,
+        attempts=tuple(
+            ThemeModelAttemptEvidence(
+                attempt_id=attempt.attempt_id,
+                response_id=attempt.response_id,
+                status=attempt.status,
+                error=attempt.error,
+                response_content=attempt.response_content,
+                response_content_digest=attempt.response_content_digest,
+                provider_response=attempt.provider_response,
+            )
+            for attempt in run.attempts
+        ),
     )
 
 

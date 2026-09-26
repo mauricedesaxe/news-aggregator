@@ -6,16 +6,17 @@ import time
 from datetime import date
 from typing import Annotated, Literal
 
-from openai.types.chat import ChatCompletionMessageParam
-from pydantic import Field, ValidationError, model_validator
+from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.analysis.attempts import ModelCall, record_model_attempt
-from romanian_news.analysis.client import openrouter_client
+from romanian_news.analysis.attempts import ModelCall
+from romanian_news.analysis.corrected_structured import (
+    StructuredMessage,
+    run_corrected_structured_openrouter,
+)
 from romanian_news.analysis.groups.models import GroupSummary
 from romanian_news.analysis.relevance import RelevanceDecision
 from romanian_news.analysis.relevance_v3 import ImpactDecision
-from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import DailyClusterSet
 from romanian_news.identity import canonical_json as _canonical_json
@@ -430,112 +431,58 @@ def construct_daily_subject_assessments(
         )
     aliases = _aliases(value)
     response_schema = _response_schema(tuple(aliases.subjects), tuple(aliases.version_for_article))
-    messages = [
+    messages = (
         SubjectAssessmentMessage(role="system", content=ASSESSMENT_PROMPT),
         SubjectAssessmentMessage(role="user", content=_assessment_context(value)),
-    ]
-    attempts: list[SubjectAssessmentAttemptEvidence] = []
-    responses = []
-    accepted: _SubjectAssessmentResponse | None = None
+    )
     started = time.monotonic()
-    model_request_id = _model_request_id(request_id, tuple(messages), response_schema, policy)
-    for attempt_index in range(2):
-        provider_inputs: ProviderChatRequest = {
-            "model": policy.model,
-            "messages": [_message_param(message) for message in messages],
-            "temperature": policy.temperature,
-            "max_tokens": policy.max_tokens,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "romanian_news_daily_subject_assessments",
-                    "strict": True,
-                    "schema": response_schema,
-                },
-            },
-            "extra_body": {
-                "provider": {"require_parameters": True},
-                "reasoning": {"effort": policy.reasoning_effort},
-            },
-        }
-        attempt_started = time.monotonic()
-        provider_call = trace_provider_call(
-            ASSESSMENT_OPERATION,
-            model_request_id,
-            provider_inputs,
-            lambda provider_inputs=provider_inputs: (
-                openrouter_client().chat.completions.create(**provider_inputs)
-            ),
-        )
-        response = provider_call.response
-        responses.append(response)
-        content = response.choices[0].message.content or ""
-        error_text = None
-        rejection: ValidationError | ValueError | None = None
-        try:
-            accepted = parse_subject_assessment_response(content, value)
-        except (ValidationError, ValueError) as error:
-            rejection = error
-            error_text = str(error)
-        status: Literal["accepted", "rejected"] = "accepted" if error_text is None else "rejected"
-        recorded = record_model_attempt(
-            response,
-            request_id=model_request_id,
-            operation_key=ASSESSMENT_OPERATION,
-            attempt_index=attempt_index,
-            latency_ms=round((time.monotonic() - attempt_started) * 1000),
-            status=status,
-            error=error_text,
-            fallback_response_id=str(provider_call.call_id),
-            trace=provider_call.trace,
-        )
-        attempts.append(
-            SubjectAssessmentAttemptEvidence(
-                attempt_id=recorded.attempt_id,
-                response_id=recorded.response_id,
-                status=status,
-                error=error_text,
-                response_content=content,
-                response_content_digest=_sha256(content.encode()),
-                provider_response=response.model_dump(mode="json"),
-            )
-        )
-        if accepted is not None and error_text is None:
-            break
-        if attempt_index == 1:
-            assert rejection is not None
-            raise SubjectAssessmentCorrectionExhausted(
-                f"Subject assessment remained invalid after correction: {error_text}"
-            ) from rejection
-        messages.extend(
-            (
-                SubjectAssessmentMessage(role="assistant", content=content),
-                SubjectAssessmentMessage(
-                    role="user",
-                    content=(
-                        "The response was invalid. Return the complete three-tier assessment. "
-                        f"Validation error: {error_text}"
-                    ),
-                ),
-            )
-        )
-    if accepted is None:
-        raise RuntimeError("Subject assessment correction loop did not return")
+    model_request_id = _model_request_id(request_id, messages, response_schema, policy)
+    run = run_corrected_structured_openrouter(
+        operation=ASSESSMENT_OPERATION,
+        request_id=model_request_id,
+        model=policy.model,
+        temperature=policy.temperature,
+        max_tokens=policy.max_tokens,
+        reasoning_effort=policy.reasoning_effort,
+        schema_name="romanian_news_daily_subject_assessments",
+        response_schema=response_schema,
+        initial_messages=(
+            StructuredMessage(role=messages[0].role, content=messages[0].content),
+            StructuredMessage(role=messages[1].role, content=messages[1].content),
+        ),
+        parse=lambda content: parse_subject_assessment_response(content, value),
+        correction_message=lambda error: (
+            "The response was invalid. Return the complete three-tier assessment. "
+            f"Validation error: {error}"
+        ),
+        exhausted_error=lambda error: SubjectAssessmentCorrectionExhausted(
+            f"Subject assessment remained invalid after correction: {error}"
+        ),
+        unreachable_error="Subject assessment correction loop did not return",
+        started_at=started,
+    )
+    construction_messages = tuple(
+        SubjectAssessmentMessage(role=message.role, content=message.content)
+        for message in run.messages
+    )
     construction = ModelSubjectAssessmentConstruction(
         request_id=model_request_id,
-        messages=tuple(messages),
-        input_digest=_messages_digest(tuple(messages)),
+        messages=construction_messages,
+        input_digest=_messages_digest(construction_messages),
         response_schema_digest=_sha256(_canonical_json(response_schema)),
-        call=ModelCall(
-            response_id=attempts[-1].response_id,
-            model=str(responses[-1].model),
-            input_tokens=sum(item.usage.prompt_tokens if item.usage else 0 for item in responses),
-            output_tokens=sum(
-                item.usage.completion_tokens if item.usage else 0 for item in responses
-            ),
-            latency_ms=round((time.monotonic() - started) * 1000),
+        call=run.call,
+        attempts=tuple(
+            SubjectAssessmentAttemptEvidence(
+                attempt_id=attempt.attempt_id,
+                response_id=attempt.response_id,
+                status=attempt.status,
+                error=attempt.error,
+                response_content=attempt.response_content,
+                response_content_digest=attempt.response_content_digest,
+                provider_response=attempt.provider_response,
+            )
+            for attempt in run.attempts
         ),
-        attempts=tuple(attempts),
     )
     return _output(
         DailySubjectAssessmentSet(
@@ -548,7 +495,7 @@ def construct_daily_subject_assessments(
             relevance_inputs=value.relevance,
             construction=construction,
             subject_ids=tuple(theme.id for theme in value.theme_set.themes),
-            assessments=_freeze_assessments(accepted, value),
+            assessments=_freeze_assessments(run.value, value),
         )
     )
 
@@ -854,14 +801,6 @@ def _read_relevance_quote(reference: ArtifactReference, article_id: Sha256) -> s
 
 def _artifact_reference(value: object) -> ArtifactReference:
     return ArtifactReference.model_validate(value, from_attributes=True)
-
-
-def _message_param(message: SubjectAssessmentMessage) -> ChatCompletionMessageParam:
-    if message.role == "system":
-        return {"role": "system", "content": message.content}
-    if message.role == "assistant":
-        return {"role": "assistant", "content": message.content}
-    return {"role": "user", "content": message.content}
 
 
 def _messages_digest(messages: tuple[SubjectAssessmentMessage, ...]) -> Sha256:

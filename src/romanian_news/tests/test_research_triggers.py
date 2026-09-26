@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from romanian_news import research_triggers as trigger_module
+from romanian_news.analysis import corrected_structured
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.research_triggers import (
     PRODUCTION_RESEARCH_TRIGGER_POLICY as POLICY,
@@ -93,7 +93,7 @@ def _provider(monkeypatch, responses):
     calls = []
     response_iterator = iter(responses)
     monkeypatch.setattr(
-        trigger_module,
+        corrected_structured,
         "openrouter_client",
         lambda: SimpleNamespace(
             chat=SimpleNamespace(
@@ -104,7 +104,7 @@ def _provider(monkeypatch, responses):
         ),
     )
     monkeypatch.setattr(
-        trigger_module,
+        corrected_structured,
         "record_model_attempt",
         lambda response, **_kwargs: SimpleNamespace(
             attempt_id=hashlib.sha256(response.id.encode()).hexdigest(),

@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from romanian_news import themes as themes_module
+from romanian_news.analysis import corrected_structured
 from romanian_news.analysis.groups.models import GroupSummary
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.groups import NewsGroup
@@ -729,8 +730,9 @@ def _provider(monkeypatch, responses):
     calls = []
     response_iterator = iter(responses)
     monkeypatch.setattr(themes_module.time, "monotonic", lambda: 0.0)
+    monkeypatch.setattr(corrected_structured.time, "monotonic", lambda: 0.0)
     monkeypatch.setattr(
-        themes_module,
+        corrected_structured,
         "openrouter_client",
         lambda: SimpleNamespace(
             chat=SimpleNamespace(
@@ -741,7 +743,7 @@ def _provider(monkeypatch, responses):
         ),
     )
     monkeypatch.setattr(
-        themes_module,
+        corrected_structured,
         "record_model_attempt",
         lambda response, **_kwargs: SimpleNamespace(
             attempt_id=hashlib.sha256(response.id.encode()).hexdigest(),
