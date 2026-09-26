@@ -1,0 +1,70 @@
+name: Inspect Dagster run failure
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Dagster run ID to inspect
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-22.04
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - name: Read failure events
+        env:
+          DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          DAGSTER_CLOUD_URL: ${{ secrets.DAGSTER_CLOUD_URL }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from urllib.request import Request, urlopen
+
+          endpoint = os.environ["DAGSTER_CLOUD_URL"].rstrip("/")
+          if not endpoint.endswith("/graphql"):
+              endpoint += "/graphql"
+          query = """query RunErrors($runId: ID!) {
+            logsForRun(runId: $runId) {
+              __typename
+              ... on EventConnection {
+                events {
+                  __typename
+                  message
+                  ... on ExecutionStepFailureEvent { error { message stack } }
+                  ... on RunFailureEvent { error { message stack } }
+                }
+              }
+            }
+          }"""
+          payload = json.dumps({
+              "query": query,
+              "variables": {"runId": os.environ["RUN_ID"]},
+          }).encode()
+          request = Request(
+              endpoint,
+              data=payload,
+              headers={
+                  "Content-Type": "application/json",
+                  "Dagster-Cloud-Api-Token": os.environ["DAGSTER_CLOUD_API_TOKEN"],
+              },
+          )
+          with urlopen(request, timeout=30) as response:
+              result = json.load(response)
+          if result.get("errors"):
+              print(json.dumps(result["errors"], indent=2))
+              raise SystemExit(1)
+          events = result["data"]["logsForRun"].get("events", [])
+          failures = [
+              event for event in events
+              if event["__typename"] in {"ExecutionStepFailureEvent", "RunFailureEvent"}
+          ]
+          print(json.dumps(failures or events[-5:], indent=2))
+          PY
