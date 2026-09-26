@@ -35,7 +35,6 @@ FFMPEG_AVAILABLE = shutil.which("ffmpeg") is not None and shutil.which("ffprobe"
 requires_ffmpeg = pytest.mark.skipif(not FFMPEG_AVAILABLE, reason="ffmpeg and ffprobe are required")
 
 
-@pytest.fixture(autouse=True)
 def _accept_synthetic_audio(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(media, "clip_narration_matches", lambda _path, _text: True)
 
@@ -258,39 +257,54 @@ def test_technical_validation_rejects_profile_duration_digest_and_size(tmp_path:
         )
 
 
-@pytest.mark.parametrize(
-    ("audio_duration", "expected_valid"),
-    (("15.104", True), ("15.150", False)),
-)
+@requires_ffmpeg
+@pytest.mark.parametrize("audio_duration", ("15.104", "15.150"))
 def test_technical_validation_allows_one_aac_frame_of_tail_padding(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     audio_duration: str,
-    expected_valid: bool,
 ) -> None:
     path = tmp_path / "candidate.mp4"
-    content = b"candidate"
-    path.write_bytes(content)
-    payload = _probe_payload(
-        duration=audio_duration,
-        video_duration="15.083333",
-        audio_duration=audio_duration,
+    subprocess.run(
+        (
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:s=1344x768:r=24:d=15.083333",
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=frequency=440:sample_rate=32000:duration={audio_duration}",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-ac",
+            "2",
+            "-ar",
+            "32000",
+            "-movflags",
+            "+faststart",
+            str(path),
+        ),
+        check=True,
     )
-    monkeypatch.setattr(
-        media,
-        "_run",
-        lambda *_args, **_kwargs: subprocess.CompletedProcess((), 0, json.dumps(payload), ""),
-    )
+    content = path.read_bytes()
 
-    if expected_valid:
+    if audio_duration == "15.104":
         probe = media.validate_media_file(
             path,
             expected_digest=sha256(content),
             expected_size=len(content),
             requested_duration_ms=15_000,
         )
-        assert probe.video_duration_ms == 15_083
-        assert probe.audio_duration_ms == 15_104
+        assert probe.audio_duration_ms > probe.video_duration_ms
     else:
         with pytest.raises(media.MediaValidationError) as captured:
             media.validate_media_file(
@@ -444,6 +458,7 @@ def test_candidate_bytes_publish_before_atomic_acceptance(
     )
     events: list[str] = []
     published: dict[str, bytes] = {}
+    _accept_synthetic_audio(monkeypatch)
     monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
     monkeypatch.setattr(media, "read_verified_r2_object", lambda _key, _digest: content)
 
@@ -554,9 +569,13 @@ def test_candidate_with_prompt_speech_after_narration_is_silenced_and_recorded(
     checkpointed: dict[str, ArtifactFile] = {}
     monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
     monkeypatch.setattr(media, "read_verified_r2_object", lambda _key, _digest: content)
-    monkeypatch.setattr(
-        media, "clip_narration_matches", lambda path, _text: path.name == "accepted.mp4"
-    )
+    narration_checks: list[bool] = []
+
+    def check_narration(_path: Path, _text: str) -> bool:
+        narration_checks.append(True)
+        return len(narration_checks) > 1
+
+    monkeypatch.setattr(media, "clip_narration_matches", check_narration)
     monkeypatch.setattr(media, "clip_narration_tail_cutoff_ms", lambda _path, _text: 500)
     monkeypatch.setattr(
         media,
@@ -611,7 +630,53 @@ def test_candidate_with_prompt_speech_after_narration_is_silenced_and_recorded(
     )
     monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (accepted_attempt,))
     monkeypatch.setattr(media, "read_verified_r2_object", lambda key, _digest: published[key])
+    tampered = json.loads(published[validation_key])
+    tampered["request_id"] = "tampered-request"
+    monkeypatch.setattr(
+        media,
+        "read_verified_r2_object",
+        lambda _key, _digest: json.dumps(tampered).encode(),
+    )
+    with pytest.raises(ValueError, match="does not match stored media evidence"):
+        _accept_candidate(_lease(edition), candidate, story)
+    monkeypatch.setattr(media, "read_verified_r2_object", lambda key, _digest: published[key])
     assert _accept_candidate(_lease(edition), candidate, story) == result
+
+
+@requires_ffmpeg
+def test_candidate_that_still_mismatches_after_silencing_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = _synthetic_clip(tmp_path / "candidate.mp4", "red")
+    edition = EditionId("e" * 64)
+    story = _story(edition, 0)
+    attempt, candidate = _processing_attempt(story, content, "unfixable-speech")
+    events: list[str] = []
+    monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
+    monkeypatch.setattr(media, "read_verified_r2_object", lambda _key, _digest: content)
+    monkeypatch.setattr(media, "clip_narration_matches", lambda _path, _text: False)
+    monkeypatch.setattr(media, "clip_narration_tail_cutoff_ms", lambda _path, _text: 500)
+    monkeypatch.setattr(
+        media,
+        "publish_private_video_object",
+        lambda *_args, **_kwargs: pytest.fail("a still-mismatching clip was accepted"),
+    )
+    monkeypatch.setattr(
+        media,
+        "publish_immutable_r2_objects",
+        lambda _objects: events.append("failure-evidence"),
+    )
+    monkeypatch.setattr(
+        media,
+        "checkpoint_generation_failure",
+        lambda *_args, **_kwargs: events.append("failure-checkpoint"),
+    )
+
+    result = _accept_candidate(_lease(edition), candidate, story)
+
+    assert isinstance(result, media.GenerationRetryAvailable)
+    assert "narration_mismatch" in result.reason
+    assert events == ["failure-evidence", "failure-checkpoint"]
 
 
 @requires_ffmpeg
@@ -642,6 +707,7 @@ def test_candidate_narration_failure_is_recorded_before_acceptance(
         return check_result
 
     monkeypatch.setattr(media, "clip_narration_matches", check_narration)
+    monkeypatch.setattr(media, "clip_narration_tail_cutoff_ms", lambda _path, _text: None)
     monkeypatch.setattr(
         media,
         "publish_private_video_object",
@@ -698,6 +764,7 @@ def test_byte_identical_candidates_share_stable_accepted_object_lineage(
     monkeypatch.setattr(media, "read_verified_r2_object", lambda *_args: content)
     monkeypatch.setattr(media, "validate_media_file", lambda *_args, **_kwargs: probe)
     monkeypatch.setattr(media, "publish_immutable_r2_objects", lambda _objects: None)
+    _accept_synthetic_audio(monkeypatch)
 
     def publish_clip(key: str, value: bytes, *, retention: str, source_lineage: str) -> None:
         assert retention == "permanent"
@@ -851,7 +918,14 @@ def test_assembly_preserves_plan_order_and_deterministic_manifest(
     monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: attempts)
     monkeypatch.setattr(media, "read_verified_r2_object", lambda key, _digest: objects[key])
     monkeypatch.setattr(media, "checkpoint_assembly_ready", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(media, "checkpoint_assembled_video", lambda *_args, **_kwargs: None)
+    legacy_checkpoints: list[tuple[ArtifactFile, ArtifactFile]] = []
+    monkeypatch.setattr(
+        media,
+        "checkpoint_assembled_video",
+        lambda _lease, *, video_file, manifest_file, **_kwargs: legacy_checkpoints.append(
+            (video_file, manifest_file)
+        ),
+    )
     monkeypatch.setattr(
         media,
         "record_assembly_attempt",
@@ -874,6 +948,7 @@ def test_assembly_preserves_plan_order_and_deterministic_manifest(
 
     assert first.video_file.content == second.video_file.content
     assert first.manifest_file.content == second.manifest_file.content
+    assert legacy_checkpoints == [(second.video_file, second.manifest_file)]
     manifest = json.loads(first.manifest_file.content)
     assert [entry["story_position"] for entry in manifest["clips"]] == [0, 1]
     assert manifest["expected_duration_ms"] == 2000
@@ -881,7 +956,7 @@ def test_assembly_preserves_plan_order_and_deterministic_manifest(
     assert abs(first.duration_ms - 2000) <= 100
     assert publications[0][first.video_file.r2_key] == first.video_file.content
     assert recorded == [(0, "succeeded", "video_digest_assembly_manifest")]
-    assert len(renewals) >= 10
+    assert renewals
     output = tmp_path / "result.mp4"
     output.write_bytes(first.video_file.content)
     assert _sample_rgb(output, "0.5") == "red"

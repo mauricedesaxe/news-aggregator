@@ -67,7 +67,7 @@ exclude = [
 packages = ["src/romanian_news"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["", "src"]
 testpaths = ["tests", "src/romanian_news"]
 
 [tool.dg]
