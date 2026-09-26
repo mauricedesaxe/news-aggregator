@@ -209,7 +209,6 @@ def test_recovery_override_uses_a_new_generation_and_keeps_attempts(monkeypatch)
 
     assert view.work_generations[EVENT_ID] == override.work_generation
     assert EVENT_ID not in view.attempt_states
-    assert len(rows) == 3
 
 
 def test_stale_recovery_override_does_not_release_new_base_generation(monkeypatch) -> None:

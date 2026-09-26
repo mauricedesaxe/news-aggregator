@@ -58,7 +58,6 @@ def test_morning_check_reports_the_day_and_pings_on_the_real_catalog(
     assert isinstance(materialization_event.event_specific_data, StepMaterializationData)
     materialization = materialization_event.event_specific_data.materialization
     assert materialization.asset_key == dg.AssetKey("daily_reports")
-    assert materialization.asset_key == dg.AssetKey("daily_reports")
     assert materialization.partition == "2026-09-14"
     assert pings == ["morning_report"]
 
