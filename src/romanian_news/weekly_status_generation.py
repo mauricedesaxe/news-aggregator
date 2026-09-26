@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 from pydantic import Field
 
-from romanian_news import GROUP_ANALYSIS_MODEL, NewsModel, Sha256
+from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.corrected_structured import (
     StructuredMessage,
     run_corrected_structured_openrouter,
@@ -17,6 +17,7 @@ from romanian_news.reports import DailyReportDocument, parse_daily_report
 from romanian_news.storage import read_verified_r2_object
 from romanian_news.weekly_status import (
     MIN_REPORT_DAYS,
+    WEEKLY_STATUS_MODEL,
     AreaAssessment,
     Development,
     StatusSource,
@@ -155,7 +156,7 @@ def _compose_status(inputs: WeekInput, sources: tuple[StatusSource, ...]) -> Gen
     run = run_corrected_structured_openrouter(
         operation="news.compose_weekly_status",
         request_id=request_id,
-        model=GROUP_ANALYSIS_MODEL,
+        model=WEEKLY_STATUS_MODEL,
         temperature=0,
         max_tokens=4500,
         reasoning_effort="low",
@@ -193,7 +194,7 @@ def _verify_status(
     run = run_corrected_structured_openrouter(
         operation="news.verify_weekly_status",
         request_id=request_id,
-        model=GROUP_ANALYSIS_MODEL,
+        model=WEEKLY_STATUS_MODEL,
         temperature=0,
         max_tokens=1200,
         reasoning_effort="low",

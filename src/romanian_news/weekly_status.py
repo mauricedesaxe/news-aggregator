@@ -16,7 +16,8 @@ from romanian_news.reports import (
     DailyReportV2,
 )
 
-WEEKLY_STATUS_POLICY = "completed-week-ranked-sources-v1"
+WEEKLY_STATUS_MODEL = "google/gemini-3.8-flash"
+WEEKLY_STATUS_POLICY = f"completed-week-ranked-sources-v1:{WEEKLY_STATUS_MODEL}"
 MIN_REPORT_DAYS = 5
 Area = Literal["overall", "economy", "politics", "society"]
 
