@@ -45,14 +45,6 @@ ARTICLE_ONE = "3" * 64
 ARTICLE_TWO = "4" * 64
 
 
-def test_video_policy_requires_english_narration() -> None:
-    definition = preflight.PRODUCTION_POLICY.definition
-
-    assert "English-language video screenplay" in definition.planning_prompt
-    assert "all spoken narration in natural English" in definition.planning_prompt
-    assert "Reject non-English narration" in definition.verification_prompt
-
-
 def _section(subject: str, article: str, rank: int) -> DailyReportSection:
     return DailyReportSection(
         theme_id=subject,

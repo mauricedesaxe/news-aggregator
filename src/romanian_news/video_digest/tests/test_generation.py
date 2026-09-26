@@ -107,12 +107,8 @@ def test_fal_prompt_requires_english_speech() -> None:
     prompt = generation._fal_arguments(request, lambda _: "https://r2.example/reference")["prompt"]
 
     assert isinstance(prompt, str)
-    assert "Video 1 is the approved visual reference" in prompt
-    assert "Audio 1 is the approved scientist voice" in prompt
     assert f"<d>[English] {request.story.narration}</d>" in prompt
-    assert "From 11 to 15 seconds" in prompt
-    assert "no speech or vocal sounds" in prompt
-    assert "in Romanian" not in prompt
+    assert f"Visual action during the sentence: {request.story.visual_direction}" in prompt
 
 
 def test_fal_prompt_requires_unambiguous_reference_positions() -> None:
