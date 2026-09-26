@@ -69,7 +69,7 @@ class CuratedScoreRoute(NewsModel):
     observation_id: str | None
 
 
-def list_daily_report_records(limit: int) -> tuple[DailyReportRecord, ...]:
+def list_daily_report_records(limit: int, offset: int = 0) -> tuple[DailyReportRecord, ...]:
     rows = catalog_query(
         """
         SELECT artifact.id AS artifact_id, version.id AS report_version_id
@@ -77,9 +77,9 @@ def list_daily_report_records(limit: int) -> tuple[DailyReportRecord, ...]:
         JOIN artifact_versions version ON version.id = artifact.current_version_id
         WHERE artifact.kind = 'news_daily_report'
         ORDER BY artifact.id DESC
-        LIMIT %s
+        LIMIT %s OFFSET %s
         """,
-        [limit],
+        [limit, offset],
     )
     return tuple(DailyReportRecord.model_validate(row, strict=False) for row in rows)
 

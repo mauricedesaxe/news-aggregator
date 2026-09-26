@@ -25,7 +25,7 @@ TEST_DAY = date(2026, 9, 20)
 
 
 def test_feedback_round_trip_through_the_real_domain(monkeypatch, postgres_catalog) -> None:
-    monkeypatch.setattr("romanian_news.reader.app._bucharest_today", lambda: TEST_DAY)
+    monkeypatch.setattr("romanian_news.reader.clock.bucharest_today", lambda: TEST_DAY)
     _wire_real_domain(monkeypatch, postgres_catalog)
     app = create_app(_settings(), PRODUCTION_DOMAIN)
     with TestClient(app) as client:

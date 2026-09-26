@@ -1,0 +1,5 @@
+ts	phase	decision	why	evidence	result
+2026-09-26T21:54:39.983294+00:00	frame	Use completed weeks with at least five daily reports for the first pass	Latest completed week has seven reports; the prior week has six	production catalog dates 2026-08-31 through 2026-09-26	coverage audit complete
+2026-09-26T21:54:39.983418+00:00	tooling	Use Python CSV writer for the audit log	Referenced skill helper script is absent from the installed skill	/Users/lazaralex/.agents/skills/pstack-show-me-your-work/SKILL.md	fallback in use
+2026-09-26T22:26:13.528642+00:00	review	Reject impact claims under insufficient coverage	Read-only review found an unsupported claim path	src/romanian_news/weekly_status.py and regression test	fixed
+2026-09-26T22:26:13.528710+00:00	qa	Phone-width status and archive navigation work	Real browser at 390 x 844	local preview /status and /status/archive	passed
