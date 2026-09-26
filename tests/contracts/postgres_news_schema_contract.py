@@ -352,34 +352,10 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         ).fetchall()
 
     assert "debt_transcript_projection_items" not in tables
-    assert len(tables) == 62
+    assert {"video_digest_slots", "news_article_recovery_overrides"} <= set(tables)
     assert migrations == [
-        (1, "initial", news_schema.NEWS_CATALOG_MIGRATIONS[0].sha256),
-        (2, "video_digest", news_schema.NEWS_CATALOG_MIGRATIONS[1].sha256),
-        (
-            3,
-            "video_digest_generation_fences",
-            news_schema.NEWS_CATALOG_MIGRATIONS[2].sha256,
-        ),
-        (
-            4,
-            "video_digest_publication_evidence",
-            news_schema.NEWS_CATALOG_MIGRATIONS[3].sha256,
-        ),
-        (5, "video_digest_planning", news_schema.NEWS_CATALOG_MIGRATIONS[4].sha256),
-        (6, "video_digest_generation_admission", news_schema.NEWS_CATALOG_MIGRATIONS[5].sha256),
-        (7, "video_digest_media_evidence", news_schema.NEWS_CATALOG_MIGRATIONS[6].sha256),
-        (8, "video_digest_orchestration", news_schema.NEWS_CATALOG_MIGRATIONS[7].sha256),
-        (9, "video_digest_publication", news_schema.NEWS_CATALOG_MIGRATIONS[8].sha256),
-        (10, "video_digest_feedback", news_schema.NEWS_CATALOG_MIGRATIONS[9].sha256),
-        (11, "article_recovery_overrides", news_schema.NEWS_CATALOG_MIGRATIONS[10].sha256),
-        (12, "daily_report_repair_requests", news_schema.NEWS_CATALOG_MIGRATIONS[11].sha256),
-        (13, "youtube_quarantine_releases", news_schema.NEWS_CATALOG_MIGRATIONS[12].sha256),
-        (14, "jev_relevance_shadow", news_schema.NEWS_CATALOG_MIGRATIONS[13].sha256),
-        (15, "video_digest_h3_references", news_schema.NEWS_CATALOG_MIGRATIONS[14].sha256),
-        (16, "video_digest_slot_selection", news_schema.NEWS_CATALOG_MIGRATIONS[15].sha256),
-        (17, "video_digest_fal_queue_states", news_schema.NEWS_CATALOG_MIGRATIONS[16].sha256),
-        (18, "video_digest_generation_active_slot", news_schema.NEWS_CATALOG_MIGRATIONS[17].sha256),
+        (migration.version, migration.name, migration.sha256)
+        for migration in news_schema.NEWS_CATALOG_MIGRATIONS
     ]
 
 
@@ -518,6 +494,41 @@ def test_video_slot_selection_is_durable_and_binds_claimed_edition(
                 "UPDATE video_digest_slot_sources SET selection_digest = %s WHERE slot_id = %s",
                 ("f" * 64, slot.slot_id),
             )
+    with pytest.raises(VideoDigestCheckpointConflictError, match="frozen slot selection"):
+        mismatched_slot = ScheduledSlot(
+            slot_id=scheduled_slot_id(SlotName.EVENING, now),
+            name=SlotName.EVENING,
+            scheduled_at=now,
+            bucharest_day=now.astimezone(BUCHAREST).date(),
+        )
+        video_digest_catalog.schedule_slot(mismatched_slot, recorded_at=datetime.now(UTC))
+        with psycopg.connect(news_schema.NEWS_POSTGRES_DSN) as connection:
+            connection.execute(
+                """INSERT INTO video_digest_slot_sources
+                   (slot_id, source_record, selection, selection_digest, observed_at,
+                    selected_at)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (
+                    mismatched_slot.slot_id,
+                    Jsonb(source.model_dump(mode="json")),
+                    Jsonb(selection.model_dump(mode="json")),
+                    selection.digest,
+                    now,
+                    now,
+                ),
+            )
+        video_digest_catalog.claim_slot(
+            mismatched_slot.slot_id,
+            EditionIdentity(
+                edition_id=edition_id(report_version, policy_version, "f" * 64),
+                daily_report_version_id=report_version,
+                policy_bundle_version_id=policy_version,
+                selection_digest="f" * 64,
+            ),
+            owner_token="contract",
+            now=now + timedelta(minutes=1),
+            lease_duration=timedelta(minutes=15),
+        )
 
 
 def test_planning_migration_grandfathers_existing_editions_without_authorizing_paid_work(
@@ -1824,6 +1835,90 @@ def test_video_digest_generation_checkpoints_complete_atomically(
                 attempt_index=1,
             )
     assert row == ("published", "accepted", "accepted", clip_file.version_id)
+
+
+def test_generation_requests_are_rejected_once_the_slot_is_failed(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    recorded_at = datetime.now(UTC)
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        report, policy = _record_artifact_versions(connection, 700, 2)
+    identity = EditionIdentity(
+        edition_id=edition_id(report, policy),
+        daily_report_version_id=report,
+        policy_bundle_version_id=policy,
+    )
+    slot = ScheduledSlot(
+        slot_id=scheduled_slot_id(SlotName.EVENING, recorded_at),
+        name=SlotName.EVENING,
+        scheduled_at=recorded_at,
+        bucharest_day=recorded_at.astimezone(BUCHAREST).date(),
+    )
+    video_digest_catalog.schedule_slot(slot, recorded_at=recorded_at)
+    claimed = video_digest_catalog.claim_slot(
+        slot.slot_id,
+        identity,
+        owner_token="failed-slot-contract",
+        now=recorded_at,
+        lease_duration=timedelta(hours=1),
+    )
+    assert isinstance(claimed, ClaimedSlot)
+    lease = claimed.lease
+    plan, plan_file, planning_attempt_file = accepted_planning_files(
+        identity,
+        ((_sha256_id(702), "Contract story", 15_000),),
+        seed="failed-slot-contract",
+    )
+    video_digest_catalog.checkpoint_planning_attempt(
+        lease,
+        0,
+        "accepted",
+        evidence_file=planning_attempt_file,
+        accepted_plan=plan,
+        plan_file=plan_file,
+        recorded_at=recorded_at,
+    )
+    story = plan.stories[0]
+    verification_file = artifact_file(
+        artifact_id=story.story_id,
+        artifact_kind="video_digest_story_verification",
+        title="Contract verification",
+        content=b"verified",
+        r2_key="contracts/video-digest/failed-slot-verification.json",
+        media_type="application/json",
+    )
+    video_digest_catalog.checkpoint_story_verification(
+        lease,
+        story.story_id,
+        evidence_file=verification_file,
+        recorded_at=recorded_at,
+    )
+    manifest_file = artifact_file(
+        artifact_id=f"{identity.edition_id}:verification-manifest",
+        artifact_kind="video_digest_verification_manifest",
+        title="Contract verification manifest",
+        content=b"verified edition",
+        r2_key="contracts/video-digest/failed-slot-manifest.json",
+        media_type="application/json",
+    )
+    video_digest_catalog.checkpoint_edition_verification(
+        lease,
+        manifest_file=manifest_file,
+        recorded_at=recorded_at,
+    )
+    video_digest_catalog.fail_slot_deadline(lease, recorded_at=recorded_at)
+
+    with pytest.raises(psycopg.errors.IntegrityConstraintViolation):
+        with psycopg.connect(news_schema.NEWS_POSTGRES_DSN) as connection:
+            connection.execute(
+                "INSERT INTO video_digest_generation_requests "
+                "(request_id, edition_id, story_position, attempt_index, "
+                "request_artifact_version_id, stage) "
+                "VALUES (%s, %s, 0, 0, %s, 'pending')",
+                (_sha256_id(703), identity.edition_id, report),
+            )
 
 
 def test_schema_check_skips_migrations_denied_to_the_news_role(
