@@ -21,6 +21,7 @@ from fasthtml.common import (
 )
 
 from romanian_news import Sha256
+from romanian_news.catalog.archive_progress import ArchiveDiscoveryMonth
 from romanian_news.catalog.weekly_status import WeeklyStatusSummary
 from romanian_news.weekly_status import AreaAssessment, StatusSource, WeeklyStatusRead
 
@@ -179,6 +180,7 @@ def render_status_archive(
     page: int,
     has_more: bool,
     header: Any,
+    discovery: tuple[ArchiveDiscoveryMonth, ...] = (),
 ) -> tuple[Any, ...]:
     return (
         Title("Weekly status archive | Press review"),
@@ -189,6 +191,7 @@ def render_status_archive(
                 P("Archive", cls="status-label"),
                 H1("Weekly status"),
                 P("Only published weeks appear here. A missing week has no saved read."),
+                _archive_discovery_summary(discovery) if discovery else None,
                 Ul(
                     *(
                         Li(
@@ -210,4 +213,38 @@ def render_status_archive(
                 cls="status",
             )
         ),
+    )
+
+
+def _archive_discovery_summary(months: tuple[ArchiveDiscoveryMonth, ...]) -> Any:
+    cards = []
+    for outlet_id, label in (("hotnews", "HotNews"), ("digi24", "Digi24")):
+        rows = [item for item in months if item.outlet_id == outlet_id]
+        if not rows:
+            continue
+        cards.append(
+            Div(
+                H3(label),
+                P(f"{sum(item.url_entries for item in rows):,} URL entries"),
+                Ul(
+                    *(
+                        Li(
+                            f"{item.month.strftime('%B %Y')}: "
+                            f"{item.url_entries:,} URLs from {item.sitemap_count} sitemap"
+                            f"{'s' if item.sitemap_count != 1 else ''}"
+                        )
+                        for item in rows
+                    )
+                ),
+                cls="status-card",
+            )
+        )
+    return Section(
+        H2("Historical collection"),
+        P(
+            "Publisher sitemap URLs found for earlier dates. These counts do not mean "
+            "the articles or reports have been published."
+        ),
+        Div(*cards, cls="status-grid"),
+        cls="status-coverage",
     )
