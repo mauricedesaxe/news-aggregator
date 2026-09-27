@@ -114,6 +114,11 @@ NEWS_CATALOG_MIGRATIONS = (
         "video_digest_generation_active_slot",
         MIGRATIONS_PATH / "0018_video_digest_generation_active_slot.sql",
     ),
+    NewsCatalogMigration(
+        19,
+        "archive_sitemap_discovery",
+        MIGRATIONS_PATH / "0019_archive_sitemap_discovery.sql",
+    ),
 )
 
 
