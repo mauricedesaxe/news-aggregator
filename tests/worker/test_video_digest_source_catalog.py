@@ -47,8 +47,8 @@ def test_midday_slot_skips_as_unchanged_when_an_earlier_edition_never_recorded_a
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ensure_news_catalog_schema()
-    morning_at = datetime.now(UTC) - timedelta(hours=1)
-    midday_at = datetime.now(UTC)
+    morning_at = datetime(2026, 9, 27, 9, tzinfo=UTC)
+    midday_at = morning_at + timedelta(hours=1)
     report = daily_report_catalog.daily_report(morning_at.astimezone(BUCHAREST).date())
     canonical = canonical_json(report.model_dump(mode="json"))
     report_file = artifact_file(
