@@ -44,8 +44,8 @@ def main() -> None:
                 row["observations"],
                 row["entries"],
                 row["unique_urls"],
-                row["first_fetched_at"].isoformat(),
-                row["last_fetched_at"].isoformat(),
+                row["first_fetched_at"],
+                row["last_fetched_at"],
             )
         )
 
