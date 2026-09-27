@@ -1,9 +1,10 @@
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from pydantic import HttpUrl
 
-from romanian_news.articles.extraction import extract_article
+from romanian_news.articles.extraction import extract_archive_article, extract_article
 from romanian_news.feeds.models import FeedEntry
 from romanian_news.feeds.registry import feed_registry
 
@@ -106,6 +107,50 @@ def test_digi24_extraction_preserves_romanian_encoding() -> None:
     assert article.title == "„Un titlu cu diacritice românești”"
     assert "articol sintetic despre un proiect public imaginar" in article.body
     assert "caracterelor ă, â, î, ș și ț" in article.body
+
+
+def test_archive_extraction_uses_original_page_date_without_a_feed_entry() -> None:
+    feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
+    content = _article_html("Primul paragraf are suficient text pentru o știre reală. " * 3)
+    content = content.replace(
+        b"<title>",
+        b'<meta property="og:title" content="Titlul articolului">'
+        b'<meta property="article:published_time" content="2025-09-19T10:00:00+03:00">'
+        b'<meta property="article:modified_time" content="2026-09-27T10:00:00+03:00">'
+        b"<title>",
+    )
+
+    article = extract_archive_article(
+        content,
+        "https://hotnews.ro/articol-test-123",
+        feed,
+    )
+
+    assert article.bucharest_day.isoformat() == "2025-09-19"
+    assert article.published_at.isoformat() == "2025-09-19T07:00:00+00:00"
+    assert article.source_updated_at is not None
+    assert article.source_updated_at.year == 2026
+    assert "Primul paragraf" in article.body
+
+
+def test_archive_extraction_rejects_missing_date_and_short_page() -> None:
+    feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
+    content = _article_html("Short.")
+    with pytest.raises(ValueError, match="verified publication date"):
+        extract_archive_article(content, "https://hotnews.ro/articol-test-123", feed)
+
+    dated = content.replace(
+        b"<title>",
+        b'<meta property="og:title" content="Titlul articolului">'
+        b'<meta property="article:published_time" content="2025-09-19T10:00:00+03:00">'
+        b"<title>",
+    )
+    with pytest.raises(ValueError, match="no extractable article text"):
+        extract_archive_article(
+            dated,
+            "https://hotnews.ro/articol-test-123",
+            feed,
+        )
 
 
 def _entry(updated_at: str) -> FeedEntry:
