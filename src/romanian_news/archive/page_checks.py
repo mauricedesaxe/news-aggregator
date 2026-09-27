@@ -49,20 +49,19 @@ def pending_page_candidates(
     targets = sitemap_targets(outlet_id, start, end)
     rows = catalog_query(
         """
-        WITH latest AS (
-            SELECT DISTINCT ON (sitemap_url) id, outlet_id, sitemap_url
-            FROM news_archive_sitemap_observations
-            WHERE outlet_id = %s AND sitemap_url = ANY(%s::text[])
-            ORDER BY sitemap_url, fetched_at DESC, id DESC
-        ), candidates AS (
+        SELECT candidate.observation_id, candidate.outlet_id, candidate.canonical_url
+        FROM (
             SELECT DISTINCT ON (entry.canonical_url)
                    latest.id AS observation_id, latest.outlet_id, entry.canonical_url
-            FROM latest
+            FROM (
+                SELECT DISTINCT ON (sitemap_url) id, outlet_id, sitemap_url
+                FROM news_archive_sitemap_observations
+                WHERE outlet_id = %s AND sitemap_url = ANY(%s::text[])
+                ORDER BY sitemap_url, fetched_at DESC, id DESC
+            ) latest
             JOIN news_archive_sitemap_entries entry ON entry.observation_id = latest.id
             ORDER BY entry.canonical_url, latest.id
-        )
-        SELECT candidate.observation_id, candidate.outlet_id, candidate.canonical_url
-        FROM candidates candidate
+        ) candidate
         WHERE NOT EXISTS (
             SELECT 1 FROM news_archive_page_checks checked
             WHERE checked.outlet_id = candidate.outlet_id
