@@ -104,9 +104,11 @@ CREATE TABLE IF NOT EXISTS news_article_versions (
     bucharest_day TEXT NOT NULL,
     material_digest TEXT NOT NULL,
     extraction_digest TEXT NOT NULL,
-    feed_snapshot_version_id TEXT NOT NULL REFERENCES artifact_versions(id),
+    feed_snapshot_version_id TEXT REFERENCES artifact_versions(id),
     page_capture_version_id TEXT REFERENCES artifact_versions(id),
-    captured_at TEXT NOT NULL
+    captured_at TEXT NOT NULL,
+    archive_capture_id TEXT REFERENCES news_archive_article_captures(id),
+    CHECK ((feed_snapshot_version_id IS NULL) <> (archive_capture_id IS NULL))
 );
 
 CREATE TABLE IF NOT EXISTS news_article_checks (
@@ -1757,3 +1759,27 @@ BEGIN SELECT RAISE(ABORT, 'archive page checks are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS news_archive_page_checks_reject_deletes
 BEFORE DELETE ON news_archive_page_checks
 BEGIN SELECT RAISE(ABORT, 'archive page checks are immutable'); END;
+
+CREATE TABLE IF NOT EXISTS news_archive_article_captures (
+    id TEXT PRIMARY KEY,
+    observation_id TEXT NOT NULL,
+    discovered_url TEXT NOT NULL,
+    final_url TEXT NOT NULL,
+    capture_artifact_version_id TEXT NOT NULL UNIQUE REFERENCES artifact_versions(id),
+    page_sha256 TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    published_at TEXT NOT NULL,
+    modified_at TEXT,
+    publication_evidence TEXT NOT NULL,
+    FOREIGN KEY (observation_id, discovered_url)
+        REFERENCES news_archive_sitemap_entries(observation_id, canonical_url),
+    CHECK (fetched_at >= published_at)
+);
+
+CREATE TRIGGER IF NOT EXISTS news_archive_article_captures_reject_updates
+BEFORE UPDATE ON news_archive_article_captures
+BEGIN SELECT RAISE(ABORT, 'archive article captures are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS news_archive_article_captures_reject_deletes
+BEFORE DELETE ON news_archive_article_captures
+BEGIN SELECT RAISE(ABORT, 'archive article captures are immutable'); END;

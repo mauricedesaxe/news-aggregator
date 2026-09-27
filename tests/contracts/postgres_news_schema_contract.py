@@ -350,9 +350,21 @@ def test_news_schema_installs_and_verifies_again(postgres_news_schema: str) -> N
         migrations = connection.execute(
             "SELECT version, name, sha256 FROM news_schema_migrations ORDER BY version"
         ).fetchall()
+        article_source_constraints = {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT conname FROM pg_constraint "
+                "WHERE conrelid = 'news_article_versions'::regclass"
+            ).fetchall()
+        }
 
     assert "debt_transcript_projection_items" not in tables
-    assert {"video_digest_slots", "news_article_recovery_overrides"} <= set(tables)
+    assert {
+        "video_digest_slots",
+        "news_article_recovery_overrides",
+        "news_archive_article_captures",
+    } <= set(tables)
+    assert "news_article_versions_exact_source" in article_source_constraints
     assert migrations == [
         (migration.version, migration.name, migration.sha256)
         for migration in news_schema.NEWS_CATALOG_MIGRATIONS
