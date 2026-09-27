@@ -88,6 +88,7 @@ def retrospective_analysis_pilot() -> None:
 
 def next_automated_day() -> date | None:
     pending_months = []
+    over_limit_days: list[tuple[date, int]] = []
     for outlet in ARCHIVE_OUTLETS:
         for next_window in (next_page_window, next_capture_window):
             window = next_window(outlet, ARCHIVE_START, ARCHIVE_END)
@@ -108,10 +109,9 @@ def next_automated_day() -> date | None:
             if coverage is not None and len(coverage.included_outlets) >= 2:
                 article_count = len(read_daily_article_references(day).values)
                 if article_count > _ARTICLE_LIMIT:
-                    raise ValueError(
-                        f"Completed archive day {day.isoformat()} has {article_count} "
-                        f"articles, above the {_ARTICLE_LIMIT}-article batch limit"
-                    )
+                    over_limit_days.append((day, article_count))
+                    day += timedelta(days=1)
+                    continue
                 if article_count >= 1:
                     if published is None:
                         return day
@@ -123,6 +123,13 @@ def next_automated_day() -> date | None:
                     ):
                         return day
             day += timedelta(days=1)
+    if over_limit_days:
+        day, article_count = over_limit_days[0]
+        raise ValueError(
+            f"Archive day {day.isoformat()} has {article_count} articles, "
+            f"above the {_ARTICLE_LIMIT}-article batch limit; "
+            f"{len(over_limit_days)} days need a larger analysis path"
+        )
     return None
 
 

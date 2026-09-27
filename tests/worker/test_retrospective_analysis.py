@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import dagster as dg
@@ -177,6 +177,24 @@ def test_schedule_surfaces_days_above_its_article_limit(monkeypatch) -> None:
 
     with pytest.raises(ValueError, match="above the 200-article batch limit"):
         retrospective_analysis.next_automated_day()
+
+
+def test_schedule_continues_past_an_over_limit_day(monkeypatch) -> None:
+    _ready_first_month(monkeypatch)
+    following = DAY + timedelta(days=1)
+    monkeypatch.setattr(retrospective_analysis, "list_archive_daily_reports", lambda *_args: ())
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_retrospective_coverage",
+        lambda day: _coverage(("digi24", "hotnews")) if day in (DAY, following) else None,
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_daily_article_references",
+        lambda day: SimpleNamespace(values=(object(),) * (201 if day == DAY else 45)),
+    )
+
+    assert retrospective_analysis.next_automated_day() == following
 
 
 def test_schedule_launches_only_one_retrospective_day(monkeypatch) -> None:
