@@ -58,7 +58,10 @@ from romanian_news.worker.morning_report import (
 )
 from romanian_news.worker.relevance_comparison import fresh_relevance_comparison
 from romanian_news.worker.relevance_v3_evaluation import relevance_v3_evaluation
-from romanian_news.worker.retrospective_analysis import retrospective_analysis_pilot
+from romanian_news.worker.retrospective_analysis import (
+    retrospective_analysis_pilot,
+    scheduled_retrospective_analysis,
+)
 from romanian_news.worker.retrospective_report import retrospective_daily_report_job
 from romanian_news.worker.theme_comparison import fresh_theme_comparison
 from romanian_news.worker.video_digest import scheduled_video_digest, video_digest_job
@@ -483,6 +486,7 @@ defs = dg.Definitions(
         scheduled_weekly_status,
         scheduled_archive_page_backfill,
         scheduled_archive_article_capture,
+        scheduled_retrospective_analysis,
     ],
     sensors=[
         article_batch_controller,

@@ -1,13 +1,23 @@
 """Run one bounded historical analysis pilot and publish its sourced report."""
 
-from datetime import date
+from datetime import date, timedelta
 
 import dagster as dg
 
-from romanian_news.archive.backfill import ARCHIVE_END, ARCHIVE_START
+from romanian_news.archive.backfill import (
+    ARCHIVE_END,
+    ARCHIVE_OUTLETS,
+    ARCHIVE_START,
+    next_page_window,
+)
+from romanian_news.archive.capture_batch import next_capture_window
+from romanian_news.archive.windows import month_windows
+from romanian_news.catalog.archive_progress import list_archive_daily_reports
 from romanian_news.catalog.archive_report_coverage import read_retrospective_coverage
 from romanian_news.config import IMPLEMENTATION_REF
 from romanian_news.daily import read_daily_article_references
+from romanian_news.feedback import read_daily_report_version
+from romanian_news.reports import RetrospectiveDailyReport
 from romanian_news.retrospective_report import publish_retrospective_daily_report
 from romanian_news.worker.operations import (
     materialize_clusters,
@@ -19,7 +29,16 @@ from romanian_news.worker.operations import (
     materialize_subject_assessments,
 )
 
-_PILOT_ARTICLE_LIMIT = 60
+_ARTICLE_LIMIT = 200
+_AUTOMATED_END = ARCHIVE_START + timedelta(days=9)
+_ACTIVE_STATUSES = (
+    dg.DagsterRunStatus.QUEUED,
+    dg.DagsterRunStatus.NOT_STARTED,
+    dg.DagsterRunStatus.MANAGED,
+    dg.DagsterRunStatus.STARTING,
+    dg.DagsterRunStatus.STARTED,
+    dg.DagsterRunStatus.CANCELING,
+)
 
 
 class RetrospectiveAnalysisConfig(dg.Config):
@@ -33,9 +52,9 @@ def analyze_retrospective_day(day: date, implementation_ref: str) -> str:
     if coverage is None or len(coverage.included_outlets) < 2:
         raise ValueError("Retrospective pilot needs captured articles from two outlets")
     article_count = len(read_daily_article_references(day).values)
-    if not 1 <= article_count <= _PILOT_ARTICLE_LIMIT:
+    if not 1 <= article_count <= _ARTICLE_LIMIT:
         raise ValueError(
-            f"Retrospective pilot requires 1-{_PILOT_ARTICLE_LIMIT} published articles; "
+            f"Retrospective analysis requires 1-{_ARTICLE_LIMIT} published articles; "
             f"found {article_count}"
         )
     if article_count > coverage.captured_article_count:
@@ -62,6 +81,74 @@ def retrospective_analysis(
     context.log.info("Retrospective report for %s: version=%s", day, version_id)
 
 
-@dg.job(tags={"dagster/max_runtime": "7200", "dagster/max_retries": "0"})
+@dg.job(tags={"dagster/max_runtime": "21600", "dagster/max_retries": "0"})
 def retrospective_analysis_pilot() -> None:
     retrospective_analysis()
+
+
+def next_automated_day() -> date | None:
+    pending_months = []
+    for outlet in ARCHIVE_OUTLETS:
+        for next_window in (next_page_window, next_capture_window):
+            window = next_window(outlet, ARCHIVE_START, ARCHIVE_END)
+            if window is not None:
+                pending_months.append(window[0])
+    reports = {
+        report.day: report for report in list_archive_daily_reports(ARCHIVE_START, _AUTOMATED_END)
+    }
+    for month_start, month_end in month_windows(ARCHIVE_START, _AUTOMATED_END):
+        if any(pending <= month_end for pending in pending_months):
+            break
+        day = month_start
+        while day <= month_end:
+            coverage = read_retrospective_coverage(day)
+            if coverage is not None and len(coverage.included_outlets) >= 2:
+                article_count = len(read_daily_article_references(day).values)
+                if article_count > _ARTICLE_LIMIT:
+                    raise ValueError(
+                        f"Completed archive day {day.isoformat()} has {article_count} "
+                        f"articles, above the {_ARTICLE_LIMIT}-article batch limit"
+                    )
+                if article_count >= 1:
+                    published = reports.get(day)
+                    if published is None:
+                        return day
+                    current = read_daily_report_version(published.version_id)
+                    if (
+                        isinstance(current, RetrospectiveDailyReport)
+                        and current.retrospective.captured_article_count
+                        < coverage.captured_article_count
+                    ):
+                        return day
+            day += timedelta(days=1)
+    return None
+
+
+@dg.schedule(
+    job=retrospective_analysis_pilot,
+    cron_schedule="5,35 * * * *",
+    execution_timezone="UTC",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
+)
+def scheduled_retrospective_analysis(
+    context: dg.ScheduleEvaluationContext,
+) -> dg.RunRequest | dg.SkipReason:
+    scheduled_at = context.scheduled_execution_time
+    if scheduled_at is None:
+        raise ValueError("Retrospective analysis schedule time is required")
+    if context.instance.get_runs(
+        filters=dg.RunsFilter(
+            job_name=retrospective_analysis_pilot.name,
+            statuses=_ACTIVE_STATUSES,
+        ),
+        limit=1,
+    ):
+        return dg.SkipReason("A retrospective report is already running.")
+    day = next_automated_day()
+    if day is None:
+        return dg.SkipReason("No completed archive day needs a report in the pilot window.")
+    return dg.RunRequest(
+        run_key=f"retrospective:{day.isoformat()}:{scheduled_at.isoformat()}",
+        run_config={"ops": {"retrospective_analysis": {"config": {"day": day.isoformat()}}}},
+        tags={"news/archive_day": day.isoformat()},
+    )
