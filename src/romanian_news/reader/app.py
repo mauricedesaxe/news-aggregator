@@ -352,10 +352,15 @@ def _register_status_routes(app: FastHTML, domain: ReaderDomain) -> None:
         page = int(raw_page)
         try:
             rows = domain.list_status(21, (page - 1) * 20)
+            discovery = domain.list_archive_discovery()
         except ResearchCatalogError:
             return _unavailable_page(request)
         return render_status_archive(
-            rows[:20], page, len(rows) > 20, _site_header(str(request.session["csrf_token"]))
+            rows[:20],
+            page,
+            len(rows) > 20,
+            _site_header(str(request.session["csrf_token"])),
+            discovery=discovery,
         )
 
     @_route(app, "get", "/status/weeks/{week_start}")

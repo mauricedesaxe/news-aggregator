@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from starlette.testclient import TestClient
 
 from romanian_news.artifacts import ArtifactReference
+from romanian_news.catalog.archive_progress import ArchiveDiscoveryMonth
 from romanian_news.catalog.weekly_status import WeeklyStatusSummary
 from romanian_news.reader.app import PRODUCTION_DOMAIN, ReaderSettings, create_app
 from romanian_news.weekly_status import (
@@ -68,12 +69,13 @@ def _read() -> WeeklyStatusRead:
     )
 
 
-def _app():
+def _app(discovery: tuple[ArchiveDiscoveryMonth, ...] = ()):
     domain = replace(
         PRODUCTION_DOMAIN,
         list_status=lambda _limit, _offset: (
             WeeklyStatusSummary(week_start=WEEK_START, version_id=STATUS_VERSION),
         ),
+        list_archive_discovery=lambda: discovery,
         read_status=lambda _week: (STATUS_VERSION, _read()),
         read_status_version=lambda _version: (STATUS_VERSION, _read()),
     )
@@ -130,6 +132,25 @@ def test_status_archive_and_exact_version_render() -> None:
     assert "Permanent link to this read" not in exact.text
     assert "cited highlight" not in exact.text
     assert "INSUFFICIENT" not in exact.text
+
+
+def test_status_archive_shows_discovered_urls_without_claiming_reports() -> None:
+    discovery = (
+        ArchiveDiscoveryMonth(
+            outlet_id="hotnews", month=date(2025, 9, 1), sitemap_count=7, url_entries=643
+        ),
+        ArchiveDiscoveryMonth(
+            outlet_id="digi24", month=date(2025, 9, 1), sitemap_count=1, url_entries=3186
+        ),
+    )
+    with TestClient(_app(discovery)) as client:
+        _sign_in(client)
+        response = client.get("/status/archive")
+
+    assert response.status_code == 200
+    assert "Historical collection" in response.text
+    assert "3,186 URL entries" in response.text
+    assert "do not mean the articles or reports have been published" in response.text
 
 
 def test_old_strong_assessment_shows_cited_evidence_instead_of_rating() -> None:

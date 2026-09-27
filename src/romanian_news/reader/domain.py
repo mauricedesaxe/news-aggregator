@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from datetime import date
 
 from romanian_news import Sha256
+from romanian_news.catalog.archive_progress import (
+    ArchiveDiscoveryMonth,
+    list_archive_discovery_months,
+)
 from romanian_news.catalog.research_triggers import read_daily_research_trigger_set
 from romanian_news.catalog.weekly_status import (
     WeeklyStatusSummary,
@@ -74,6 +78,7 @@ class ReaderDomain:
         lambda _limit, _offset: ()
     )
     list_status: Callable[[int, int], tuple[WeeklyStatusSummary, ...]] = lambda _limit, _offset: ()
+    list_archive_discovery: Callable[[], tuple[ArchiveDiscoveryMonth, ...]] = lambda: ()
     read_status: Callable[[date], tuple[Sha256, WeeklyStatusRead]] | None = None
     read_status_version: Callable[[Sha256], tuple[Sha256, WeeklyStatusRead]] | None = None
     submit_video_feedback: Callable[[VideoDigestFeedbackCommand], VideoDigestFeedbackEvent] = (
@@ -89,6 +94,7 @@ PRODUCTION_DOMAIN = ReaderDomain(
     list_reports=list_daily_reports,
     list_report_archive=list_daily_reports,
     list_status=list_weekly_status,
+    list_archive_discovery=list_archive_discovery_months,
     read_status=read_weekly_status,
     read_status_version=read_weekly_status_version,
     resolve_current_report_version=resolve_current_daily_report_version,
