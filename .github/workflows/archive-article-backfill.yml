@@ -1,8 +1,6 @@
 name: Backfill historical articles
 
 on:
-  schedule:
-    - cron: "5,20,35,50 * * * *"
   workflow_dispatch:
 
 permissions:

@@ -150,6 +150,7 @@ jobs:
               "quarter_hourly_news_feedback_sync",
               "scheduled_weekly_status",
               "scheduled_archive_page_backfill",
+              "scheduled_archive_article_capture",
           ):
               result = execute(
                   """

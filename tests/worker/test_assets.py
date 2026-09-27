@@ -69,6 +69,10 @@ def test_automation_starts_running_and_uses_bucharest_time() -> None:
         definitions.scheduled_archive_page_backfill.default_status
         == dg.DefaultScheduleStatus.RUNNING
     )
+    assert (
+        definitions.scheduled_archive_article_capture.default_status
+        == dg.DefaultScheduleStatus.RUNNING
+    )
     assert definitions.scheduled_weekly_status.default_status == dg.DefaultScheduleStatus.RUNNING
     assert weekly_freshness.default_status == dg.DefaultSensorStatus.RUNNING
     assert weekly_freshness.minimum_interval_seconds == 3600
@@ -91,6 +95,7 @@ def test_automation_starts_running_and_uses_bucharest_time() -> None:
         "scheduled_video_digest_incident_monitor",
         "scheduled_weekly_status",
         "scheduled_archive_page_backfill",
+        "scheduled_archive_article_capture",
     }
     assert defs.resolve_job_def("morning_report_check").name == morning_report_check.name
     assert defs.resolve_job_def("weekly_report").name == weekly_report_job.name
