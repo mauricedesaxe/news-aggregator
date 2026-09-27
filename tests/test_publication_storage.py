@@ -351,10 +351,20 @@ def test_public_verification_accepts_cache_control_whitespace() -> None:
         lambda response: response.headers.__setitem__("Content-Length", "1"),
         lambda response: response.headers.__setitem__("Content-Type", "video/webm"),
         lambda response: response.headers.__setitem__("Cache-Control", "public,max-age=60"),
+        lambda response: response.headers.__setitem__("Cache-Control", "public, max-age=60"),
         lambda response: response.headers.pop("ETag"),
         lambda response: setattr(response, "content", b"wrong-body"),
     ),
-    ids=("redirect", "wrong-status", "length", "type", "cache", "validator", "body"),
+    ids=(
+        "redirect",
+        "wrong-status",
+        "length",
+        "type",
+        "cache",
+        "spaced-cache",
+        "validator",
+        "body",
+    ),
 )
 def test_public_full_verification_rejects_wrong_response(
     mutate: Callable[[_Response], object],
