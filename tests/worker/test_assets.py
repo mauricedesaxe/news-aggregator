@@ -98,6 +98,7 @@ def test_automation_starts_running_and_uses_bucharest_time() -> None:
         "scheduled_video_digest",
         "scheduled_video_digest_incident_monitor",
         "scheduled_weekly_status",
+        "scheduled_historical_weekly_status",
         "scheduled_archive_page_backfill",
         "scheduled_archive_article_capture",
         "scheduled_retrospective_analysis",

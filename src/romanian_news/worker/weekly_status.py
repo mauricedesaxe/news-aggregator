@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 import dagster as dg
 
 from romanian_news import BUCHAREST
+from romanian_news.archive.backfill import ARCHIVE_END, ARCHIVE_START
 from romanian_news.catalog.weekly_status import (
     WeeklyStatusNotFound,
     publish_weekly_status,
@@ -51,6 +52,65 @@ def weekly_status_refresh() -> None:
 def recent_completed_week_starts(today: date, count: int = 4) -> tuple[date, ...]:
     current_monday = today - timedelta(days=today.weekday())
     return tuple(current_monday - timedelta(weeks=offset) for offset in range(1, count + 1))
+
+
+def next_historical_week(today: date) -> date | None:
+    recent = recent_completed_week_starts(today)
+    last_week = min(
+        ARCHIVE_END - timedelta(days=ARCHIVE_END.weekday()),
+        min(recent) - timedelta(weeks=1),
+    )
+    week = ARCHIVE_START - timedelta(days=ARCHIVE_START.weekday())
+    while week <= last_week:
+        inputs = read_week_input(week)
+        if inputs.available_days >= MIN_REPORT_DAYS:
+            try:
+                _version_id, current = read_weekly_status(week)
+            except WeeklyStatusNotFound:
+                return week
+            if current.policy != inputs.policy or current.days != inputs.days:
+                return week
+        week += timedelta(weeks=1)
+    return None
+
+
+@dg.schedule(
+    job=weekly_status_refresh,
+    cron_schedule="20 */2 * * *",
+    execution_timezone="UTC",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
+)
+def scheduled_historical_weekly_status(
+    context: dg.ScheduleEvaluationContext,
+) -> dg.RunRequest | dg.SkipReason:
+    scheduled_at = context.scheduled_execution_time
+    if scheduled_at is None:
+        raise ValueError("Historical weekly status schedule time is required")
+    if context.instance.get_runs(
+        filters=dg.RunsFilter(
+            job_name=weekly_status_refresh.name,
+            statuses=(
+                dg.DagsterRunStatus.QUEUED,
+                dg.DagsterRunStatus.NOT_STARTED,
+                dg.DagsterRunStatus.MANAGED,
+                dg.DagsterRunStatus.STARTING,
+                dg.DagsterRunStatus.STARTED,
+                dg.DagsterRunStatus.CANCELING,
+            ),
+        ),
+        limit=1,
+    ):
+        return dg.SkipReason("A weekly status refresh is already running.")
+    week = next_historical_week(scheduled_at.date())
+    if week is None:
+        return dg.SkipReason("No historical week has new published daily reports.")
+    return dg.RunRequest(
+        run_key=f"archive-weekly:{week.isoformat()}:{scheduled_at.isoformat()}",
+        run_config={
+            "ops": {"refresh_weekly_statuses": {"config": {"week_starts": [week.isoformat()]}}}
+        },
+        tags={"news/archive_week": week.isoformat()},
+    )
 
 
 @dg.schedule(
