@@ -117,3 +117,49 @@ def test_status_archive_and_exact_version_render() -> None:
     assert f"/status/versions/{STATUS_VERSION}" in week.text
     assert exact.status_code == 200
     assert "What changed in Romania?" in exact.text
+    assert "cited highlight" not in exact.text
+    assert "INSUFFICIENT" not in exact.text
+
+
+def test_old_strong_assessment_shows_cited_evidence_instead_of_rating() -> None:
+    read = _read()
+    full_days = tuple(
+        WeekInputDay(
+            day=WEEK_START + timedelta(days=offset),
+            report=ArtifactReference(
+                artifact_id=f"news:daily:{(WEEK_START + timedelta(days=offset)).isoformat()}",
+                version_id=DAILY_VERSION,
+                content_digest="d" * 64,
+                r2_key=f"report-{offset}.json",
+            ),
+        )
+        for offset in range(7)
+    )
+    assessment = AreaAssessment(
+        area="overall",
+        judgment="Budget talks continued.",
+        what_changed="The budget entered debate.",
+        why_it_matters="Spending is at stake.",
+        source_handles=("s1",),
+        coverage="strong",
+        coverage_note="Only selected daily highlights were reviewed.",
+    )
+    legacy_read = read.model_copy(
+        update={
+            "days": full_days,
+            "assessments": (assessment, *read.assessments[1:]),
+        }
+    )
+    domain = replace(
+        PRODUCTION_DOMAIN,
+        read_status_version=lambda _version: (STATUS_VERSION, legacy_read),
+    )
+    app = create_app(ReaderSettings(app_password="correct horse", session_secret="s" * 32), domain)
+    with TestClient(app) as client:
+        _sign_in(client)
+        response = client.get(f"/status/versions/{STATUS_VERSION}")
+
+    assert response.status_code == 200
+    assert "1 cited highlight across 1 report day" in response.text
+    assert "Only selected daily highlights were reviewed." in response.text
+    assert "STRONG" not in response.text

@@ -17,7 +17,7 @@ from romanian_news.reports import (
 )
 
 WEEKLY_STATUS_MODEL = "google/gemini-3.8-flash"
-WEEKLY_STATUS_POLICY = f"completed-week-ranked-sources-v1:{WEEKLY_STATUS_MODEL}"
+WEEKLY_STATUS_POLICY = f"completed-week-ranked-sources-v2:{WEEKLY_STATUS_MODEL}"
 MIN_REPORT_DAYS = 5
 Area = Literal["overall", "economy", "politics", "society"]
 
@@ -124,10 +124,10 @@ class WeeklyStatusRead(NewsModel):
             "society",
         ):
             raise ValueError("Assessments must cover the four areas in order")
-        if inputs.available_days < 7 and any(
+        if (inputs.available_days < 7 or self.policy == WEEKLY_STATUS_POLICY) and any(
             item.coverage == "strong" for item in self.assessments
         ):
-            raise ValueError("Missing report days prevent strong coverage")
+            raise ValueError("This weekly read cannot claim strong coverage")
         for item in (*self.developments, *self.assessments):
             cited = item.source_handles
             contrary = item.contrary_handles if isinstance(item, AreaAssessment) else ()

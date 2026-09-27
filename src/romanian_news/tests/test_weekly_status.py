@@ -69,7 +69,7 @@ def _draft(inputs: WeekInput, handles: tuple[str, ...]) -> GeneratedStatus:
                 what_changed="The draft entered public debate.",
                 why_it_matters="The budget could affect national spending.",
                 source_handles=handles[:2],
-                coverage="limited" if inputs.available_days < 7 else "strong",
+                coverage="limited",
                 coverage_note="Selected report highlights only.",
             ),
             *(
@@ -171,3 +171,27 @@ def test_insufficient_assessment_cannot_claim_impact() -> None:
             coverage="insufficient",
             coverage_note="Not enough selected reporting.",
         )
+
+
+def test_new_policy_rejects_uncalibrated_strong_coverage_but_old_reads_still_parse() -> None:
+    inputs = _inputs()
+    sources = source_items(inputs, _reports(inputs))
+    draft = _draft(inputs, tuple(source.handle for source in sources))
+    strong = draft.assessments[0].model_copy(update={"coverage": "strong"})
+
+    def read(policy: str) -> WeeklyStatusRead:
+        return WeeklyStatusRead(
+            policy=policy,
+            week_start=WEEK_START,
+            week_end=WEEK_START + timedelta(days=6),
+            days=inputs.days,
+            sources=sources,
+            developments=draft.developments,
+            assessments=(strong, *draft.assessments[1:]),
+        )
+
+    with pytest.raises(ValidationError, match="cannot claim strong coverage"):
+        read(inputs.policy)
+
+    old_read = read("completed-week-ranked-sources-v1:google/gemini-3.8-flash")
+    assert old_read.assessments[0].coverage == "strong"
