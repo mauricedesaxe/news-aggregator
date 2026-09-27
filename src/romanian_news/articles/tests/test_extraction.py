@@ -133,6 +133,27 @@ def test_archive_extraction_uses_original_page_date_without_a_feed_entry() -> No
     assert "Primul paragraf" in article.body
 
 
+def test_archive_extraction_uses_full_page_when_selected_fragment_has_no_text() -> None:
+    feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
+    paragraphs = "".join(
+        f"Paragraph {index} describes a public project with a concrete update and context." "<br>"
+        for index in range(12)
+    )
+    content = (
+        "<html><head><title>Acme project update</title>"
+        '<meta property="og:title" content="Acme project update">'
+        '<meta property="article:published_time" content="2025-09-27T10:00:00+03:00">'
+        "</head><body><main><article><h1>Acme project update</h1>"
+        '<div class="article-single-content"><p class="wp-block-paragraph">'
+        f"{paragraphs}</p></div></article></main></body></html>"
+    ).encode()
+
+    article = extract_archive_article(content, "https://hotnews.ro/acme-project-123", feed)
+
+    assert article.bucharest_day.isoformat() == "2025-09-27"
+    assert "Paragraph 11" in article.body
+
+
 def test_archive_extraction_rejects_missing_date_and_short_page() -> None:
     feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
     content = _article_html("Short.")
@@ -145,7 +166,7 @@ def test_archive_extraction_rejects_missing_date_and_short_page() -> None:
         b'<meta property="article:published_time" content="2025-09-19T10:00:00+03:00">'
         b"<title>",
     )
-    with pytest.raises(ValueError, match="no extractable article text"):
+    with pytest.raises(ValueError, match="content is too short"):
         extract_archive_article(
             dated,
             "https://hotnews.ro/articol-test-123",
