@@ -55,17 +55,16 @@ def list_archive_discovery_months() -> tuple[ArchiveDiscoveryMonth, ...]:
         count[1] += int(row["entry_count"])
     checked_rows = catalog_query(
         """
-        WITH latest AS (
+        SELECT observation.outlet_id, observation.sitemap_url, latest.status,
+               COUNT(*) AS page_count
+        FROM (
             SELECT DISTINCT ON (check_record.outlet_id, check_record.canonical_url)
                    check_record.observation_id, check_record.status
             FROM news_archive_page_checks check_record
             WHERE check_record.outlet_id IN ('hotnews', 'digi24')
             ORDER BY check_record.outlet_id, check_record.canonical_url,
                      check_record.fetched_at DESC, check_record.id DESC
-        )
-        SELECT observation.outlet_id, observation.sitemap_url, latest.status,
-               COUNT(*) AS page_count
-        FROM latest
+        ) latest
         JOIN news_archive_sitemap_observations observation
           ON observation.id = latest.observation_id
         GROUP BY observation.outlet_id, observation.sitemap_url, latest.status
