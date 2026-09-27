@@ -29,6 +29,7 @@ from romanian_news.reports import (
     RetrospectiveDailyReport,
     WeeklyReport,
     build_daily_report_from_construction,
+    build_retrospective_daily_report,
     build_weekly_report,
     parse_daily_report,
 )
@@ -125,6 +126,7 @@ def test_retrospective_report_requires_capture_evidence_and_survives_weekly_roun
         RetrospectiveDailyReport.model_validate(
             {key: value for key, value in historical.model_dump().items() if key != "retrospective"}
         )
+
     with pytest.raises(ValueError, match="schema version 4"):
         RetrospectiveDailyReport.model_validate({**historical.model_dump(), "schema_version": 3})
     with pytest.raises(ValueError, match="schema version 3"):
@@ -157,6 +159,56 @@ def test_retrospective_report_requires_capture_evidence_and_survives_weekly_roun
     round_trip = WeeklyReport.model_validate_json(weekly.content, strict=True)
     assert isinstance(round_trip.days[0].report, RetrospectiveDailyReport)
     assert round_trip.days[0].report.retrospective == coverage
+
+
+def test_retrospective_output_changes_with_coverage_and_keeps_exact_inputs() -> None:
+    day = date(2025, 9, 19)
+    live = DailyReport(
+        day=day,
+        accepted_article_count=2,
+        theme_count=0,
+        group_count=0,
+        sections=(),
+    )
+    base = DailyReportOutput(
+        request_id="a" * 64,
+        report=live,
+        themes=_reference("1" * 64),
+        assessments=_reference("2" * 64),
+        cluster_set=_reference("3" * 64),
+        summaries=(),
+        sentiments=(),
+        content_digest="b" * 64,
+        content=live.model_dump_json().encode(),
+    )
+    coverage = RetrospectiveCoverage(
+        capture_started_at=datetime(2026, 9, 27, 10, tzinfo=UTC),
+        capture_ended_at=datetime(2026, 9, 27, 11, tzinfo=UTC),
+        included_outlets=("hotnews", "digi24"),
+        discovered_url_count=20,
+        verified_page_count=5,
+        captured_article_count=3,
+        coverage_note="Two outlets have verified captures.",
+    )
+
+    first = build_retrospective_daily_report(base, coverage)
+    replay = build_retrospective_daily_report(base, coverage)
+    revised = build_retrospective_daily_report(
+        base, coverage.model_copy(update={"captured_article_count": 4})
+    )
+
+    assert first == replay
+    assert first.request_id != base.request_id
+    assert first.request_id != revised.request_id
+    assert first.content_digest != revised.content_digest
+    assert parse_daily_report(first.content) == first.report
+    assert first.themes == base.themes
+    assert first.assessments == base.assessments
+    assert first.cluster_set == base.cluster_set
+    with pytest.raises(ValueError, match="Accepted articles exceed retrospective captures"):
+        build_retrospective_daily_report(
+            base, coverage.model_copy(update={"captured_article_count": 1})
+        )
 
 
 def test_weekly_report_reconstructs_a_mixed_current_and_archived_week(monkeypatch) -> None:

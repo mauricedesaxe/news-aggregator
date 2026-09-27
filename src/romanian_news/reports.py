@@ -471,6 +471,38 @@ def build_daily_report_from_construction(
     )
 
 
+def build_retrospective_daily_report(
+    output: DailyReportOutput, coverage: RetrospectiveCoverage
+) -> DailyReportOutput:
+    """Attach the measured capture window to a constructed historical report."""
+    if type(output.report) is not DailyReport:
+        raise ValueError("Retrospective reports require a current daily report construction")
+    report = RetrospectiveDailyReport.model_validate(
+        {
+            **output.report.model_dump(mode="python"),
+            "schema_version": 4,
+            "retrospective": coverage,
+        }
+    )
+    content = _canonical_json(report.model_dump(mode="json"))
+    request_id = _sha256(
+        _canonical_json(
+            {
+                "daily_request_id": output.request_id,
+                "retrospective_coverage": coverage.model_dump(mode="json"),
+            }
+        )
+    )
+    return output.model_copy(
+        update={
+            "request_id": request_id,
+            "report": report,
+            "content_digest": _sha256(content),
+            "content": content,
+        }
+    )
+
+
 def _report_theme_section(
     theme: DailyTheme,
     assessment: SubjectAssessment,
