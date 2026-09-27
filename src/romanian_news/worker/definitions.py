@@ -13,6 +13,7 @@ from romanian_news.articles.recovery import (
 from romanian_news.config import IMPLEMENTATION_REF
 from romanian_news.daily import bucharest_day_window, read_daily_article_references
 from romanian_news.feeds.registry import feed_registry
+from romanian_news.worker.archive_capture import archive_article_capture_batch
 from romanian_news.worker.assets import (
     BUCHAREST_TIMEZONE,
     DAILY_PARTITIONS,
@@ -457,6 +458,7 @@ defs = dg.Definitions(
         jev_relevance_evaluation,
         weekly_status_refresh,
         catalog_schema_activation,
+        archive_article_capture_batch,
     ],
     schedules=[
         hourly_registered_feed_poll,
