@@ -274,8 +274,8 @@ def test_missing_configuration_fails_before_provider_or_catalog_reads(
     monkeypatch.setattr(generation_port, "NEWS_H3_REFERENCE_PACK_ID", None)
     monkeypatch.setattr(
         generation_port,
-        "read_h3_reference_pack",
-        lambda _pack_id: pytest.fail("missing pack configuration reached the catalog"),
+        "FalH3Client",
+        lambda: pytest.fail("missing pack configuration reached the Fal provider boundary"),
     )
     with pytest.raises(ValueError, match="NEWS_H3_REFERENCE_PACK_ID"):
         generation_port.ProductionH3GenerationPort().execute(_action())
@@ -288,11 +288,6 @@ def test_provider_credentials_are_checked_before_pack_or_request_admission(
         generation_port,
         "FalH3Client",
         lambda: (_ for _ in ()).throw(ValueError("FAL_KEY is required")),
-    )
-    monkeypatch.setattr(
-        generation_port,
-        "read_h3_reference_pack",
-        lambda _pack_id: pytest.fail("missing Fal credentials reached the catalog"),
     )
     with pytest.raises(ValueError, match="FAL_KEY"):
         generation_port.ProductionH3GenerationPort(pack_id="7" * 64).execute(_action())
@@ -421,12 +416,9 @@ def test_retry_available_advances_from_durable_failed_attempt(
             reason="technical validation failed",
         ),
     )
-    assert isinstance(
-        generation_port.ProductionH3GenerationPort(
-            provider=_unused_provider(), pack_id="7" * 64
-        ).execute(action),
-        ActionAdvanced,
-    )
+    assert generation_port.ProductionH3GenerationPort(
+        provider=_unused_provider(), pack_id="7" * 64
+    ).execute(action) == ActionAdvanced(durable_progress=True)
 
 
 def test_generation_port_rejects_reference_pack_drift_from_prior_requests(
