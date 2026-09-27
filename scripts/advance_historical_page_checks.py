@@ -3,28 +3,8 @@
 import argparse
 import json
 import sys
-from collections import Counter
-from datetime import date
 
-from romanian_news.archive.page_checks import check_archive_pages, pending_page_candidates
-from romanian_news.archive.windows import month_windows
-
-
-def advance_page_checks(
-    outlet_id: str, start: date, end: date, limit: int = 100
-) -> dict[str, object]:
-    for month_start, month_end in month_windows(start, end):
-        if not pending_page_candidates(outlet_id, month_start, month_end, 1):
-            continue
-        checks = check_archive_pages(outlet_id, month_start, month_end, limit=limit)
-        return {
-            "outlet": outlet_id,
-            "start": month_start.isoformat(),
-            "end": month_end.isoformat(),
-            "checked": len(checks),
-            "statuses": dict(Counter(check.status for check in checks)),
-        }
-    return {"outlet": outlet_id, "checked": 0, "complete": True}
+from romanian_news.archive.backfill import ARCHIVE_END, ARCHIVE_START, advance_page_checks
 
 
 def main() -> None:
@@ -33,8 +13,8 @@ def main() -> None:
     args = parser.parse_args()
     result = advance_page_checks(
         args.outlet,
-        date(2025, 9, 27),
-        date(2026, 9, 26),
+        ARCHIVE_START,
+        ARCHIVE_END,
     )
     sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
 

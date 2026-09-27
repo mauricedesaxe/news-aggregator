@@ -14,6 +14,10 @@ from romanian_news.config import IMPLEMENTATION_REF
 from romanian_news.daily import bucharest_day_window, read_daily_article_references
 from romanian_news.feeds.registry import feed_registry
 from romanian_news.worker.archive_capture import archive_article_capture_batch
+from romanian_news.worker.archive_page_backfill import (
+    archive_page_backfill_job,
+    scheduled_archive_page_backfill,
+)
 from romanian_news.worker.assets import (
     BUCHAREST_TIMEZONE,
     DAILY_PARTITIONS,
@@ -460,6 +464,7 @@ defs = dg.Definitions(
         weekly_status_refresh,
         catalog_schema_activation,
         archive_article_capture_batch,
+        archive_page_backfill_job,
         retrospective_daily_report_job,
     ],
     schedules=[
@@ -471,6 +476,7 @@ defs = dg.Definitions(
         scheduled_video_digest,
         scheduled_video_digest_incident_monitor,
         scheduled_weekly_status,
+        scheduled_archive_page_backfill,
     ],
     sensors=[
         article_batch_controller,

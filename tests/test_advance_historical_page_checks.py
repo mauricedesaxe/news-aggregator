@@ -1,7 +1,7 @@
 from datetime import date
 
+from romanian_news.archive import backfill
 from romanian_news.archive.windows import month_windows
-from scripts import advance_historical_page_checks as advance
 
 
 def test_month_windows_keep_partial_first_and_last_months() -> None:
@@ -28,10 +28,10 @@ def test_advance_checks_oldest_month_with_pending_pages(monkeypatch) -> None:
         )
         return ()
 
-    monkeypatch.setattr(advance, "pending_page_candidates", pending)
-    monkeypatch.setattr(advance, "check_archive_pages", check)
+    monkeypatch.setattr(backfill, "pending_page_candidates", pending)
+    monkeypatch.setattr(backfill, "check_archive_pages", check)
 
-    result = advance.advance_page_checks("hotnews", date(2025, 9, 27), date(2025, 10, 31))
+    result = backfill.advance_page_checks("hotnews", date(2025, 9, 27), date(2025, 10, 31))
 
     assert [item[1].month for item in queried] == [9, 10]
     assert result == {
