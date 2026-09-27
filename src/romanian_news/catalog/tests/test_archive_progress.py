@@ -26,6 +26,15 @@ def test_discovery_inventory_groups_latest_sitemaps_by_month(monkeypatch) -> Non
                     "page_count": 3,
                 },
             ]
+        if "news_archive_article_captures" in sql:
+            return [
+                {
+                    "outlet_id": "hotnews",
+                    "sitemap_url": "https://hotnews.ro/sitemap.xml?yyyy=2025&mm=09&dd=19",
+                    "discovered_url": f"https://hotnews.ro/story-{index}",
+                }
+                for index in range(5)
+            ]
         return [
             {
                 "outlet_id": "hotnews",
@@ -48,7 +57,10 @@ def test_discovery_inventory_groups_latest_sitemaps_by_month(monkeypatch) -> Non
 
     rows = archive_progress.list_archive_discovery_months()
 
-    assert archive_progress.ArchiveDiscoveryMonth("hotnews", date(2025, 9, 1), 2, 159, 8, 2) in rows
+    assert (
+        archive_progress.ArchiveDiscoveryMonth("hotnews", date(2025, 9, 1), 2, 159, 8, 2, 0, 5)
+        in rows
+    )
     assert (
         archive_progress.ArchiveDiscoveryMonth("digi24", date(2025, 9, 1), 1, 3186, 0, 0, 3) in rows
     )

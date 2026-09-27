@@ -144,6 +144,7 @@ def test_status_archive_shows_discovered_urls_without_claiming_reports() -> None
             accepted_pages=42,
             rejected_pages=3,
             retryable_pages=1,
+            captured_articles=5,
         ),
         ArchiveDiscoveryMonth(
             outlet_id="digi24", month=date(2025, 9, 1), sitemap_count=1, url_entries=3186
@@ -158,7 +159,8 @@ def test_status_archive_shows_discovered_urls_without_claiming_reports() -> None
     assert "3,186 URL entries" in response.text
     assert "42 pages with verified dates" in response.text
     assert "3 rejected" in response.text
-    assert "do not mean the articles or reports have been published" in response.text
+    assert "5 articles captured" in response.text
+    assert "Daily reports and weekly reads appear only when published" in response.text
 
 
 def test_old_strong_assessment_shows_cited_evidence_instead_of_rating() -> None:
