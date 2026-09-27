@@ -13,7 +13,10 @@ from romanian_news.articles.recovery import (
 from romanian_news.config import IMPLEMENTATION_REF
 from romanian_news.daily import bucharest_day_window, read_daily_article_references
 from romanian_news.feeds.registry import feed_registry
-from romanian_news.worker.archive_capture import archive_article_capture_batch
+from romanian_news.worker.archive_capture import (
+    archive_article_capture_batch,
+    scheduled_archive_article_capture,
+)
 from romanian_news.worker.archive_page_backfill import (
     archive_page_backfill_job,
     scheduled_archive_page_backfill,
@@ -477,6 +480,7 @@ defs = dg.Definitions(
         scheduled_video_digest_incident_monitor,
         scheduled_weekly_status,
         scheduled_archive_page_backfill,
+        scheduled_archive_article_capture,
     ],
     sensors=[
         article_batch_controller,

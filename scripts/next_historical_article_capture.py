@@ -5,26 +5,26 @@ import json
 import sys
 from datetime import date
 
-from romanian_news.archive.capture_batch import pending_archive_articles
-from romanian_news.archive.windows import month_windows
+from romanian_news.archive.capture_batch import next_capture_window
 
 
 def next_capture_config(outlet_id: str, start: date, end: date) -> dict[str, object] | None:
-    for month_start, month_end in month_windows(start, end):
-        if pending_archive_articles(outlet_id, month_start, month_end, 1):
-            return {
-                "ops": {
-                    "archive_article_capture": {
-                        "config": {
-                            "outlet": outlet_id,
-                            "start": month_start.isoformat(),
-                            "end": month_end.isoformat(),
-                            "limit": 50,
-                        }
-                    }
+    window = next_capture_window(outlet_id, start, end)
+    if window is None:
+        return None
+    month_start, month_end = window
+    return {
+        "ops": {
+            "archive_article_capture": {
+                "config": {
+                    "outlet": outlet_id,
+                    "start": month_start.isoformat(),
+                    "end": month_end.isoformat(),
+                    "limit": 50,
                 }
             }
-    return None
+        }
+    }
 
 
 def main() -> None:

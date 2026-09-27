@@ -11,6 +11,7 @@ import requests
 from romanian_news.archive.articles import capture_archive_article
 from romanian_news.archive.discovery import USER_AGENT
 from romanian_news.archive.page_checks import _fetch
+from romanian_news.archive.windows import month_windows
 from romanian_news.articles.extraction import normalize_article_url
 from romanian_news.catalog.archive_articles import publish_archive_article
 from romanian_news.catalog_transport import catalog_query
@@ -30,6 +31,13 @@ class ArchiveCaptureBatchResult:
     published: int
     unchanged: int
     failed: tuple[tuple[str, str], ...]
+
+
+def next_capture_window(outlet_id: str, start: date, end: date) -> tuple[date, date] | None:
+    for month_start, month_end in month_windows(start, end):
+        if pending_archive_articles(outlet_id, month_start, month_end, 1):
+            return month_start, month_end
+    return None
 
 
 def pending_archive_articles(
