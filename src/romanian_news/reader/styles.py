@@ -117,6 +117,14 @@ button { border-radius: 0; }
 }
 .report-status p { margin: 0; }
 .report-status a { color: #13231a; font-weight: 900; margin-left: .4rem; }
+.retrospective-notice {
+  background: var(--card);
+  border: 2px solid var(--line);
+  margin-bottom: 1rem;
+  padding: 1rem 1.25rem;
+}
+.retrospective-notice h2 { font-size: 1.15rem; margin: 0 0 .5rem; }
+.retrospective-notice p { margin: .35rem 0; }
 .report-tools {
   align-items: start;
   border-bottom: 3px solid var(--line);

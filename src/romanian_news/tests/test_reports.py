@@ -1,5 +1,5 @@
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -25,8 +25,12 @@ from romanian_news.reports import (
     DailyReportOutput,
     ReportArticleSource,
     ReportEvent,
+    RetrospectiveCoverage,
+    RetrospectiveDailyReport,
+    WeeklyReport,
     build_daily_report_from_construction,
     build_weekly_report,
+    parse_daily_report,
 )
 from romanian_news.subject_assessments import (
     PRODUCTION_SUBJECT_ASSESSMENT_POLICY,
@@ -93,6 +97,66 @@ def test_weekly_report_uses_seven_exact_daily_versions(monkeypatch) -> None:
     assert tuple(day.daily_report_version_id for day in output.report.days) == tuple(
         reference.version_id for reference, _report in daily.values()
     )
+
+
+def test_retrospective_report_requires_capture_evidence_and_survives_weekly_round_trip(
+    monkeypatch,
+) -> None:
+    week_start = date(2025, 9, 15)
+    coverage = RetrospectiveCoverage(
+        capture_started_at=datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
+        capture_ended_at=datetime(2026, 9, 27, 10, 5, tzinfo=UTC),
+        included_outlets=("hotnews", "digi24"),
+        discovered_url_count=200,
+        verified_page_count=80,
+        captured_article_count=40,
+        coverage_note="Only two publisher archives were included.",
+    )
+    historical = RetrospectiveDailyReport(
+        day=week_start,
+        accepted_article_count=25,
+        theme_count=0,
+        group_count=0,
+        sections=(),
+        retrospective=coverage,
+    )
+    assert parse_daily_report(historical.model_dump_json().encode()) == historical
+    with pytest.raises(ValueError):
+        RetrospectiveDailyReport.model_validate(
+            {key: value for key, value in historical.model_dump().items() if key != "retrospective"}
+        )
+    with pytest.raises(ValueError, match="schema version 4"):
+        RetrospectiveDailyReport.model_validate({**historical.model_dump(), "schema_version": 3})
+    with pytest.raises(ValueError, match="schema version 3"):
+        DailyReport(
+            schema_version=4,
+            day=week_start,
+            accepted_article_count=0,
+            theme_count=0,
+            group_count=0,
+            sections=(),
+        )
+    daily = {
+        week_start + timedelta(days=offset): (
+            _reference(str(offset) * 64),
+            historical
+            if offset == 0
+            else DailyReport(
+                day=week_start + timedelta(days=offset),
+                accepted_article_count=1,
+                theme_count=0,
+                group_count=0,
+                sections=(),
+            ),
+        )
+        for offset in range(7)
+    }
+    monkeypatch.setattr("romanian_news.reports._read_daily_report", daily.__getitem__)
+
+    weekly = build_weekly_report(week_start)
+    round_trip = WeeklyReport.model_validate_json(weekly.content, strict=True)
+    assert isinstance(round_trip.days[0].report, RetrospectiveDailyReport)
+    assert round_trip.days[0].report.retrospective == coverage
 
 
 def test_weekly_report_reconstructs_a_mixed_current_and_archived_week(monkeypatch) -> None:

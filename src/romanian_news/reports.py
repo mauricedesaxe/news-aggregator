@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import threading
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.groups.models import GroupSentiment, GroupSummary
@@ -88,12 +88,51 @@ class DailyReportSection(DailyReportSectionV2):
 
 
 class DailyReport(NewsModel):
-    schema_version: Literal[3] = 3
+    schema_version: int = 3
     day: date
     accepted_article_count: Annotated[int, Field(ge=0)]
     theme_count: Annotated[int, Field(ge=0)]
     group_count: Annotated[int, Field(ge=0)]
     sections: tuple[DailyReportSection, ...]
+
+    @model_validator(mode="after")
+    def validate_schema_version(self) -> DailyReport:
+        if type(self) is DailyReport and self.schema_version != 3:
+            raise ValueError("Live daily reports require schema version 3")
+        return self
+
+
+class RetrospectiveCoverage(NewsModel):
+    capture_started_at: datetime
+    capture_ended_at: datetime
+    included_outlets: Annotated[tuple[str, ...], Field(min_length=1)]
+    discovered_url_count: Annotated[int, Field(ge=0)]
+    verified_page_count: Annotated[int, Field(ge=0)]
+    captured_article_count: Annotated[int, Field(ge=0)]
+    coverage_note: Annotated[str, Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def validate_capture_window(self) -> RetrospectiveCoverage:
+        if self.capture_started_at.tzinfo is None or self.capture_ended_at.tzinfo is None:
+            raise ValueError("Retrospective capture times need UTC offsets")
+        if self.capture_ended_at < self.capture_started_at:
+            raise ValueError("Retrospective capture window is reversed")
+        if self.captured_article_count > self.verified_page_count:
+            raise ValueError("Captured articles exceed verified pages")
+        return self
+
+
+class RetrospectiveDailyReport(DailyReport):
+    schema_version: int = 4
+    retrospective: RetrospectiveCoverage
+
+    @model_validator(mode="after")
+    def validate_article_coverage(self) -> RetrospectiveDailyReport:
+        if self.schema_version != 4:
+            raise ValueError("Historical daily reports require schema version 4")
+        if self.accepted_article_count > self.retrospective.captured_article_count:
+            raise ValueError("Accepted articles exceed retrospective captures")
+        return self
 
 
 class ArchivedDailyReportSection(NewsModel):
@@ -116,7 +155,7 @@ class ArchivedDailyReport(NewsModel):
     sections: tuple[ArchivedDailyReportSection, ...]
 
 
-DailyReportDocument = DailyReport | DailyReportV2 | ArchivedDailyReport
+DailyReportDocument = RetrospectiveDailyReport | DailyReport | DailyReportV2 | ArchivedDailyReport
 
 
 def report_section_events(
@@ -681,6 +720,8 @@ def parse_daily_report(content: bytes) -> DailyReportDocument:
         raise ValueError("Daily report payload must be an object")
     if payload.get("schema_version") == 3:
         return DailyReport.model_validate_json(content, strict=True)
+    if payload.get("schema_version") == 4:
+        return RetrospectiveDailyReport.model_validate_json(content, strict=True)
     if payload.get("schema_version") == 2:
         return DailyReportV2.model_validate_json(content, strict=True)
     return ArchivedDailyReport.model_validate_json(content, strict=True)
