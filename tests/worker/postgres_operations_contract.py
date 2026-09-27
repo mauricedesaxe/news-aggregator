@@ -728,7 +728,6 @@ def test_relevance_materializer_uses_production_v3(
                         SimpleNamespace(
                             summary_needed=True,
                             sentiment_needed=False,
-                            model_copy=lambda **_kwargs: object(),
                         ),
                     ),
                 ),
