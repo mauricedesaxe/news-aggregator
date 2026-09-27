@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from starlette.testclient import TestClient
 
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.archive_progress import ArchiveDiscoveryMonth
+from romanian_news.catalog.archive_progress import ArchiveDailyReport, ArchiveDiscoveryMonth
 from romanian_news.catalog.weekly_status import WeeklyStatusSummary
 from romanian_news.reader.app import PRODUCTION_DOMAIN, ReaderSettings, create_app
 from romanian_news.weekly_status import (
@@ -69,13 +69,17 @@ def _read() -> WeeklyStatusRead:
     )
 
 
-def _app(discovery: tuple[ArchiveDiscoveryMonth, ...] = ()):
+def _app(
+    discovery: tuple[ArchiveDiscoveryMonth, ...] = (),
+    archive_reports: tuple[ArchiveDailyReport, ...] = (),
+):
     domain = replace(
         PRODUCTION_DOMAIN,
         list_status=lambda _limit, _offset: (
             WeeklyStatusSummary(week_start=WEEK_START, version_id=STATUS_VERSION),
         ),
         list_archive_discovery=lambda: discovery,
+        list_archive_reports=lambda _start, _end: archive_reports,
         read_status=lambda _week: (STATUS_VERSION, _read()),
         read_status_version=lambda _version: (STATUS_VERSION, _read()),
     )
@@ -134,7 +138,7 @@ def test_status_archive_and_exact_version_render() -> None:
     assert "INSUFFICIENT" not in exact.text
 
 
-def test_status_archive_shows_discovered_urls_without_claiming_reports() -> None:
+def test_status_archive_distinguishes_captures_from_published_reports() -> None:
     discovery = (
         ArchiveDiscoveryMonth(
             outlet_id="hotnews",
@@ -150,7 +154,8 @@ def test_status_archive_shows_discovered_urls_without_claiming_reports() -> None
             outlet_id="digi24", month=date(2025, 9, 1), sitemap_count=1, url_entries=3186
         ),
     )
-    with TestClient(_app(discovery)) as client:
+    reports = (ArchiveDailyReport(day=date(2025, 9, 29), version_id=DAILY_VERSION),)
+    with TestClient(_app(discovery, reports)) as client:
         _sign_in(client)
         response = client.get("/status/archive")
 
@@ -160,6 +165,8 @@ def test_status_archive_shows_discovered_urls_without_claiming_reports() -> None
     assert "42 pages with verified dates" in response.text
     assert "3 rejected" in response.text
     assert "5 articles captured" in response.text
+    assert "1 daily report published for the one-year archive" in response.text
+    assert f'href="/reports/{DAILY_VERSION}"' in response.text
     assert "Daily reports and weekly reads appear only when published" in response.text
 
 

@@ -21,6 +21,33 @@ class ArchiveDiscoveryMonth:
     captured_articles: int = 0
 
 
+@dataclass(frozen=True)
+class ArchiveDailyReport:
+    day: date
+    version_id: str
+
+
+def list_archive_daily_reports(start: date, end: date) -> tuple[ArchiveDailyReport, ...]:
+    rows = catalog_query(
+        """
+        SELECT artifact.id, artifact.current_version_id
+        FROM artifacts artifact
+        WHERE artifact.kind = 'news_daily_report'
+          AND artifact.id BETWEEN %s AND %s
+          AND artifact.current_version_id IS NOT NULL
+        ORDER BY artifact.id DESC
+        """,
+        [f"news:daily:{start.isoformat()}", f"news:daily:{end.isoformat()}"],
+    )
+    return tuple(
+        ArchiveDailyReport(
+            day=date.fromisoformat(str(row["id"]).removeprefix("news:daily:")),
+            version_id=str(row["current_version_id"]),
+        )
+        for row in rows
+    )
+
+
 def _sitemap_month(outlet_id: str, sitemap_url: str) -> date | None:
     if outlet_id == "hotnews":
         query = parse_qs(urlsplit(sitemap_url).query)
