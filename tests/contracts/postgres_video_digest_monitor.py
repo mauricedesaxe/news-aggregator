@@ -55,11 +55,10 @@ def test_due_incidents_cover_every_video_failure_category(
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     recorded = datetime.now(UTC) - timedelta(minutes=10)
-    scheduled = datetime.now(UTC) + timedelta(minutes=95)
-    if (scheduled + timedelta(minutes=61)).astimezone(BUCHAREST).date() != (
-        scheduled.astimezone(BUCHAREST).date()
-    ):
-        scheduled += timedelta(days=1)
+    scheduled = (
+        datetime.now(BUCHAREST).replace(hour=12, minute=0, second=0, microsecond=0)
+        + timedelta(days=1)
+    ).astimezone(UTC)
     monitor_now = scheduled + timedelta(minutes=61)
 
     report_v, policy_v, video_v, failure_v = ("1" * 64, "2" * 64, "3" * 64, "4" * 64)
