@@ -15,7 +15,6 @@ from fasthtml.common import (
     Nav,
     P,
     Section,
-    Span,
     Style,
     Title,
     Ul,
@@ -74,15 +73,21 @@ def _source_links(handles: tuple[str, ...], sources: dict[str, StatusSource]) ->
 
 def _assessment(value: AreaAssessment, sources: dict[str, StatusSource]) -> FT:
     title = "Romania overall" if value.area == "overall" else value.area.capitalize()
+    cited_days = len({sources[handle].day for handle in value.source_handles})
+    cited_sources = len(value.source_handles)
+    evidence = (
+        f"{cited_sources} cited highlight{'s' if cited_sources != 1 else ''} "
+        f"across {cited_days} report day{'s' if cited_days != 1 else ''}"
+    )
     return Article(
-        Span(value.coverage, cls="status-label"),
         H2(title),
         H3(value.judgment)
         if value.judgment is not None
         else H3("Not enough reporting to assess this area"),
         P(value.what_changed) if value.what_changed else None,
         P(value.why_it_matters) if value.why_it_matters else None,
-        P(value.coverage_note, cls="status-label"),
+        P(evidence) if cited_sources else None,
+        P(value.coverage_note),
         _source_links(value.source_handles, sources),
         P("Other evidence:", cls="status-label") if value.contrary_handles else None,
         _source_links(value.contrary_handles, sources),

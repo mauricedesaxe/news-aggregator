@@ -38,7 +38,9 @@ and each area assessment. A source can disagree with a claim; put it in contrary
 explain the uncertainty. Be cautious about causality and avoid sentiment scores. Cover overall,
 economy, politics, and society in that order. If an area has too little evidence, set coverage to
 insufficient and judgment, what_changed, and why_it_matters to null. Mention missing dates and the limited
-selection of daily stories in coverage notes. Do not infer facts outside the source excerpts."""
+selection of daily stories in coverage notes. Use limited when an area has enough cited evidence
+ for a judgment and insufficient otherwise. Do not use strong as a coverage rating. For each area,
+ state specific gaps in its coverage note. Do not infer facts outside the source excerpts."""
 
 _VERIFICATION_PROMPT = """Check every substantive claim in the proposed weekly read against its cited
 daily-report excerpts. Reject a claim if its cited sources do not support it, if a trend is inferred
@@ -147,10 +149,8 @@ def _compose_status(inputs: WeekInput, sources: tuple[StatusSource, ...]) -> Gen
             contrary = item.contrary_handles if isinstance(item, AreaAssessment) else ()
             if not set((*handles, *contrary)) <= valid_handles:
                 raise ValueError("A claim cites an unknown source handle")
-        if inputs.available_days < 7 and any(
-            item.coverage == "strong" for item in draft.assessments
-        ):
-            raise ValueError("A week with missing days cannot claim strong coverage")
+        if any(item.coverage == "strong" for item in draft.assessments):
+            raise ValueError("New weekly reads cannot claim strong coverage")
         return draft
 
     run = run_corrected_structured_openrouter(
