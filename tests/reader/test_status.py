@@ -138,7 +138,7 @@ def test_status_archive_and_exact_version_render() -> None:
     assert "INSUFFICIENT" not in exact.text
 
 
-def test_status_archive_distinguishes_captures_from_published_reports() -> None:
+def test_collection_progress_is_separate_from_weekly_archive() -> None:
     discovery = (
         ArchiveDiscoveryMonth(
             outlet_id="hotnews",
@@ -157,8 +157,13 @@ def test_status_archive_distinguishes_captures_from_published_reports() -> None:
     reports = (ArchiveDailyReport(day=date(2025, 9, 29), version_id=DAILY_VERSION),)
     with TestClient(_app(discovery, reports)) as client:
         _sign_in(client)
-        response = client.get("/status/archive")
+        weekly = client.get("/status/archive")
+        response = client.get("/reports/backfill")
 
+    assert weekly.status_code == 200
+    assert "Historical collection" not in weekly.text
+    assert f'href="/reports/{DAILY_VERSION}"' not in weekly.text
+    assert "Week of 14 September 2026" in weekly.text
     assert response.status_code == 200
     assert "Historical collection" in response.text
     assert "3,186 URL entries" in response.text

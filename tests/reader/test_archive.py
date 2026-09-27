@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from datetime import date
 
@@ -51,11 +52,27 @@ def test_archive_pages_through_all_daily_reports() -> None:
         second = client.get("/reports?page=2")
 
     assert first.status_code == 200
-    assert first.text.count('href="/reports/') == 30
+    assert len(re.findall(r'href="/reports/[0-9a-f]{64}"', first.text)) == 30
     assert 'href="/reports?page=2"' in first.text
     assert second.status_code == 200
-    assert second.text.count('href="/reports/') == 5
+    assert len(re.findall(r'href="/reports/[0-9a-f]{64}"', second.text)) == 5
     assert 'href="/reports?page=1"' in second.text
+
+
+def test_report_archive_shows_year_break_for_historical_report() -> None:
+    reports = (
+        DailyReportSummary(report_version_id=REPORT_VERSION, day=date(2026, 9, 27)),
+        DailyReportSummary(report_version_id=OLD_VERSION, day=date(2025, 9, 29)),
+    )
+    with TestClient(_app(reports)) as client:
+        _sign_in(client)
+        response = client.get("/reports")
+
+    assert response.status_code == 200
+    assert response.text.index("2026</li>") < response.text.index("27 September 2026")
+    assert response.text.index("2025</li>") < response.text.index("29 September 2025")
+    assert response.text.index("27 September 2026") < response.text.index("29 September 2025")
+    assert 'href="/reports/backfill"' in response.text
 
 
 def test_exact_report_keeps_requested_version() -> None:

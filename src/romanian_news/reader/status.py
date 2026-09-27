@@ -180,8 +180,6 @@ def render_status_archive(
     page: int,
     has_more: bool,
     header: Any,
-    discovery: tuple[ArchiveDiscoveryMonth, ...] = (),
-    archive_reports: tuple[ArchiveDailyReport, ...] = (),
 ) -> tuple[Any, ...]:
     return (
         Title("Weekly status archive | Press review"),
@@ -192,7 +190,6 @@ def render_status_archive(
                 P("Archive", cls="status-label"),
                 H1("Weekly status"),
                 P("Only published weeks appear here. A missing week has no saved read."),
-                _archive_discovery_summary(discovery, archive_reports) if discovery else None,
                 Ul(
                     *(
                         Li(
@@ -214,6 +211,19 @@ def render_status_archive(
                 cls="status",
             )
         ),
+    )
+
+
+def render_archive_progress(
+    discovery: tuple[ArchiveDiscoveryMonth, ...],
+    archive_reports: tuple[ArchiveDailyReport, ...],
+    header: Any,
+) -> tuple[Any, ...]:
+    return (
+        Title("Historical collection | Press review"),
+        Style(_STATUS_STYLES),
+        header,
+        Main(Div(_archive_discovery_summary(discovery, archive_reports), cls="status")),
     )
 
 
