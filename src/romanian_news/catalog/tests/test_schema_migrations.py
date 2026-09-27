@@ -9,9 +9,12 @@ def test_news_schema_contains_its_catalog_boundaries() -> None:
     assert {"artifacts", "artifact_versions", "runs", "news_schema_migrations"} <= news_tables
     assert {"news_archive_sitemap_observations", "news_archive_sitemap_entries"} <= news_tables
     assert "news_archive_page_checks" in news_tables
+    assert "news_archive_article_captures" in news_tables
     assert {
         "news_archive_page_checks_reject_updates",
         "news_archive_page_checks_reject_deletes",
+        "news_archive_article_captures_reject_updates",
+        "news_archive_article_captures_reject_deletes",
     } <= news_triggers
     assert {"artifacts_protect_identity", "runs_protect_identity"} <= news_triggers
     assert {
@@ -118,6 +121,7 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         (18, "video_digest_generation_active_slot"),
         (19, "archive_sitemap_discovery"),
         (20, "archive_page_checks"),
+        (21, "archive_article_provenance"),
     )
     assert tuple(migration.version for migration in NEWS_CATALOG_MIGRATIONS) == tuple(
         range(1, len(NEWS_CATALOG_MIGRATIONS) + 1)
@@ -149,4 +153,5 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         "2f066c1148cb9eadfa227cd4feb947bf6e9bea2b4b2437d83cbdf9af8cc13f5a",
         "2cbf6fae66a225ef45870822969867acb08995da82a7739c74ed06ee312a4e0f",
         "cbf31220b7c51ba6a3a4a6620fa1bb1554900a3b3a595c4976cf553ee61ea5cd",
+        "1cd2a09173d399057e86ddbd74002812c1e5ca6ff555c9e8013e16c63c2026e0",
     )

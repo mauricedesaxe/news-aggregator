@@ -546,7 +546,11 @@ def _seed_analysis_article(
         advance_artifact_current_version_statement(snapshot.artifact_id, snapshot.version_id),
         advance_artifact_current_version_statement(file.artifact_id, file.version_id),
         (
-            "INSERT INTO news_article_versions VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "INSERT INTO news_article_versions "
+            "(artifact_version_id, article_artifact_id, outlet_id, canonical_url, "
+            "published_at, source_updated_at, bucharest_day, material_digest, "
+            "extraction_digest, feed_snapshot_version_id, page_capture_version_id, captured_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             [
                 file.version_id,
                 file.artifact_id,

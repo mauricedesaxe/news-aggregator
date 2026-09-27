@@ -526,7 +526,11 @@ def _article_catalog_statements(
     statements.extend(_article_alias_statements(capture))
     statements.append(
         (
-            "INSERT INTO news_article_versions VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            "INSERT INTO news_article_versions "
+            "(artifact_version_id, article_artifact_id, outlet_id, canonical_url, "
+            "published_at, source_updated_at, bucharest_day, material_digest, "
+            "extraction_digest, feed_snapshot_version_id, page_capture_version_id, captured_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
             [
                 article_file.version_id,
                 article_file.artifact_id,

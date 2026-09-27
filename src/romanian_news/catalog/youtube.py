@@ -1168,7 +1168,11 @@ def publish_next_approved_candidate(implementation_ref: str) -> YouTubePublicati
                 [f"url:{candidate.video_url}", value.artifact_id, "canonical_url", timestamp],
             ),
             (
-                "INSERT INTO news_article_versions VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                "INSERT INTO news_article_versions "
+                "(artifact_version_id, article_artifact_id, outlet_id, canonical_url, "
+                "published_at, source_updated_at, bucharest_day, material_digest, "
+                "extraction_digest, feed_snapshot_version_id, page_capture_version_id, captured_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
                 "ON CONFLICT DO NOTHING",
                 [
                     value.version_id,

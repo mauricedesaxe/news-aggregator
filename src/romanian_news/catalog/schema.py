@@ -122,6 +122,9 @@ NEWS_CATALOG_MIGRATIONS = (
     NewsCatalogMigration(
         20, "archive_page_checks", MIGRATIONS_PATH / "0020_archive_page_checks.sql"
     ),
+    NewsCatalogMigration(
+        21, "archive_article_provenance", MIGRATIONS_PATH / "0021_archive_article_provenance.sql"
+    ),
 )
 
 
