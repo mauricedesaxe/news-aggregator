@@ -115,8 +115,18 @@ def test_status_archive_and_exact_version_render() -> None:
     assert week.status_code == 200
     assert "Based on reports from 1 of 7 days" in week.text
     assert f"/status/versions/{STATUS_VERSION}" in week.text
+    assert "Permanent link to this read" in week.text
+    assert "Saved weekly read" not in week.text
     assert exact.status_code == 200
     assert "What changed in Romania?" in exact.text
+    assert "Saved weekly read" in exact.text
+    assert (
+        "This saved snapshot keeps this read available if the current week page is updated."
+        in exact.text
+    )
+    assert 'href="/status/weeks/2026-09-14"' in exact.text
+    assert "Current version for this week" in exact.text
+    assert "Permanent link to this read" not in exact.text
     assert "cited highlight" not in exact.text
     assert "INSUFFICIENT" not in exact.text
 

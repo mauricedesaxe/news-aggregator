@@ -114,15 +114,23 @@ def render_status(
         header,
         Main(
             Div(
-                P("Weekly status", cls="status-label"),
+                P("Saved weekly read" if exact_version else "Weekly status", cls="status-label"),
                 H1("What changed in Romania?"),
                 P(date_range, cls="status-intro"),
+                P(
+                    "This saved snapshot keeps this read available if the current week page is updated."
+                )
+                if exact_version
+                else None,
                 Nav(
                     A("All weeks", href="/status/archive"),
                     A("Daily reports", href="/reports"),
-                    A("Saved version", href=f"/status/versions/{version_id}")
+                    A("Permanent link to this read", href=f"/status/versions/{version_id}")
                     if not exact_version
-                    else None,
+                    else A(
+                        "Current version for this week",
+                        href=f"/status/weeks/{read.week_start.isoformat()}",
+                    ),
                     aria_label="Status navigation",
                     cls="status-nav",
                 ),
