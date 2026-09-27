@@ -197,6 +197,25 @@ def test_schedule_continues_past_an_over_limit_day(monkeypatch) -> None:
     assert retrospective_analysis.next_automated_day() == following
 
 
+def test_schedule_reaches_dates_after_the_initial_ten_days(monkeypatch) -> None:
+    later = date(2025, 11, 3)
+    monkeypatch.setattr(retrospective_analysis, "next_page_window", lambda *_args: None)
+    monkeypatch.setattr(retrospective_analysis, "next_capture_window", lambda *_args: None)
+    monkeypatch.setattr(retrospective_analysis, "list_archive_daily_reports", lambda *_args: ())
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_retrospective_coverage",
+        lambda day: _coverage(("digi24", "hotnews")) if day == later else None,
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_daily_article_references",
+        lambda _day: SimpleNamespace(values=(object(),) * 45),
+    )
+
+    assert retrospective_analysis.next_automated_day() == later
+
+
 def test_schedule_launches_only_one_retrospective_day(monkeypatch) -> None:
     monkeypatch.setattr(retrospective_analysis, "next_automated_day", lambda: DAY)
     with dg.instance_for_test() as instance:
