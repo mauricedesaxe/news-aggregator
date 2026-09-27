@@ -58,6 +58,8 @@ from romanian_news.reports import (
     ReportArticle,
     ReportEvent,
     ReportSubjectCitation,
+    RetrospectiveCoverage,
+    RetrospectiveDailyReport,
 )
 from romanian_news.research_triggers import (
     DailyResearchTriggerSet,
@@ -490,6 +492,30 @@ def test_archived_report_metadata_uses_group_count_for_subjects_and_events() -> 
         r"5 subjects · 5 events · 6 articles in this report</span>\s*</div>",
         response.text,
     )
+
+
+def test_historical_report_discloses_later_capture_and_limited_sources() -> None:
+    report = RetrospectiveDailyReport(
+        **_daily_report().model_dump(exclude={"schema_version"}),
+        retrospective=RetrospectiveCoverage(
+            capture_started_at=datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
+            capture_ended_at=datetime(2026, 9, 27, 10, 5, tzinfo=UTC),
+            included_outlets=("hotnews", "digi24"),
+            discovered_url_count=200,
+            verified_page_count=80,
+            captured_article_count=40,
+            coverage_note="Other configured outlets were not included.",
+        ),
+    )
+
+    response = _read_report_response(report)
+
+    assert response.status_code == 200
+    assert "Historical report" in response.text
+    assert "pages captured later" in response.text
+    assert "2026-09-27 10:00 UTC" in response.text
+    assert "Archive sources: hotnews, digi24" in response.text
+    assert "Other configured outlets were not included." in response.text
 
 
 def _tiered_report() -> DailyReport:

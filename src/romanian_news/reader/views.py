@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from datetime import date, timedelta
+from datetime import UTC, date, timedelta
 from itertools import count
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
@@ -66,6 +66,7 @@ from romanian_news.reader.report_status import _initial_status_strip
 from romanian_news.reports import (
     DailyReport,
     DailyReportSection,
+    RetrospectiveDailyReport,
 )
 from romanian_news.research_triggers import SubjectResearchFlag
 from romanian_news.storage import (
@@ -161,6 +162,7 @@ def _report_page(
         _video_digest(video_digest, request.url.path, csrf_token)
         if video_digest is not None
         else None,
+        _retrospective_notice(report) if isinstance(report, RetrospectiveDailyReport) else None,
         report_tools,
         *sections_body,
         cls="reader",
@@ -169,6 +171,27 @@ def _report_page(
         Title(f"{_format_date(report.day)} | Press review"),
         _site_header(csrf_token),
         Main(reader),
+    )
+
+
+def _retrospective_notice(report: RetrospectiveDailyReport) -> Any:
+    coverage = report.retrospective
+    started = coverage.capture_started_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    ended = coverage.capture_ended_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    return Section(
+        H2("Historical report"),
+        P(
+            f"This report covers {report.day.isoformat()} using publisher pages captured "
+            f"later, from {started} to {ended}."
+        ),
+        P(
+            f"Archive sources: {', '.join(coverage.included_outlets)}. "
+            f"{coverage.discovered_url_count:,} URLs found; "
+            f"{coverage.verified_page_count:,} pages date-verified; "
+            f"{coverage.captured_article_count:,} articles captured."
+        ),
+        P(coverage.coverage_note),
+        cls="retrospective-notice",
     )
 
 
