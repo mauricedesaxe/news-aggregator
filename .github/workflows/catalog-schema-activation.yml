@@ -1,0 +1,52 @@
+name: Activate news catalog schema
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  activate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.12.5"
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --no-default-groups
+
+      - name: Apply and verify catalog migrations
+        env:
+          DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          DAGSTER_CLOUD_DEPLOYMENT: ${{ secrets.DAGSTER_CLOUD_DEPLOYMENT }}
+          DAGSTER_CLOUD_LOCATION: ${{ secrets.DAGSTER_CLOUD_LOCATION }}
+          DAGSTER_CLOUD_ORGANIZATION: ${{ secrets.DAGSTER_CLOUD_ORGANIZATION }}
+        run: |
+          OUTPUT=$(uv run --no-sync dagster-cloud job launch \
+            --organization "$DAGSTER_CLOUD_ORGANIZATION" \
+            --deployment "$DAGSTER_CLOUD_DEPLOYMENT" \
+            --location "$DAGSTER_CLOUD_LOCATION" \
+            --job catalog_schema_activation \
+            --wait \
+            --interval 30)
+          printf '%s\n' "$OUTPUT"
+          case "$OUTPUT" in
+            *"finished successfully."*) ;;
+            *) exit 1 ;;
+          esac
