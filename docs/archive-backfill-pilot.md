@@ -19,6 +19,10 @@ page text.
 | Digi24 | 799 | 21 | 21 | 21 |
 
 These are small deterministic samples, not estimates of a month's usable yield.
+The same 42 pages were sampled again on 2026-09-27 with the page-only archive
+extractor. All 42 had an accepted publication date on the requested day and
+at least 200 characters of extracted article text. The probe discarded the
+text after measuring it and did not create feed entries.
 HotNews exposes daily sitemaps. Digi24 exposes a monthly sitemap; its 799 entries
 were selected by `lastmod` in that week. Articles published during the week and edited
 later can be absent from this slice. A full Digi24 month scan must fetch candidates

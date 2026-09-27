@@ -3,23 +3,22 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 import time
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from urllib.parse import urlsplit
 from urllib.robotparser import RobotFileParser
 from xml.etree import ElementTree
 
 import requests
 from lxml import html as lxml_html
-from pydantic import HttpUrl
 
 from romanian_news import BUCHAREST
-from romanian_news.articles.extraction import extract_article
-from romanian_news.feeds.models import FeedEntry, FeedSpec
+from romanian_news.archive.page_metadata import extract_archive_page_metadata
+from romanian_news.articles.extraction import extract_archive_article
+from romanian_news.feeds.models import FeedSpec
 from romanian_news.feeds.registry import feed_registry
 
 USER_AGENT = (
@@ -68,40 +67,6 @@ def _sitemap_urls(content: bytes) -> list[tuple[str, str | None]]:
     return values
 
 
-def _page_dates(content: bytes) -> tuple[datetime | None, datetime | None, str]:
-    root = lxml_html.fromstring(content)
-    published: list[str] = []
-    modified: list[str] = []
-    for meta in root.xpath("//meta[@content]"):
-        key = (meta.get("property") or meta.get("name") or meta.get("itemprop") or "").lower()
-        value = meta.get("content")
-        if not value:
-            continue
-        if key in {"article:published_time", "datepublished", "pubdate", "publish_date"}:
-            published.append(value)
-        elif key in {"article:modified_time", "datemodified", "lastmod"}:
-            modified.append(value)
-    for node in root.xpath("//script[@type='application/ld+json']/text()"):
-        try:
-            value = json.loads(node)
-        except json.JSONDecodeError:
-            continue
-        for item in _json_objects(value):
-            if isinstance(item.get("datePublished"), str):
-                published.append(item["datePublished"])
-            if isinstance(item.get("dateModified"), str):
-                modified.append(item["dateModified"])
-    for value in root.xpath("//time[@datetime]/@datetime"):
-        published.append(value)
-    publication_raw = next((raw for raw in published if _parse_date(raw) is not None), None)
-    publication = _parse_date(publication_raw) if publication_raw else None
-    update = next((parsed for raw in modified if (parsed := _parse_date(raw)) is not None), None)
-    precision = (
-        "exact" if publication_raw and ("T" in publication_raw or " " in publication_raw) else "day"
-    )
-    return publication, update, precision
-
-
 def _page_section(content: bytes, url: str) -> str:
     root = lxml_html.fromstring(content)
     for key in ("article:section", "parsely-section"):
@@ -110,25 +75,6 @@ def _page_section(content: bytes, url: str) -> str:
             return value
     path = urlsplit(url).path.strip("/").split("/")
     return path[1] if len(path) > 1 and path[0] == "stiri" else "unclassified"
-
-
-def _json_objects(value: object) -> list[dict[str, object]]:
-    if isinstance(value, dict):
-        children = [value]
-        for nested in value.values():
-            children.extend(_json_objects(nested))
-        return children
-    if isinstance(value, list):
-        return [item for nested in value for item in _json_objects(nested)]
-    return []
-
-
-def _parse_date(value: str) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=BUCHAREST)
 
 
 def _sample(values: list[str], count: int) -> list[str]:
@@ -198,27 +144,14 @@ def run(start: date, days: int, sample_per_day: int, delay_seconds: float) -> di
                     final_host = urlsplit(final_url).hostname or ""
                     if final_host.removeprefix("www.") not in feed.article_hosts:
                         raise ValueError("Redirected outside the outlet")
-                    published_at, updated_at, precision = _page_dates(content)
-                    if published_at is None:
-                        raise ValueError("Page has no publication date")
+                    metadata = extract_archive_page_metadata(content)
+                    if metadata.rejection or metadata.published_at is None:
+                        raise ValueError(f"Page date rejected: {metadata.rejection}")
+                    published_at = metadata.published_at
                     if published_at.astimezone(BUCHAREST).date() != day:
                         raise ValueError(f"Published on {published_at.date()}, not requested day")
                     row["valid_day"] += 1
-                    title = (
-                        lxml_html.fromstring(content).xpath("string(//h1[1])").strip() or final_url
-                    )
-                    entry = FeedEntry(
-                        feed_id=feed.id,
-                        source_id=hashlib.sha256(url.encode()).hexdigest(),
-                        url=HttpUrl(url),
-                        title=title,
-                        summary=title,
-                        feed_content=None,
-                        published_at=published_at,
-                        source_updated_at=updated_at,
-                        author=None,
-                    )
-                    article = extract_article(entry, feed, html=content, final_url=final_url)
+                    article = extract_archive_article(content, final_url, feed)
                     if len(article.body) < 200:
                         raise ValueError(f"Extracted body too short: {len(article.body)} chars")
                     row["extracted"] += 1
@@ -226,8 +159,10 @@ def run(start: date, days: int, sample_per_day: int, delay_seconds: float) -> di
                         {
                             "url": final_url,
                             "published_at": published_at.isoformat(),
-                            "updated_at": updated_at.isoformat() if updated_at else None,
-                            "precision": precision,
+                            "updated_at": metadata.modified_at.isoformat()
+                            if metadata.modified_at
+                            else None,
+                            "precision": "exact",
                             "body_chars": len(article.body),
                             "section": _page_section(content, final_url),
                         }
