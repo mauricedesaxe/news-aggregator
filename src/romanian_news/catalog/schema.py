@@ -119,6 +119,9 @@ NEWS_CATALOG_MIGRATIONS = (
         "archive_sitemap_discovery",
         MIGRATIONS_PATH / "0019_archive_sitemap_discovery.sql",
     ),
+    NewsCatalogMigration(
+        20, "archive_page_checks", MIGRATIONS_PATH / "0020_archive_page_checks.sql"
+    ),
 )
 
 

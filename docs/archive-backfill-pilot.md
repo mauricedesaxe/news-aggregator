@@ -53,6 +53,18 @@ replay, and canonical URLs appear once per observation. Later capture must verif
 the page publication timestamp, enforce source-specific retention, and keep
 retrospective reports in preview until coverage and disclosure checks pass.
 
+The next bounded job checks article pages for title, exact publication timestamp,
+later modification timestamp, redirect validity, and a page digest. It discards
+page HTML after checking and stores no article text. A sitemap `lastmod` never
+becomes `published_at`. Invalid and conflicting page dates are recorded as
+rejections. Failed requests can retry after one day. Each run checks at most 100
+URLs and waits at least one second between article requests.
+
+```sh
+uv run python scripts/check_historical_archive_pages.py \
+  --outlet hotnews --start 2025-09-15 --end 2025-09-21 --limit 50
+```
+
 ```mermaid
 flowchart LR
     S[Publisher sitemap] --> O[Immutable observation]
