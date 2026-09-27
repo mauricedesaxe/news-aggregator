@@ -38,6 +38,7 @@ from romanian_news.worker.assets import (
     youtube_publication,
     youtube_source,
 )
+from romanian_news.worker.catalog_schema import catalog_schema_activation
 from romanian_news.worker.feedback_sync import (
     news_feedback_sync,
     quarter_hourly_news_feedback_sync,
@@ -455,6 +456,7 @@ defs = dg.Definitions(
         video_digest_incident_monitor_job,
         jev_relevance_evaluation,
         weekly_status_refresh,
+        catalog_schema_activation,
     ],
     schedules=[
         hourly_registered_feed_poll,
