@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import time
@@ -24,6 +23,8 @@ from romanian_news.analysis.binary_evaluation import (
 )
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.config import TYPESAFE_API_KEY
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 
 JEV_RELEVANCE_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
 JEV_INPUT_COST_PER_MILLION_TOKENS_USD = 0.042
@@ -250,14 +251,6 @@ def _parse_response(content: bytes, question_id: str) -> tuple[JevNoulResponse, 
     except KeyError as error:
         raise ValueError(f"Jev response omitted binary question {question_id!r}") from error
     return response, answer.noul
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()
 
 
 def _retry_after_seconds(headers: Mapping[str, str]) -> float | None:

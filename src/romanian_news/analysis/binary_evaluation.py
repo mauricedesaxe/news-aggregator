@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Callable, Mapping
 from decimal import Decimal
 from typing import Annotated, Literal, cast
@@ -11,6 +9,8 @@ from pydantic import Field, StringConstraints, model_validator
 from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.analysis.relevance_v3 import relevance_v3_article_text
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 
 
 class BinaryQuestion(NewsModel):
@@ -214,11 +214,3 @@ def binary_decision(probability: Decimal, threshold: Decimal) -> bool:
 
 def binary_state_digest(state: str) -> Sha256:
     return _sha256(state.encode())
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

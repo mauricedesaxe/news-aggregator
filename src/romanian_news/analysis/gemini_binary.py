@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import time
@@ -22,6 +21,8 @@ from romanian_news.analysis.binary_evaluation import (
 )
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.tracing import ProviderChatRequest
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 
 _PURPOSE = "news.binary.gemini.evaluation"
 _PROMPT_SERIALIZATION = "canonical-binary-system-and-json-v1"
@@ -414,11 +415,3 @@ def _latency_ms(started: float, finished: float) -> int:
     if elapsed < 0:
         raise ValueError("Gemini binary evaluation latency cannot be negative")
     return round(elapsed * 1000)
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

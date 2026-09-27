@@ -513,12 +513,14 @@ def _stage_request_id(
 
 def read_daily_theme_input(day: date) -> DailyThemeInput:
     """Select the current cluster set and exact current summary for every group."""
+    from romanian_news.analysis.groups.summary import summary_request_id
+
     cluster = _current_reference(f"news:clusters:{day.isoformat()}", "news_clusters")
     cluster_set = parse_daily_cluster_set(
         read_verified_r2_object(cluster.r2_key, cluster.content_digest)
     )
     summaries = tuple(
-        _current_reference(f"news:summary:{_summary_request_id(group)}", "news_summary")
+        _current_reference(f"news:summary:{summary_request_id(group)}", "news_summary")
         for group in cluster_set.groups
     )
     return load_daily_theme_input(cluster, summaries)
@@ -1624,9 +1626,3 @@ def _current_reference(artifact_id: str, kind: str) -> ArtifactReference:
     if reference is None:
         raise ValueError(f"Required theme input is unavailable: {artifact_id}")
     return reference
-
-
-def _summary_request_id(group: NewsGroup) -> Sha256:
-    from romanian_news.analysis.groups.summary import summary_request_id
-
-    return summary_request_id(group)

@@ -67,13 +67,15 @@ def read_daily_relevance_references(day: date) -> DailyArtifactReferences:
 
 
 def read_daily_embedding_references(day: date) -> DailyArtifactReferences:
+    from romanian_news.catalog.daily import relevance_is_accepted
+
     relevance = {value.artifact_id: value for value in read_daily_relevance_references(day).values}
     articles = read_daily_article_references(day).values
     artifact_ids = []
     for article in articles:
         relevance_id = f"news:relevance:{production_relevance_v3_request_id(article)}"
         reference = relevance.get(relevance_id)
-        if reference is not None and _relevance_is_accepted(reference.version_id):
+        if reference is not None and relevance_is_accepted(reference.version_id):
             artifact_ids.append(f"news:embedding:{embedding_request_id(article, reference)}")
     return DailyArtifactReferences(day=day, values=_current_references(tuple(artifact_ids)))
 
@@ -118,12 +120,6 @@ def _read_daily_group_references(day: date, kind: str) -> DailyArtifactReference
     request_id = summary_request_id if kind == "summary" else sentiment_request_id
     artifact_ids = tuple(f"news:{kind}:{request_id(group)}" for group in cluster_set.groups)
     return DailyArtifactReferences(day=day, values=_current_references(artifact_ids))
-
-
-def _relevance_is_accepted(version_id: str) -> bool:
-    from romanian_news.catalog.daily import relevance_is_accepted
-
-    return relevance_is_accepted(version_id)
 
 
 def _required_current_reference(artifact_id: str) -> ArtifactReference:

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import time
 from collections.abc import Callable, Mapping
@@ -57,6 +55,7 @@ from romanian_news.evaluation import (
     NewsEvaluationPin,
     RelevanceEvaluationSpec,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import read_verified_r2_object
 
 V11_SOURCE_ARTIFACT_ID = "083d5ae5ba73686511f5eb01ce770dc2e5826de22cf27df76e205bd9b946216a"
@@ -675,8 +674,8 @@ def _request_id(
     case_id: str,
     request: BinaryRequest,
 ) -> Sha256:
-    return hashlib.sha256(
-        _canonical_json(
+    return sha256(
+        canonical_json(
             {
                 "case_id": case_id,
                 "execution_policy_digest": target.execution_policy_digest,
@@ -687,7 +686,7 @@ def _request_id(
                 "trial_ref": trial_ref,
             }
         )
-    ).hexdigest()
+    )
 
 
 def _ratio(numerator: int, denominator: int) -> Decimal:
@@ -706,7 +705,3 @@ def _percentile(values: tuple[int, ...], quantile: Decimal) -> Decimal:
     return Decimal(ordered[lower]) + Decimal(ordered[upper] - ordered[lower]) * (
         position - Decimal(lower)
     )
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
