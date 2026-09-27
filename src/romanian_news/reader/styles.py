@@ -82,6 +82,7 @@ button { border-radius: 0; }
 }
 .logout button:hover, .logout button:focus-visible { background: var(--acid); color: #13231a; }
 .reader { padding: 1.5rem 0 5rem; }
+.archive-year { font-family: var(--font-display); font-size: 1.5rem; font-weight: 800; list-style: none; margin: 1.5rem 0 .5rem -1.2rem; }
 .date-nav {
   align-items: stretch;
   border: 2px solid var(--line);

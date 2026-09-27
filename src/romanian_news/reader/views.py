@@ -721,16 +721,24 @@ def _load_report_archive(request: Request, domain: ReaderDomain) -> tuple[Any, .
             Div(
                 P("Archive", cls="eyebrow"),
                 H1("Daily reports"),
-                P("Open any saved daily report."),
+                P("Only dates with a published report appear here. Newest first."),
+                P(A("Historical collection progress →", href="/reports/backfill")),
                 Ul(
                     *(
-                        Li(
-                            A(
-                                _format_date(report.day),
-                                href=f"/reports/{report.report_version_id}",
-                            )
+                        child
+                        for index, report in enumerate(visible)
+                        for child in (
+                            Li(f"{report.day.year}", cls="archive-year")
+                            if index == 0 or report.day.year != visible[index - 1].day.year
+                            else None,
+                            Li(
+                                A(
+                                    _format_date(report.day),
+                                    href=f"/reports/{report.report_version_id}",
+                                )
+                            ),
                         )
-                        for report in visible
+                        if child is not None
                     ),
                     cls="archive-list",
                 ),

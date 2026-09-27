@@ -70,7 +70,11 @@ from romanian_news.reader.report_status import (
     _poll_report_status,
     _valid_csrf,
 )
-from romanian_news.reader.status import render_status, render_status_archive
+from romanian_news.reader.status import (
+    render_archive_progress,
+    render_status,
+    render_status_archive,
+)
 from romanian_news.reader.styles import _STYLES
 from romanian_news.reader.views import (
     _is_htmx,
@@ -321,6 +325,17 @@ def _register_daily_routes(app: FastHTML, settings: ReaderSettings, domain: Read
     def report_archive(request: Request) -> tuple[Any, ...] | FtResponse:
         return _load_report_archive(request, domain)
 
+    @_route(app, "get", "/reports/backfill")
+    def archive_progress(request: Request) -> tuple[Any, ...] | FtResponse:
+        try:
+            discovery = domain.list_archive_discovery()
+            archive_reports = domain.list_archive_reports(ARCHIVE_START, ARCHIVE_END)
+        except ResearchCatalogError:
+            return _unavailable_page(request)
+        return render_archive_progress(
+            discovery, archive_reports, _site_header(str(request.session["csrf_token"]))
+        )
+
     @_route(app, "get", "/reports/exact/{report_version_id}")
     def exact_report_page(request: Request, report_version_id: str) -> tuple[Any, ...] | FtResponse:
         return _load_exact_report(request, report_version_id, domain)
@@ -353,8 +368,6 @@ def _register_status_routes(app: FastHTML, domain: ReaderDomain) -> None:
         page = int(raw_page)
         try:
             rows = domain.list_status(21, (page - 1) * 20)
-            discovery = domain.list_archive_discovery()
-            archive_reports = domain.list_archive_reports(ARCHIVE_START, ARCHIVE_END)
         except ResearchCatalogError:
             return _unavailable_page(request)
         return render_status_archive(
@@ -362,8 +375,6 @@ def _register_status_routes(app: FastHTML, domain: ReaderDomain) -> None:
             page,
             len(rows) > 20,
             _site_header(str(request.session["csrf_token"])),
-            discovery=discovery,
-            archive_reports=archive_reports,
         )
 
     @_route(app, "get", "/status/weeks/{week_start}")
