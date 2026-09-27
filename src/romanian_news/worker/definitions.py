@@ -51,6 +51,7 @@ from romanian_news.worker.morning_report import (
 )
 from romanian_news.worker.relevance_comparison import fresh_relevance_comparison
 from romanian_news.worker.relevance_v3_evaluation import relevance_v3_evaluation
+from romanian_news.worker.retrospective_report import retrospective_daily_report_job
 from romanian_news.worker.theme_comparison import fresh_theme_comparison
 from romanian_news.worker.video_digest import scheduled_video_digest, video_digest_job
 from romanian_news.worker.video_digest_monitor import (
@@ -459,6 +460,7 @@ defs = dg.Definitions(
         weekly_status_refresh,
         catalog_schema_activation,
         archive_article_capture_batch,
+        retrospective_daily_report_job,
     ],
     schedules=[
         hourly_registered_feed_poll,
