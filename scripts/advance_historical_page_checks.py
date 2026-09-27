@@ -1,26 +1,13 @@
 """Advance one publisher's oldest unchecked month in the one-year archive."""
 
 import argparse
-import calendar
 import json
 import sys
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date
 
 from romanian_news.archive.page_checks import check_archive_pages, pending_page_candidates
-
-
-def month_windows(start: date, end: date) -> tuple[tuple[date, date], ...]:
-    if start > end:
-        raise ValueError("Archive window is reversed")
-    windows = []
-    cursor = start
-    while cursor <= end:
-        final_day = calendar.monthrange(cursor.year, cursor.month)[1]
-        month_end = min(end, date(cursor.year, cursor.month, final_day))
-        windows.append((cursor, month_end))
-        cursor = month_end + timedelta(days=1)
-    return tuple(windows)
+from romanian_news.archive.windows import month_windows
 
 
 def advance_page_checks(

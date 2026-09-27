@@ -1,10 +1,11 @@
 from datetime import date
 
+from romanian_news.archive.windows import month_windows
 from scripts import advance_historical_page_checks as advance
 
 
 def test_month_windows_keep_partial_first_and_last_months() -> None:
-    assert advance.month_windows(date(2025, 9, 27), date(2025, 11, 2)) == (
+    assert month_windows(date(2025, 9, 27), date(2025, 11, 2)) == (
         (date(2025, 9, 27), date(2025, 9, 30)),
         (date(2025, 10, 1), date(2025, 10, 31)),
         (date(2025, 11, 1), date(2025, 11, 2)),

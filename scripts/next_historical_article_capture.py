@@ -6,7 +6,7 @@ import sys
 from datetime import date
 
 from romanian_news.archive.capture_batch import pending_archive_articles
-from scripts.advance_historical_page_checks import month_windows
+from romanian_news.archive.windows import month_windows
 
 
 def next_capture_config(outlet_id: str, start: date, end: date) -> dict[str, object] | None:
