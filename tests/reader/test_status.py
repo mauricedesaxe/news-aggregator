@@ -165,7 +165,8 @@ def test_status_archive_distinguishes_captures_from_published_reports() -> None:
     assert "42 pages with verified dates" in response.text
     assert "3 rejected" in response.text
     assert "5 articles captured" in response.text
-    assert "1 daily report published for the one-year archive" in response.text
+    assert "1 daily report published" in response.text
+    assert "regular reports and reports reconstructed from archived pages" in response.text
     assert f'href="/reports/{DAILY_VERSION}"' in response.text
     assert "Daily reports and weekly reads appear only when published" in response.text
 

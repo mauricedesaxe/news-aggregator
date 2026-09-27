@@ -260,10 +260,11 @@ def _archive_discovery_summary(
             "original publication date. Captured articles have stored text. Daily reports "
             "and weekly reads appear only when published."
         ),
-        H3("Published historical daily reports"),
+        H3("Daily reports in this date range"),
         P(
             f"{len(reports):,} daily "
-            f"{'report' if len(reports) == 1 else 'reports'} published for the one-year archive."
+            f"{'report' if len(reports) == 1 else 'reports'} published. "
+            "This includes regular reports and reports reconstructed from archived pages."
         ),
         Ul(
             *(
