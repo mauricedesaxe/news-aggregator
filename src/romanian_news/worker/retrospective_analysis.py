@@ -97,10 +97,13 @@ def next_automated_day() -> date | None:
         report.day: report for report in list_archive_daily_reports(ARCHIVE_START, _AUTOMATED_END)
     }
     for month_start, month_end in month_windows(ARCHIVE_START, _AUTOMATED_END):
-        if any(pending <= month_end for pending in pending_months):
-            break
+        month_complete = not any(pending <= month_end for pending in pending_months)
         day = month_start
         while day <= month_end:
+            published = reports.get(day)
+            if published is not None and not month_complete:
+                day += timedelta(days=1)
+                continue
             coverage = read_retrospective_coverage(day)
             if coverage is not None and len(coverage.included_outlets) >= 2:
                 article_count = len(read_daily_article_references(day).values)
@@ -110,7 +113,6 @@ def next_automated_day() -> date | None:
                         f"articles, above the {_ARTICLE_LIMIT}-article batch limit"
                     )
                 if article_count >= 1:
-                    published = reports.get(day)
                     if published is None:
                         return day
                     current = read_daily_report_version(published.version_id)

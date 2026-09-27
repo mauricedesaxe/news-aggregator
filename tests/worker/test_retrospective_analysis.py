@@ -99,7 +99,7 @@ def _ready_first_month(monkeypatch) -> None:
     )
 
 
-def test_schedule_waits_for_both_outlets_to_finish_the_month(monkeypatch) -> None:
+def test_schedule_publishes_ready_day_before_month_finishes(monkeypatch) -> None:
     monkeypatch.setattr(
         retrospective_analysis,
         "next_page_window",
@@ -110,7 +110,27 @@ def test_schedule_waits_for_both_outlets_to_finish_the_month(monkeypatch) -> Non
     monkeypatch.setattr(
         retrospective_analysis,
         "read_retrospective_coverage",
-        lambda _day: pytest.fail("No day is ready while September page checks remain"),
+        lambda day: _coverage(("digi24", "hotnews")) if day == DAY else None,
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_daily_article_references",
+        lambda _day: SimpleNamespace(values=(object(),) * 45),
+    )
+
+    assert retrospective_analysis.next_automated_day() == DAY
+
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "list_archive_daily_reports",
+        lambda *_args: (SimpleNamespace(day=DAY, version_id="a" * 64),),
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_retrospective_coverage",
+        lambda day: pytest.fail("Published day should wait for completed month")
+        if day == DAY
+        else None,
     )
 
     assert retrospective_analysis.next_automated_day() is None
