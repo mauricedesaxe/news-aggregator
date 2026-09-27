@@ -4,6 +4,8 @@ from datetime import date, timedelta
 
 import dagster as dg
 
+from romanian_news.analysis.relevance import read_pending_relevance_references
+from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
 from romanian_news.archive.backfill import (
     ARCHIVE_END,
     ARCHIVE_OUTLETS,
@@ -44,22 +46,23 @@ class RetrospectiveAnalysisConfig(dg.Config):
     day: str
 
 
-def analyze_retrospective_day(day: date, implementation_ref: str) -> str:
+def analyze_retrospective_day(day: date, implementation_ref: str) -> str | None:
     if not ARCHIVE_START <= day <= ARCHIVE_END:
         raise ValueError("Retrospective analysis day is outside the one-year archive")
     coverage = read_retrospective_coverage(day)
     if coverage is None or len(coverage.included_outlets) < 2:
         raise ValueError("Retrospective pilot needs captured articles from two outlets")
     article_count = len(read_daily_article_references(day).values)
-    if not 1 <= article_count <= _ARTICLE_LIMIT:
-        raise ValueError(
-            f"Retrospective analysis requires 1-{_ARTICLE_LIMIT} published articles; "
-            f"found {article_count}"
-        )
+    if article_count < 1:
+        raise ValueError("Retrospective analysis requires published articles")
     if article_count > coverage.captured_article_count:
         raise ValueError("Published articles exceed recorded archive captures")
+    materialize_relevance(day, implementation_ref, limit=_ARTICLE_LIMIT)
+    if read_pending_relevance_references(
+        day=day, request_id_for_article=production_relevance_v3_request_id
+    ):
+        return None
     for stage in (
-        materialize_relevance,
         materialize_embeddings,
         materialize_clusters,
         materialize_group_summaries,
@@ -77,7 +80,12 @@ def retrospective_analysis(
 ) -> None:
     day = date.fromisoformat(config.day)
     version_id = analyze_retrospective_day(day, IMPLEMENTATION_REF)
-    context.log.info("Retrospective report for %s: version=%s", day, version_id)
+    if version_id is None:
+        context.log.info(
+            "Retrospective relevance batch for %s completed; more articles remain", day
+        )
+    else:
+        context.log.info("Retrospective report for %s: version=%s", day, version_id)
 
 
 @dg.job(tags={"dagster/max_runtime": "21600", "dagster/max_retries": "0"})
@@ -87,7 +95,6 @@ def retrospective_analysis_pilot() -> None:
 
 def next_automated_day() -> date | None:
     pending_months = []
-    over_limit_days: list[tuple[date, int]] = []
     for outlet in ARCHIVE_OUTLETS:
         for next_window in (next_page_window, next_capture_window):
             window = next_window(outlet, ARCHIVE_START, ARCHIVE_END)
@@ -107,10 +114,6 @@ def next_automated_day() -> date | None:
             coverage = read_retrospective_coverage(day)
             if coverage is not None and len(coverage.included_outlets) >= 2:
                 article_count = len(read_daily_article_references(day).values)
-                if article_count > _ARTICLE_LIMIT:
-                    over_limit_days.append((day, article_count))
-                    day += timedelta(days=1)
-                    continue
                 if article_count >= 1:
                     if published is None:
                         return day
@@ -122,13 +125,6 @@ def next_automated_day() -> date | None:
                     ):
                         return day
             day += timedelta(days=1)
-    if over_limit_days:
-        day, article_count = over_limit_days[0]
-        raise ValueError(
-            f"Archive day {day.isoformat()} has {article_count} articles, "
-            f"above the {_ARTICLE_LIMIT}-article batch limit; "
-            f"{len(over_limit_days)} days need a larger analysis path"
-        )
     return None
 
 
