@@ -1731,3 +1731,29 @@ BEGIN SELECT RAISE(ABORT, 'archive sitemap entries are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS news_archive_sitemap_entries_reject_deletes
 BEFORE DELETE ON news_archive_sitemap_entries
 BEGIN SELECT RAISE(ABORT, 'archive sitemap entries are immutable'); END;
+
+CREATE TABLE IF NOT EXISTS news_archive_page_checks (
+    id TEXT PRIMARY KEY,
+    observation_id TEXT NOT NULL REFERENCES news_archive_sitemap_observations(id),
+    outlet_id TEXT NOT NULL,
+    canonical_url TEXT NOT NULL,
+    final_url TEXT,
+    fetched_at TEXT NOT NULL,
+    page_sha256 TEXT,
+    title TEXT,
+    published_at TEXT,
+    modified_at TEXT,
+    publication_evidence TEXT,
+    rejection TEXT,
+    status TEXT NOT NULL CHECK (status IN ('accepted', 'rejected', 'retryable')),
+    CHECK ((status = 'accepted') = (published_at IS NOT NULL)),
+    UNIQUE (observation_id, canonical_url, page_sha256)
+);
+
+CREATE TRIGGER IF NOT EXISTS news_archive_page_checks_reject_updates
+BEFORE UPDATE ON news_archive_page_checks
+BEGIN SELECT RAISE(ABORT, 'archive page checks are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS news_archive_page_checks_reject_deletes
+BEFORE DELETE ON news_archive_page_checks
+BEGIN SELECT RAISE(ABORT, 'archive page checks are immutable'); END;
