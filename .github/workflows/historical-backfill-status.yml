@@ -1,0 +1,63 @@
+name: Inspect historical backfill runs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - name: List recent Dagster runs
+        env:
+          DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          DAGSTER_CLOUD_GRAPHQL_URL: ${{ secrets.DAGSTER_CLOUD_GRAPHQL_URL }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          query = """
+          query RecentRuns($filter: RunsFilter!) {
+            runsOrError(filter: $filter, limit: 3) {
+              __typename
+              ... on Runs { results { runId status } }
+              ... on PythonError { message }
+            }
+          }
+          """
+          for job in (
+              "retrospective_analysis_pilot",
+              "weekly_status_refresh",
+              "archive_article_capture_batch",
+              "archive_page_backfill_job",
+          ):
+              body = json.dumps({
+                  "query": query,
+                  "variables": {"filter": {"pipelineName": job}},
+              }).encode()
+              request = urllib.request.Request(
+                  os.environ["DAGSTER_CLOUD_GRAPHQL_URL"],
+                  data=body,
+                  headers={
+                      "Content-Type": "application/json",
+                      "Dagster-Cloud-Api-Token": os.environ["DAGSTER_CLOUD_API_TOKEN"],
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  result = json.load(response)
+              if result.get("errors"):
+                  raise RuntimeError(f"Dagster run query failed for {job}: {result['errors']}")
+              runs = result["data"]["runsOrError"]
+              if runs["__typename"] != "Runs":
+                  raise RuntimeError(f"Dagster run query failed for {job}: {runs}")
+              print(f"{job}:")
+              for run in runs["results"]:
+                  print(f"  {run['runId']} {run['status']}")
+          PY
