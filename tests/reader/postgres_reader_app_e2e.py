@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import hashlib
+import io
 from collections.abc import Callable
-from datetime import date
+from datetime import date, timedelta
+from typing import Any, cast
 
 import psycopg
+from botocore.exceptions import ClientError
 from fasthtml.common import FastHTML
 from starlette.testclient import TestClient
 
+from romanian_news.artifacts import ArtifactReference
+from romanian_news.catalog.weekly_status import publish_weekly_status, read_weekly_status
 from romanian_news.reader.app import (
     PRODUCTION_DOMAIN,
     SESSION_COOKIE,
@@ -16,12 +21,21 @@ from romanian_news.reader.app import (
     decode_session_cookie,
 )
 from romanian_news.storage import ResearchObjectIntegrityError
-from tests.daily_report_catalog import REPORT_VERSION, daily_report, seed_daily_report
+from romanian_news.weekly_status import (
+    AreaAssessment,
+    Development,
+    WeekInput,
+    WeekInputDay,
+)
+from romanian_news.weekly_status_generation import GeneratedStatus, build_weekly_status
+from tests.daily_report_catalog import REPORT_VERSION, THEME_ID, daily_report, seed_daily_report
 from tests.postgres_catalog import PostgresCatalog
 
 FEEDBACK_ID = "00000000-0000-4000-8000-000000000001"
 TEST_SESSION_SECRET = "s" * 32
 TEST_DAY = date(2026, 9, 20)
+WEEK_START = date(2026, 9, 14)
+CAPTURED_AT = "2026-09-21T06:00:00+00:00"
 
 
 def test_feedback_round_trip_through_the_real_domain(monkeypatch, postgres_catalog) -> None:
@@ -162,3 +176,169 @@ def _feedback_form(csrf_token: str) -> dict[str, str]:
         "note": "Clear and useful.",
         "csrf_token": csrf_token,
     }
+
+
+class _R2Library:
+    """In-memory stand-in for the R2 S3 client at the storage network boundary."""
+
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+
+    def head_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+        if Key not in self.objects:
+            raise ClientError({"Error": {"Code": "404", "Message": "Not found"}}, "HeadObject")
+        return {}
+
+    def put_object(self, *, Bucket: str, Key: str, Body: bytes, **_kwargs: object) -> None:
+        self.objects[Key] = Body
+
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+        if Key not in self.objects:
+            raise ClientError({"Error": {"Code": "NoSuchKey", "Message": "Not found"}}, "GetObject")
+        return {"Body": io.BytesIO(self.objects[Key])}
+
+
+def _seed_week_of_daily_reports(
+    catalog: PostgresCatalog, library: _R2Library, week_start: date
+) -> dict[date, str]:
+    versions: dict[date, str] = {}
+    for offset in range(7):
+        day = week_start + timedelta(days=offset)
+        payload = daily_report(day).model_dump_json().encode()
+        digest = hashlib.sha256(payload).hexdigest()
+        artifact_id = f"news:daily:{day.isoformat()}"
+        version_id = hashlib.sha256(day.isoformat().encode()).hexdigest()
+        r2_key = f"news/reports/daily/{day.isoformat()}/{digest}.json"
+        library.objects[r2_key] = payload
+        catalog.execute(
+            "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, "
+            "visibility, created_at) VALUES (%s, 'news_daily_report', %s, 'derived', "
+            "'current', 'private', %s) ON CONFLICT DO NOTHING",
+            (artifact_id, f"Daily report {day.isoformat()}", CAPTURED_AT),
+        )
+        catalog.execute(
+            "INSERT INTO artifact_versions (id, artifact_id, schema_version, content_digest, "
+            "created_at) VALUES (%s, %s, 3, %s, %s) ON CONFLICT DO NOTHING",
+            (version_id, artifact_id, digest, CAPTURED_AT),
+        )
+        catalog.execute(
+            "INSERT INTO artifact_files (id, artifact_version_id, r2_key, media_type, "
+            "content_digest, byte_size, row_count, schema_fingerprint) "
+            "VALUES (%s, %s, %s, 'application/json', %s, %s, NULL, NULL)",
+            (
+                hashlib.sha256(r2_key.encode()).hexdigest(),
+                version_id,
+                r2_key,
+                digest,
+                len(payload),
+            ),
+        )
+        catalog.execute(
+            "UPDATE artifacts SET current_version_id = %s WHERE id = %s",
+            (version_id, artifact_id),
+        )
+        versions[day] = version_id
+    return versions
+
+
+def _week_input(versions: dict[date, str], week_start: date) -> WeekInput:
+    return WeekInput(
+        week_start=week_start,
+        days=tuple(
+            WeekInputDay(
+                day=week_start + timedelta(days=offset),
+                report=ArtifactReference(
+                    artifact_id=f"news:daily:{(week_start + timedelta(days=offset)).isoformat()}",
+                    version_id=versions[week_start + timedelta(days=offset)],
+                    content_digest=versions[week_start + timedelta(days=offset)],
+                    r2_key=(
+                        f"news/reports/daily/"
+                        f"{(week_start + timedelta(days=offset)).isoformat()}/x.json"
+                    ),
+                ),
+            )
+            for offset in range(7)
+        ),
+    )
+
+
+def _draft(sources) -> GeneratedStatus:
+    handles = tuple(source.handle for source in sources)
+    return GeneratedStatus(
+        developments=(
+            Development(
+                title="Budget debate",
+                what_changed="The budget discussion continued during the week.",
+                source_handles=handles[:1],
+            ),
+        ),
+        assessments=(
+            AreaAssessment(
+                area="overall",
+                judgment="The budget debate dominated the selected reports.",
+                what_changed="The draft entered public debate.",
+                why_it_matters="The budget could affect national spending.",
+                source_handles=handles[:1],
+                coverage="limited",
+                coverage_note="All seven daily reports were captured.",
+            ),
+            *(
+                AreaAssessment(
+                    area=area,
+                    judgment=None,
+                    what_changed=None,
+                    why_it_matters=None,
+                    source_handles=(),
+                    coverage="insufficient",
+                    coverage_note="Not enough selected reporting.",
+                )
+                for area in ("economy", "politics", "society")
+            ),
+        ),
+    )
+
+
+def test_weekly_status_pages_render_from_the_real_catalog(monkeypatch, postgres_catalog) -> None:
+    library = _R2Library()
+    monkeypatch.setattr("romanian_news.storage._r2_client", lambda: cast(Any, library))
+    versions = _seed_week_of_daily_reports(postgres_catalog, library, WEEK_START)
+    inputs = _week_input(versions, WEEK_START)
+    reports = {
+        slot.report.version_id: daily_report(slot.day) for slot in inputs.days if slot.report
+    }
+    output = build_weekly_status(
+        inputs,
+        reports,
+        compose=lambda _inputs, sources: _draft(sources),
+        verify=lambda *_args: None,
+    )
+    publication = publish_weekly_status(output, "reader-e2e")
+    version_id, read = read_weekly_status(WEEK_START)
+
+    app = create_app(_settings(), PRODUCTION_DOMAIN)
+    with TestClient(app) as client:
+        _login(app, client)
+
+        latest = client.get("/status", follow_redirects=False)
+        assert latest.status_code == 303
+        assert latest.headers["location"] == f"/status/weeks/{WEEK_START.isoformat()}"
+
+        week_page = client.get(f"/status/weeks/{WEEK_START.isoformat()}")
+        assert week_page.status_code == 200
+        assert "Budget debate" in week_page.text
+        assert "Romania overall" in week_page.text
+        source_link = f"/reports/exact/{read.sources[0].report_version_id}#source-{THEME_ID}"
+        assert source_link in week_page.text
+
+        version_page = client.get(f"/status/versions/{version_id}")
+        assert version_page.status_code == 200
+        assert "Budget debate" in version_page.text
+
+        archive_page = client.get("/status/archive")
+        assert archive_page.status_code == 200
+        assert f"/status/weeks/{WEEK_START.isoformat()}" in archive_page.text
+
+        source_page = client.get(source_link)
+        assert source_page.status_code == 200
+        assert f'id="source-{THEME_ID}"' in source_page.text
+        assert version_id == publication.version_id
