@@ -34,9 +34,16 @@ def test_pilot_runs_analysis_in_report_input_order(monkeypatch) -> None:
         "read_daily_article_references",
         lambda _day: SimpleNamespace(values=(object(),) * 45),
     )
+    monkeypatch.setattr(
+        retrospective_analysis, "read_pending_relevance_references", lambda **_kwargs: ()
+    )
     called = []
-    for name in (
+    monkeypatch.setattr(
+        retrospective_analysis,
         "materialize_relevance",
+        lambda _day, _ref, *, limit: called.append(("materialize_relevance", limit)),
+    )
+    for name in (
         "materialize_embeddings",
         "materialize_clusters",
         "materialize_group_summaries",
@@ -57,7 +64,7 @@ def test_pilot_runs_analysis_in_report_input_order(monkeypatch) -> None:
     monkeypatch.setattr(retrospective_analysis, "publish_retrospective_daily_report", publish)
     assert retrospective_analysis.analyze_retrospective_day(DAY, "git:test") == "a" * 64
     assert called == [
-        "materialize_relevance",
+        ("materialize_relevance", 200),
         "materialize_embeddings",
         "materialize_clusters",
         "materialize_group_summaries",
@@ -166,20 +173,46 @@ def test_schedule_selects_a_completed_day_and_refreshes_new_captures(monkeypatch
     assert retrospective_analysis.next_automated_day() == DAY
 
 
-def test_schedule_surfaces_days_above_its_article_limit(monkeypatch) -> None:
+def test_large_day_runs_one_relevance_batch_before_downstream_work(monkeypatch) -> None:
     _ready_first_month(monkeypatch)
-    monkeypatch.setattr(retrospective_analysis, "list_archive_daily_reports", lambda *_args: ())
     monkeypatch.setattr(
         retrospective_analysis,
         "read_daily_article_references",
         lambda _day: SimpleNamespace(values=(object(),) * 201),
     )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_retrospective_coverage",
+        lambda day: _coverage(("digi24", "hotnews")).model_copy(
+            update={"captured_article_count": 201}
+        )
+        if day == DAY
+        else None,
+    )
+    called = []
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "materialize_relevance",
+        lambda _day, _ref, *, limit: called.append(limit),
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_pending_relevance_references",
+        lambda **_kwargs: (object(),),
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "materialize_embeddings",
+        lambda *_args: pytest.fail("downstream work must wait for the remaining article"),
+    )
 
-    with pytest.raises(ValueError, match="above the 200-article batch limit"):
-        retrospective_analysis.next_automated_day()
+    assert retrospective_analysis.analyze_retrospective_day(DAY, "git:test") is None
+    assert called == [200]
+    monkeypatch.setattr(retrospective_analysis, "list_archive_daily_reports", lambda *_args: ())
+    assert retrospective_analysis.next_automated_day() == DAY
 
 
-def test_schedule_continues_past_an_over_limit_day(monkeypatch) -> None:
+def test_schedule_selects_earlier_large_day_before_later_day(monkeypatch) -> None:
     _ready_first_month(monkeypatch)
     following = DAY + timedelta(days=1)
     monkeypatch.setattr(retrospective_analysis, "list_archive_daily_reports", lambda *_args: ())
@@ -194,7 +227,7 @@ def test_schedule_continues_past_an_over_limit_day(monkeypatch) -> None:
         lambda day: SimpleNamespace(values=(object(),) * (201 if day == DAY else 45)),
     )
 
-    assert retrospective_analysis.next_automated_day() == following
+    assert retrospective_analysis.next_automated_day() == DAY
 
 
 def test_schedule_reaches_dates_after_the_initial_ten_days(monkeypatch) -> None:

@@ -336,13 +336,15 @@ def materialize_next_youtube_publication(
     return run_next_youtube_publication(implementation_ref)
 
 
-def materialize_relevance(day: date, implementation_ref: str) -> DailyArtifactReferences:
+def materialize_relevance(
+    day: date, implementation_ref: str, *, limit: int | None = None
+) -> DailyArtifactReferences:
     try:
         pending = read_pending_relevance_references(
             day=day,
             request_id_for_article=production_relevance_v3_request_id,
         )
-        for reference in pending:
+        for reference in pending[:limit]:
             output = analyze_relevance_v3(
                 load_article_analysis_input(reference),
                 mode="production_early_exit",
