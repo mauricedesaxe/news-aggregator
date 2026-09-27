@@ -188,6 +188,7 @@ def render_status_archive(
             Div(
                 P("Archive", cls="status-label"),
                 H1("Weekly status"),
+                P("Only published weeks appear here. A missing week has no saved read."),
                 Ul(
                     *(
                         Li(
