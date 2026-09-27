@@ -151,6 +151,7 @@ jobs:
               "scheduled_weekly_status",
               "scheduled_archive_page_backfill",
               "scheduled_archive_article_capture",
+              "scheduled_retrospective_analysis",
           ):
               result = execute(
                   """
