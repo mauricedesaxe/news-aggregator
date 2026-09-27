@@ -1,0 +1,97 @@
+name: Capture historical articles
+
+on:
+  workflow_dispatch:
+    inputs:
+      outlet:
+        description: Publisher archive source
+        required: true
+        type: choice
+        options:
+          - hotnews
+          - digi24
+      start:
+        description: First verified publication date (YYYY-MM-DD)
+        required: true
+        type: string
+      end:
+        description: Last verified publication date (YYYY-MM-DD, at most 31 days)
+        required: true
+        type: string
+      limit:
+        description: Maximum articles to capture in this run (1 to 50)
+        required: true
+        type: number
+        default: 10
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment: production
+    concurrency:
+      group: archive-article-${{ inputs.outlet }}
+      cancel-in-progress: false
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.12.5"
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --no-default-groups
+
+      - name: Capture verified pages
+        env:
+          DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          DAGSTER_CLOUD_DEPLOYMENT: ${{ secrets.DAGSTER_CLOUD_DEPLOYMENT }}
+          DAGSTER_CLOUD_ENV: ${{ secrets.DAGSTER_CLOUD_ENV }}
+          DAGSTER_CLOUD_LOCATION: ${{ secrets.DAGSTER_CLOUD_LOCATION }}
+          DAGSTER_CLOUD_ORGANIZATION: ${{ secrets.DAGSTER_CLOUD_ORGANIZATION }}
+          DAGSTER_CLOUD_URL: ${{ secrets.DAGSTER_CLOUD_URL }}
+          ARCHIVE_OUTLET: ${{ inputs.outlet }}
+          ARCHIVE_START: ${{ inputs.start }}
+          ARCHIVE_END: ${{ inputs.end }}
+          ARCHIVE_LIMIT: ${{ inputs.limit }}
+        run: |
+          CONFIG=$(uv run --no-sync python - <<'PY'
+          import json
+          import os
+          from datetime import date
+
+          start = date.fromisoformat(os.environ["ARCHIVE_START"])
+          end = date.fromisoformat(os.environ["ARCHIVE_END"])
+          limit = int(os.environ["ARCHIVE_LIMIT"])
+          assert start <= end and (end - start).days <= 31
+          assert 1 <= limit <= 50
+          print(json.dumps({"ops": {"archive_article_capture": {"config": {
+              "outlet": os.environ["ARCHIVE_OUTLET"],
+              "start": start.isoformat(), "end": end.isoformat(), "limit": limit,
+          }}}}))
+          PY
+          )
+          OUTPUT=$(uv run --no-sync dagster-cloud job launch \
+            --organization "$DAGSTER_CLOUD_ORGANIZATION" \
+            --deployment "$DAGSTER_CLOUD_DEPLOYMENT" \
+            --location "$DAGSTER_CLOUD_LOCATION" \
+            --job archive_article_capture_batch \
+            --config-json "$CONFIG" --wait --interval 30)
+          printf '%s\n' "$OUTPUT"
+          case "$OUTPUT" in
+            *"finished successfully."*) ;;
+            *) exit 1 ;;
+          esac
