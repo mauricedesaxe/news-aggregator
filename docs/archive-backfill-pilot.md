@@ -36,8 +36,27 @@ limit commercial content use without written consent. Bulk retention of full art
 text or republication must be resolved before a historical capture run for these
 outlets. Source metadata and URL discovery can proceed without publishing articles.
 
-The first infrastructure slice will record immutable sitemap observations and
-candidate URLs with source, retrieval time, and date-hint provenance. Later capture
-must verify the page publication timestamp, deduplicate by canonical URL, enforce
-source-specific retention, and keep retrospective reports in preview until their
-coverage and disclosure checks pass.
+The discovery command records immutable sitemap observations and normalized URL
+entries with outlet, retrieval time, and `lastmod` hints. It does not label those
+hints as publication times or retain article text. Run it in bounded date ranges:
+
+```sh
+uv run python scripts/discover_historical_archive.py \
+  --outlet hotnews --start 2025-09-15 --end 2025-09-21
+uv run python scripts/discover_historical_archive.py \
+  --outlet digi24 --start 2025-09-15 --end 2025-09-21
+```
+
+The Digi24 command records its entire September sitemap because the source offers
+monthly files. The identical sitemap body maps to the same observation ID on
+replay, and canonical URLs appear once per observation. Later capture must verify
+the page publication timestamp, enforce source-specific retention, and keep
+retrospective reports in preview until coverage and disclosure checks pass.
+
+```mermaid
+flowchart LR
+    S[Publisher sitemap] --> O[Immutable observation]
+    O --> U[Normalized URL entries]
+    U --> C[Future page capture and date check]
+    C --> R[Future report preview]
+```

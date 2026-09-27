@@ -1,0 +1,58 @@
+name: Discover historical article URLs
+
+on:
+  workflow_dispatch:
+    inputs:
+      outlet:
+        description: Publisher sitemap source
+        required: true
+        type: choice
+        options:
+          - hotnews
+          - digi24
+      start:
+        description: First date (YYYY-MM-DD)
+        required: true
+        type: string
+      end:
+        description: Last date (YYYY-MM-DD, at most 31 days)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.12.5"
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --no-default-groups
+
+      - name: Record sitemap observations and URLs
+        env:
+          NEWS_POSTGRES_DSN: ${{ secrets.NEWS_POSTGRES_DSN }}
+          ARCHIVE_OUTLET: ${{ inputs.outlet }}
+          ARCHIVE_START: ${{ inputs.start }}
+          ARCHIVE_END: ${{ inputs.end }}
+        run: |
+          uv run --no-sync python scripts/discover_historical_archive.py \
+            --outlet "$ARCHIVE_OUTLET" --start "$ARCHIVE_START" --end "$ARCHIVE_END"
