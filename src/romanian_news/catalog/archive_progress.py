@@ -15,6 +15,9 @@ class ArchiveDiscoveryMonth:
     month: date
     sitemap_count: int
     url_entries: int
+    accepted_pages: int = 0
+    rejected_pages: int = 0
+    retryable_pages: int = 0
 
 
 def _sitemap_month(outlet_id: str, sitemap_url: str) -> date | None:
@@ -50,12 +53,40 @@ def list_archive_discovery_months() -> tuple[ArchiveDiscoveryMonth, ...]:
         count = totals[outlet_id, month]
         count[0] += 1
         count[1] += int(row["entry_count"])
+    checked_rows = catalog_query(
+        """
+        WITH latest AS (
+            SELECT DISTINCT ON (check_record.outlet_id, check_record.canonical_url)
+                   check_record.observation_id, check_record.status
+            FROM news_archive_page_checks check_record
+            WHERE check_record.outlet_id IN ('hotnews', 'digi24')
+            ORDER BY check_record.outlet_id, check_record.canonical_url,
+                     check_record.fetched_at DESC, check_record.id DESC
+        )
+        SELECT observation.outlet_id, observation.sitemap_url, latest.status,
+               COUNT(*) AS page_count
+        FROM latest
+        JOIN news_archive_sitemap_observations observation
+          ON observation.id = latest.observation_id
+        GROUP BY observation.outlet_id, observation.sitemap_url, latest.status
+        """,
+        [],
+    )
+    checks: dict[tuple[str, date], dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for row in checked_rows:
+        outlet_id = str(row["outlet_id"])
+        month = _sitemap_month(outlet_id, str(row["sitemap_url"]))
+        if month is not None:
+            checks[outlet_id, month][str(row["status"])] += int(row["page_count"])
     return tuple(
         ArchiveDiscoveryMonth(
             outlet_id=outlet_id,
             month=month,
             sitemap_count=counts[0],
             url_entries=counts[1],
+            accepted_pages=checks[outlet_id, month]["accepted"],
+            rejected_pages=checks[outlet_id, month]["rejected"],
+            retryable_pages=checks[outlet_id, month]["retryable"],
         )
         for (outlet_id, month), counts in sorted(
             totals.items(), key=lambda item: (item[0][1], item[0][0]), reverse=True

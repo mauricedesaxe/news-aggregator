@@ -137,7 +137,13 @@ def test_status_archive_and_exact_version_render() -> None:
 def test_status_archive_shows_discovered_urls_without_claiming_reports() -> None:
     discovery = (
         ArchiveDiscoveryMonth(
-            outlet_id="hotnews", month=date(2025, 9, 1), sitemap_count=7, url_entries=643
+            outlet_id="hotnews",
+            month=date(2025, 9, 1),
+            sitemap_count=7,
+            url_entries=643,
+            accepted_pages=42,
+            rejected_pages=3,
+            retryable_pages=1,
         ),
         ArchiveDiscoveryMonth(
             outlet_id="digi24", month=date(2025, 9, 1), sitemap_count=1, url_entries=3186
@@ -150,6 +156,8 @@ def test_status_archive_shows_discovered_urls_without_claiming_reports() -> None
     assert response.status_code == 200
     assert "Historical collection" in response.text
     assert "3,186 URL entries" in response.text
+    assert "42 pages with verified dates" in response.text
+    assert "3 rejected" in response.text
     assert "do not mean the articles or reports have been published" in response.text
 
 

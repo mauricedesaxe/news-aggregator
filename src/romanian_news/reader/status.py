@@ -226,12 +226,20 @@ def _archive_discovery_summary(months: tuple[ArchiveDiscoveryMonth, ...]) -> Any
             Div(
                 H3(label),
                 P(f"{sum(item.url_entries for item in rows):,} URL entries"),
+                P(
+                    f"{sum(item.accepted_pages for item in rows):,} pages with verified dates, "
+                    f"{sum(item.rejected_pages for item in rows):,} rejected, "
+                    f"{sum(item.retryable_pages for item in rows):,} awaiting retry"
+                ),
                 Ul(
                     *(
                         Li(
                             f"{item.month.strftime('%B %Y')}: "
                             f"{item.url_entries:,} URLs from {item.sitemap_count} sitemap"
-                            f"{'s' if item.sitemap_count != 1 else ''}"
+                            f"{'s' if item.sitemap_count != 1 else ''}; "
+                            f"{item.accepted_pages:,} verified, "
+                            f"{item.rejected_pages:,} rejected, "
+                            f"{item.retryable_pages:,} awaiting retry"
                         )
                         for item in rows
                     )
@@ -242,8 +250,9 @@ def _archive_discovery_summary(months: tuple[ArchiveDiscoveryMonth, ...]) -> Any
     return Section(
         H2("Historical collection"),
         P(
-            "Publisher sitemap URLs found for earlier dates. These counts do not mean "
-            "the articles or reports have been published."
+            "Publisher sitemap URLs found for earlier dates. Verified pages have a readable "
+            "original publication date. These counts do not mean the articles or reports "
+            "have been published."
         ),
         Div(*cards, cls="status-grid"),
         cls="status-coverage",
