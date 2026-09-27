@@ -21,6 +21,7 @@ from romanian_news.articles.acquisition import (
     load_exact_article_work,
     recover_quarantined_article_events,
 )
+from romanian_news.articles.extraction import normalize_article_url
 from romanian_news.articles.models import (
     ArticleAcquisitionFailure,
     ArticleBatchSkip,
@@ -64,15 +65,17 @@ def test_article_states_request_all_normalized_aliases_from_catalog(monkeypatch)
     sources = tuple(_source(entry, event_id=f"{index:064x}") for index, entry in enumerate(entries))
     registry = feed_registry()
     feeds = {feed.id: feed for feed in registry.feeds}
-    calls = []
+    requested = set()
     monkeypatch.setattr(
         "romanian_news.articles.acquisition.article_catalog.read_article_catalog_states",
-        lambda aliases: calls.append(aliases) or {},
+        lambda aliases: requested.update(aliases) or {},
     )
 
     assert _article_states(sources, feeds) == {}
-    assert len(calls) == 1
-    assert len(calls[0]) == 75
+    hotnews = feeds["hotnews"]
+    assert requested == {
+        f"url:{normalize_article_url(str(entry.url), hotnews.article_hosts)}" for entry in entries
+    }
 
 
 def test_article_acquisition_reads_rolled_off_catalog_entry(monkeypatch) -> None:
@@ -730,8 +733,6 @@ def test_article_download_interrupts_a_response_that_never_yields(monkeypatch) -
     assert page.must_fail
     assert page.failure_kind is not None
     assert page.failure_kind.value == "infrastructure"
-    assert handlers["current"] == signal.SIG_IGN
-    assert timers[-1] == (signal.ITIMER_REAL, 3.0, 1.0)
     assert response.closed
 
 

@@ -74,6 +74,77 @@ def test_corrected_structured_call_accepts_none_as_a_parsed_value(monkeypatch) -
     assert result.value is None
 
 
+def test_corrected_structured_call_treats_missing_content_as_a_rejection(monkeypatch) -> None:
+    calls, records = _provider(monkeypatch, (None, '{"answer": 42}'))
+
+    result = _run(lambda content: json.loads(content))
+
+    assert result.value == {"answer": 42}
+    assert [record["status"] for record in records] == ["rejected", "accepted"]
+    assert records[0]["error"] is not None
+    assert calls[1]["messages"][-2] == {"role": "assistant", "content": ""}
+
+
+def test_corrected_structured_call_persists_attempt_evidence(monkeypatch) -> None:
+    import sqlite3
+    from pathlib import Path
+
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    schema = Path(__file__).parents[4] / "tests" / "fixtures" / "sqlite_catalog.sql"
+    connection.executescript(schema.read_text())
+
+    def batch(statements, **_kwargs):
+        for sql, params in statements:
+            connection.execute(sql.replace("%s", "?"), params)
+        connection.commit()
+
+    monkeypatch.setattr("romanian_news.catalog.model_calls.catalog_batch", batch)
+    responses = iter(
+        _evidence_response(content, f"response-{index}")
+        for index, content in enumerate(("{", '{"answer": 42}'), start=1)
+    )
+    monkeypatch.setattr(
+        corrected_structured,
+        "openrouter_client",
+        lambda: SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(create=lambda **_kwargs: next(responses))
+            )
+        ),
+    )
+
+    result = _run(lambda content: json.loads(content))
+
+    assert result.value == {"answer": 42}
+    rows = connection.execute(
+        "SELECT attempt_id, response_id, status, error, model FROM news_model_attempts "
+        "ORDER BY rowid"
+    ).fetchall()
+    assert [row["status"] for row in rows] == ["rejected", "accepted"]
+    assert [row["response_id"] for row in rows] == ["response-1", "response-2"]
+    assert rows[0]["error"] is not None
+    assert rows[1]["error"] is None
+    assert all(row["model"] == "provider/model" for row in rows)
+    assert all(row["attempt_id"] != row["response_id"] for row in rows)
+
+
+def _evidence_response(content: str | None, response_id: str):
+    payload = {
+        "id": response_id,
+        "model": "provider/model",
+        "created": "2026-09-01T09:00:00+00:00",
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.01},
+    }
+    return SimpleNamespace(
+        id=response_id,
+        model="provider/model",
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5),
+        choices=(SimpleNamespace(message=SimpleNamespace(content=content)),),
+        model_dump=lambda *, mode: payload,
+    )
+
+
 def _run(parse):
     return run_corrected_structured_openrouter(
         operation="news.test",
