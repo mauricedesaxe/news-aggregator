@@ -101,3 +101,21 @@ def test_numeric_transcript_with_extra_intro_or_repeated_phrase_fails() -> None:
         "Bonnie as the continental currency slipped 0 .18 Bonnie yesterday",
     )
     assert not narration_matches(NUMERIC_APPROVED, tuple(repeated.split()))
+
+
+def test_transcript_dropping_a_numeric_fact_cannot_pass() -> None:
+    dropped = NUMERIC_TRANSCRIPT.replace("0 .18 Bonnie", "some Bonnie")
+
+    assert not narration_matches(NUMERIC_APPROVED, tuple(dropped.split()))
+
+
+def test_compound_number_words_match_their_digit_form() -> None:
+    approved = "Inflation climbed to twenty-five percent of the projected baseline."
+
+    assert narration_matches(
+        approved, tuple("Inflation climbed to 25 percent of the projected baseline.".split())
+    )
+    assert narration_matches(
+        approved,
+        tuple("Inflation climbed to twenty five percent of the projected baseline.".split()),
+    )

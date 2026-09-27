@@ -107,8 +107,9 @@ def test_fal_prompt_requires_english_speech() -> None:
     prompt = generation._fal_arguments(request, lambda _: "https://r2.example/reference")["prompt"]
 
     assert isinstance(prompt, str)
-    assert f"<d>[English] {request.story.narration}</d>" in prompt
-    assert f"Visual action during the sentence: {request.story.visual_direction}" in prompt
+    assert prompt.count(request.story.narration) == 1
+    assert f"[English] {request.story.narration}" in prompt
+    assert request.story.visual_direction in prompt
 
 
 def test_fal_prompt_requires_unambiguous_reference_positions() -> None:
@@ -141,7 +142,8 @@ def test_fal_prompt_keeps_quoted_narration_inside_spoken_line() -> None:
     prompt = generation._fal_arguments(request, lambda _: "https://r2.example/reference")["prompt"]
 
     assert isinstance(prompt, str)
-    assert "<d>[English] The scientist says 'hello'.</d>" in prompt
+    assert request.story.narration.replace('"', "'") in prompt
+    assert request.story.narration not in prompt
 
 
 def _section(subject: str, article: str, position: int) -> DailyReportSection:

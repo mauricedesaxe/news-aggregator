@@ -11,7 +11,7 @@ from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, sha256
 from romanian_news.catalog.video_digest import AcceptedClipReference, GenerationAttemptReference
 from romanian_news.storage import ResearchObjectIntegrityError
-from romanian_news.video_digest import media
+from romanian_news.video_digest import media, narration_quality
 from romanian_news.video_digest.generation import CandidateReady, CandidateReference
 from romanian_news.video_digest.models import (
     AvailableSubtitles,
@@ -569,11 +569,11 @@ def test_candidate_with_prompt_speech_after_narration_is_silenced_and_recorded(
     checkpointed: dict[str, ArtifactFile] = {}
     monkeypatch.setattr(media, "read_generation_attempts", lambda _edition: (attempt,))
     monkeypatch.setattr(media, "read_verified_r2_object", lambda _key, _digest: content)
-    narration_checks: list[bool] = []
+    narration_check_paths: list[str] = []
 
-    def check_narration(_path: Path, _text: str) -> bool:
-        narration_checks.append(True)
-        return len(narration_checks) > 1
+    def check_narration(path: Path, _text: str) -> bool:
+        narration_check_paths.append(path.name)
+        return path.name == "accepted.mp4"
 
     monkeypatch.setattr(media, "clip_narration_matches", check_narration)
     monkeypatch.setattr(media, "clip_narration_tail_cutoff_ms", lambda _path, _text: 500)
@@ -598,6 +598,7 @@ def test_candidate_with_prompt_speech_after_narration_is_silenced_and_recorded(
     result = _accept_candidate(_lease(edition), candidate, story)
 
     assert isinstance(result, media.AcceptedCandidate)
+    assert narration_check_paths == ["candidate.mp4", "accepted.mp4"]
     clip_key = next(key for key in published if key.endswith("-silenced.mp4"))
     assert published[clip_key] != content
     validation_key = next(key for key in published if "/validation-" in key)
@@ -731,6 +732,95 @@ def test_candidate_narration_failure_is_recorded_before_acceptance(
     assert isinstance(result, media.GenerationRetryAvailable)
     assert result.reason == f"Candidate validation failed: {expected_code}"
     assert events == ["failure-evidence", "failure-checkpoint"]
+
+
+def _fake_narration_check_stdout(monkeypatch: pytest.MonkeyPatch, stdout: str) -> None:
+    # the real check shells out to a local Whisper model; fake its single subprocess seam
+    monkeypatch.setattr(narration_quality, "_run_narration_check", lambda *_args, **_kwargs: stdout)
+
+
+def test_tail_cutoff_stdout_mismatch_returns_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_narration_check_stdout(monkeypatch, "mismatch")
+
+    result = narration_quality.clip_narration_tail_cutoff_ms(tmp_path / "clip.mp4", "Approved")
+
+    assert result is None
+
+
+@pytest.mark.parametrize("stdout", ["banana", "0", "-5"])
+def test_tail_cutoff_rejects_non_integer_or_non_positive_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stdout: str
+) -> None:
+    _fake_narration_check_stdout(monkeypatch, stdout)
+
+    with pytest.raises(NarrationCheckError):
+        narration_quality.clip_narration_tail_cutoff_ms(tmp_path / "clip.mp4", "Approved")
+
+
+def _media_probe() -> media.MediaProbe:
+    return media.MediaProbe(
+        duration_ms=1000,
+        video_duration_ms=1000,
+        audio_duration_ms=1000,
+        video_start_ms=0,
+        audio_start_ms=0,
+        video_frames=24,
+        audio_frames=32,
+        video_codec="h264",
+        width=1344,
+        height=768,
+        frame_rate="24/1",
+        pixel_format="yuv420p",
+        audio_codec="aac",
+        channels=2,
+        sample_rate_hz=32000,
+    )
+
+
+def _evidence_values(**overrides: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "request_id": "request",
+        "request_artifact_version_id": "1" * 64,
+        "response_artifact_version_id": "2" * 64,
+        "story_id": "story",
+        "story_position": 0,
+        "attempt_index": 0,
+        "requested_duration_ms": 1000,
+        "candidate_r2_key": "candidates/clip.mp4",
+        "candidate_content_digest": "3" * 64,
+        "candidate_byte_size": 100,
+        "accepted_clip_content_digest": "3" * 64,
+        "accepted_clip_byte_size": 100,
+        "probe": _media_probe(),
+    }
+    values.update(overrides)
+    return values
+
+
+def test_v2_candidate_evidence_requires_accepted_clip_identity() -> None:
+    assert media.CandidateValidationEvidence.model_validate(_evidence_values())
+
+    with pytest.raises(ValueError, match="requires accepted clip identity"):
+        media.CandidateValidationEvidence.model_validate(
+            _evidence_values(accepted_clip_content_digest=None, accepted_clip_byte_size=None)
+        )
+    with pytest.raises(ValueError, match="requires accepted clip identity"):
+        media.CandidateValidationEvidence.model_validate(
+            _evidence_values(accepted_clip_byte_size=None)
+        )
+
+
+def test_unchanged_candidate_evidence_must_retain_its_original_identity() -> None:
+    with pytest.raises(ValueError, match="must retain its original identity"):
+        media.CandidateValidationEvidence.model_validate(
+            _evidence_values(accepted_clip_content_digest="4" * 64)
+        )
+
+    assert media.CandidateValidationEvidence.model_validate(
+        _evidence_values(muted_after_ms=500, accepted_clip_content_digest="4" * 64)
+    )
 
 
 def test_byte_identical_candidates_share_stable_accepted_object_lineage(

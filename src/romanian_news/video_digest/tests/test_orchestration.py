@@ -548,6 +548,28 @@ def test_generation_progress_continues_when_slot_projection_is_unchanged() -> No
     assert generation.calls == 2
 
 
+def test_action_without_durable_progress_defers_without_alert() -> None:
+    catalog = _Catalog(PlanningResume(slot=SLOT, lease=LEASE))
+    ports = _ports(catalog)
+    request = VideoDigestRunRequest(
+        slot=SLOT, owner_token="owner", source=SourceReady(edition=EDITION)
+    )
+
+    outcome, alert = run_video_digest(
+        request,
+        cast(CatalogPort, catalog),
+        ports,
+        now=lambda: NOW + timedelta(minutes=1),
+    )
+
+    assert outcome == RunDeferred(
+        reason="durable state did not advance",
+        retry_after_seconds=300,
+    )
+    assert alert == NoAlert()
+    assert len(cast(_Port, ports.planning).calls) == 1
+
+
 def test_active_state_without_a_next_action_raises_a_checkpoint_conflict() -> None:
     attempts = tuple(
         AssemblyAttemptReference(
