@@ -222,7 +222,9 @@ def _gate_policy(prompt: str, schema_name: str) -> GatePolicy:
 RELEVANCE_V3_POLICY = RelevanceV3Policy(
     policy_id="relevance-v3-main-claim-domain-guard",
     context=_gate_policy(CONTEXT_PROMPT, "romanian_news_relevance_v3_context"),
-    impact=_gate_policy(IMPACT_PROMPT, "romanian_news_relevance_v3_impact"),
+    impact=_gate_policy(IMPACT_PROMPT, "romanian_news_relevance_v3_impact").model_copy(
+        update={"max_tokens": 2048}
+    ),
     acceptance=AcceptancePolicy(
         acceptance_algorithm_id="recall-first-combined-v3-attempt-3-material-v3",
         context=ContextAcceptancePolicy(
