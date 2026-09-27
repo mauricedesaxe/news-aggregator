@@ -112,6 +112,7 @@ def test_status_archive_and_exact_version_render() -> None:
 
     assert archive.status_code == 200
     assert "/status/weeks/2026-09-14" in archive.text
+    assert "A missing week has no saved read." in archive.text
     assert week.status_code == 200
     assert "Based on reports from 1 of 7 days" in week.text
     assert f"/status/versions/{STATUS_VERSION}" in week.text
