@@ -18,6 +18,7 @@ class ArchiveDiscoveryMonth:
     accepted_pages: int = 0
     rejected_pages: int = 0
     retryable_pages: int = 0
+    captured_articles: int = 0
 
 
 def _sitemap_month(outlet_id: str, sitemap_url: str) -> date | None:
@@ -77,6 +78,23 @@ def list_archive_discovery_months() -> tuple[ArchiveDiscoveryMonth, ...]:
         month = _sitemap_month(outlet_id, str(row["sitemap_url"]))
         if month is not None:
             checks[outlet_id, month][str(row["status"])] += int(row["page_count"])
+    captured_rows = catalog_query(
+        """
+        SELECT DISTINCT observation.outlet_id, observation.sitemap_url,
+               capture.discovered_url
+        FROM news_archive_article_captures capture
+        JOIN news_archive_sitemap_observations observation
+          ON observation.id = capture.observation_id
+        WHERE observation.outlet_id IN ('hotnews', 'digi24')
+        """,
+        [],
+    )
+    captured: dict[tuple[str, date], set[str]] = defaultdict(set)
+    for row in captured_rows:
+        outlet_id = str(row["outlet_id"])
+        month = _sitemap_month(outlet_id, str(row["sitemap_url"]))
+        if month is not None:
+            captured[outlet_id, month].add(str(row["discovered_url"]))
     return tuple(
         ArchiveDiscoveryMonth(
             outlet_id=outlet_id,
@@ -86,6 +104,7 @@ def list_archive_discovery_months() -> tuple[ArchiveDiscoveryMonth, ...]:
             accepted_pages=checks[outlet_id, month]["accepted"],
             rejected_pages=checks[outlet_id, month]["rejected"],
             retryable_pages=checks[outlet_id, month]["retryable"],
+            captured_articles=len(captured[outlet_id, month]),
         )
         for (outlet_id, month), counts in sorted(
             totals.items(), key=lambda item: (item[0][1], item[0][0]), reverse=True

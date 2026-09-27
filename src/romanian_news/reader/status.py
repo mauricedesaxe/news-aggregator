@@ -231,6 +231,7 @@ def _archive_discovery_summary(months: tuple[ArchiveDiscoveryMonth, ...]) -> Any
                     f"{sum(item.rejected_pages for item in rows):,} rejected, "
                     f"{sum(item.retryable_pages for item in rows):,} awaiting retry"
                 ),
+                P(f"{sum(item.captured_articles for item in rows):,} articles captured"),
                 Ul(
                     *(
                         Li(
@@ -239,7 +240,8 @@ def _archive_discovery_summary(months: tuple[ArchiveDiscoveryMonth, ...]) -> Any
                             f"{'s' if item.sitemap_count != 1 else ''}; "
                             f"{item.accepted_pages:,} verified, "
                             f"{item.rejected_pages:,} rejected, "
-                            f"{item.retryable_pages:,} awaiting retry"
+                            f"{item.retryable_pages:,} awaiting retry; "
+                            f"{item.captured_articles:,} articles captured"
                         )
                         for item in rows
                     )
@@ -251,8 +253,8 @@ def _archive_discovery_summary(months: tuple[ArchiveDiscoveryMonth, ...]) -> Any
         H2("Historical collection"),
         P(
             "Publisher sitemap URLs found for earlier dates. Verified pages have a readable "
-            "original publication date. These counts do not mean the articles or reports "
-            "have been published."
+            "original publication date. Captured articles have stored text. Daily reports "
+            "and weekly reads appear only when published."
         ),
         Div(*cards, cls="status-grid"),
         cls="status-coverage",
