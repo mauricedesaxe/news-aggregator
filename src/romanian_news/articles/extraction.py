@@ -144,6 +144,8 @@ def extract_archive_article(
         raise ValueError("Archive article requires a verified publication date and title")
     canonical_url = normalize_article_url(final_url, feed.article_hosts)
     parsed, body_source = _extract_page(html, feed)
+    if (not parsed or not parsed.get("text")) and feed.article_xpath:
+        parsed, body_source = _extract_page(html, feed.model_copy(update={"article_xpath": None}))
     if not parsed or not parsed.get("text"):
         raise ValueError(f"Archive page has no extractable article text: {final_url}")
     candidate_url = parsed.get("url")
