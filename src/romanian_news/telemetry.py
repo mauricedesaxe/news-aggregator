@@ -1,6 +1,6 @@
 """OpenTelemetry setup and pure-ASGI HTTP request tracing."""
 
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import Protocol, runtime_checkable
 
@@ -49,7 +49,12 @@ class HttpTracingMiddleware:
             return
 
         method = scope["method"]
-        parent_context = propagate.extract(_header_carrier(scope.get("headers", [])))
+        parent_context = propagate.extract(
+            {
+                name.decode("latin-1"): value.decode("latin-1")
+                for name, value in scope.get("headers", [])
+            }
+        )
         with self.tracer.start_as_current_span(
             f"HTTP {method}", context=parent_context, kind=SpanKind.SERVER
         ) as current:
@@ -113,10 +118,6 @@ def event(name: str, **attributes: str | int | float | bool) -> None:
 def fail(current: Span, description: str) -> None:
     """Mark an expected terminal failure on a span that does not raise."""
     current.set_status(Status(StatusCode.ERROR, description))
-
-
-def _header_carrier(headers: Iterable[tuple[bytes, bytes]]) -> dict[str, str]:
-    return {name.decode("latin-1"): value.decode("latin-1") for name, value in headers}
 
 
 def _set_request_attributes(current: Span, scope: Scope, method: str) -> None:
