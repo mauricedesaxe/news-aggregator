@@ -1697,3 +1697,37 @@ BEGIN SELECT RAISE(ABORT, 'video_digest_h3_reference_media are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS video_digest_h3_reference_media_reject_deletes
 BEFORE DELETE ON video_digest_h3_reference_media
 BEGIN SELECT RAISE(ABORT, 'video_digest_h3_reference_media are immutable'); END;
+
+CREATE TABLE IF NOT EXISTS news_archive_sitemap_observations (
+    id TEXT PRIMARY KEY,
+    outlet_id TEXT NOT NULL,
+    sitemap_url TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    entry_count INTEGER NOT NULL CHECK (entry_count >= 0),
+    UNIQUE (outlet_id, sitemap_url, content_sha256)
+);
+
+CREATE TABLE IF NOT EXISTS news_archive_sitemap_entries (
+    observation_id TEXT NOT NULL REFERENCES news_archive_sitemap_observations(id),
+    canonical_url TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    lastmod_hint TEXT,
+    PRIMARY KEY (observation_id, canonical_url)
+);
+
+CREATE TRIGGER IF NOT EXISTS news_archive_sitemap_observations_reject_updates
+BEFORE UPDATE ON news_archive_sitemap_observations
+BEGIN SELECT RAISE(ABORT, 'archive sitemap observations are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS news_archive_sitemap_observations_reject_deletes
+BEFORE DELETE ON news_archive_sitemap_observations
+BEGIN SELECT RAISE(ABORT, 'archive sitemap observations are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS news_archive_sitemap_entries_reject_updates
+BEFORE UPDATE ON news_archive_sitemap_entries
+BEGIN SELECT RAISE(ABORT, 'archive sitemap entries are immutable'); END;
+
+CREATE TRIGGER IF NOT EXISTS news_archive_sitemap_entries_reject_deletes
+BEFORE DELETE ON news_archive_sitemap_entries
+BEGIN SELECT RAISE(ABORT, 'archive sitemap entries are immutable'); END;
