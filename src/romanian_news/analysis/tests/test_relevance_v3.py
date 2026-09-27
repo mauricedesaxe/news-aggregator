@@ -646,11 +646,12 @@ def test_policy_and_request_identity_cover_schemas_acceptance_and_mode() -> None
     payload = relevance_v3_policy_payload(RELEVANCE_V3_POLICY)
     reference = _reference()
 
+    assert RELEVANCE_V3_POLICY.impact.max_tokens == 2048
     assert relevance_v3_policy_digest() == (
-        "5d822f268202f8eb65b02998c68075abe1779bf13107bbea016ed9069ab407aa"
+        "9420c08458d20768bf2a202d9b28ea222805da76f518bf85a85d5b043995978c"
     )
     assert production_relevance_v3_request_id(reference) == (
-        "bb6068578e2746a7ae0640eefff3bc2e4baa2f4111607575e78e29068c1709bc"
+        "1c9d77a52f39f78c4c82a3ca39437b9bb06802bd859c60b986ac06a03de0b751"
     )
 
     assert payload["acceptance"] == RELEVANCE_V3_POLICY.acceptance.model_dump(mode="json")
