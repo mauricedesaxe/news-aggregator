@@ -21,7 +21,7 @@ from fasthtml.common import (
 )
 
 from romanian_news import Sha256
-from romanian_news.catalog.archive_progress import ArchiveDiscoveryMonth
+from romanian_news.catalog.archive_progress import ArchiveDailyReport, ArchiveDiscoveryMonth
 from romanian_news.catalog.weekly_status import WeeklyStatusSummary
 from romanian_news.weekly_status import AreaAssessment, StatusSource, WeeklyStatusRead
 
@@ -181,6 +181,7 @@ def render_status_archive(
     has_more: bool,
     header: Any,
     discovery: tuple[ArchiveDiscoveryMonth, ...] = (),
+    archive_reports: tuple[ArchiveDailyReport, ...] = (),
 ) -> tuple[Any, ...]:
     return (
         Title("Weekly status archive | Press review"),
@@ -191,7 +192,7 @@ def render_status_archive(
                 P("Archive", cls="status-label"),
                 H1("Weekly status"),
                 P("Only published weeks appear here. A missing week has no saved read."),
-                _archive_discovery_summary(discovery) if discovery else None,
+                _archive_discovery_summary(discovery, archive_reports) if discovery else None,
                 Ul(
                     *(
                         Li(
@@ -216,7 +217,10 @@ def render_status_archive(
     )
 
 
-def _archive_discovery_summary(months: tuple[ArchiveDiscoveryMonth, ...]) -> Any:
+def _archive_discovery_summary(
+    months: tuple[ArchiveDiscoveryMonth, ...],
+    reports: tuple[ArchiveDailyReport, ...],
+) -> Any:
     cards = []
     for outlet_id, label in (("hotnews", "HotNews"), ("digi24", "Digi24")):
         rows = [item for item in months if item.outlet_id == outlet_id]
@@ -255,6 +259,23 @@ def _archive_discovery_summary(months: tuple[ArchiveDiscoveryMonth, ...]) -> Any
             "Publisher sitemap URLs found for earlier dates. Verified pages have a readable "
             "original publication date. Captured articles have stored text. Daily reports "
             "and weekly reads appear only when published."
+        ),
+        H3("Published historical daily reports"),
+        P(
+            f"{len(reports):,} daily "
+            f"{'report' if len(reports) == 1 else 'reports'} published for the one-year archive."
+        ),
+        Ul(
+            *(
+                Li(
+                    A(
+                        report.day.strftime("%-d %B %Y"),
+                        href=f"/reports/{report.version_id}",
+                    )
+                )
+                for report in reports
+            ),
+            cls="status-history",
         ),
         Div(*cards, cls="status-grid"),
         cls="status-coverage",

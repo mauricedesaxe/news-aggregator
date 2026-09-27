@@ -37,6 +37,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from romanian_news.archive.backfill import ARCHIVE_END, ARCHIVE_START
 from romanian_news.catalog.weekly_status import (
     WeeklyStatusNotFound,
 )
@@ -353,6 +354,7 @@ def _register_status_routes(app: FastHTML, domain: ReaderDomain) -> None:
         try:
             rows = domain.list_status(21, (page - 1) * 20)
             discovery = domain.list_archive_discovery()
+            archive_reports = domain.list_archive_reports(ARCHIVE_START, ARCHIVE_END)
         except ResearchCatalogError:
             return _unavailable_page(request)
         return render_status_archive(
@@ -361,6 +363,7 @@ def _register_status_routes(app: FastHTML, domain: ReaderDomain) -> None:
             len(rows) > 20,
             _site_header(str(request.session["csrf_token"])),
             discovery=discovery,
+            archive_reports=archive_reports,
         )
 
     @_route(app, "get", "/status/weeks/{week_start}")
