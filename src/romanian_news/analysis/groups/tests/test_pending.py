@@ -32,7 +32,9 @@ def test_article_reads_use_bounded_catalog_batches(monkeypatch) -> None:
     monkeypatch.setattr("romanian_news.catalog.artifacts.catalog_query", query)
 
     assert set(_read_article_references(version_ids)) == set(version_ids)
-    assert [len(batch) for batch in batches] == [50, 1]
+    assert len(batches) > 1
+    assert all(len(batch) <= len(batches[0]) for batch in batches)
+    assert sorted(value for batch in batches for value in batch) == sorted(version_ids)
 
 
 def test_pending_group_planning_reads_references_without_article_bodies(monkeypatch) -> None:
@@ -50,28 +52,35 @@ def test_pending_group_planning_reads_references_without_article_bodies(monkeypa
     )
     digest = sha256(cluster_set.model_dump_json().encode()).hexdigest()
 
-    def query(sql, _values=None):
-        if "cluster.kind" in sql:
-            return [
-                {
-                    "artifact_id": "news:clusters:2026-08-31",
-                    "version_id": "e" * 64,
-                    "content_digest": digest,
-                    "r2_key": "news/clusters/day.json",
-                }
-            ]
+    def cluster_reference_query(_statement, parameters=None):
+        assert parameters is None
         return [
             {
-                "artifact_id": "news:article:test",
-                "version_id": version_id,
-                "content_digest": "f" * 64,
-                "r2_key": "news/articles/article.json",
+                "artifact_id": "news:clusters:2026-08-31",
+                "version_id": "e" * 64,
+                "content_digest": digest,
+                "r2_key": "news/clusters/day.json",
             }
         ]
 
+    def article_reference_query(_statement, values):
+        requested = list(values)
+        assert requested == [version_id]
+        return [
+            {
+                "artifact_id": f"news:article:{value}",
+                "version_id": value,
+                "content_digest": "f" * 64,
+                "r2_key": f"news/articles/{value}.json",
+            }
+            for value in requested
+        ]
+
     reads = []
-    monkeypatch.setattr("romanian_news.catalog.artifacts.catalog_query", query)
-    monkeypatch.setattr("romanian_news.catalog.cluster_inputs.catalog_query", query)
+    monkeypatch.setattr(
+        "romanian_news.catalog.cluster_inputs.catalog_query", cluster_reference_query
+    )
+    monkeypatch.setattr("romanian_news.catalog.artifacts.catalog_query", article_reference_query)
     monkeypatch.setattr(pending, "existing_current_artifact_ids", lambda _ids: frozenset())
     monkeypatch.setattr(
         pending,

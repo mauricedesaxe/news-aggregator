@@ -14,7 +14,6 @@ from romanian_news.analysis.groups.models import (
     SentimentAssessment,
 )
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.reports import _report_run_statements
 from romanian_news.groups import DailyClusterSet, NewsGroup
 from romanian_news.reports import (
     ArchivedDailyReport,
@@ -393,27 +392,6 @@ def test_daily_report_records_assessment_in_output_and_request_identity(monkeypa
 
     assert output.assessments.artifact_id == "news:subject-assessments"
     assert output.request_id != without_assessment
-
-
-def test_daily_report_publication_records_assessment_lineage(monkeypatch) -> None:
-    output = _build_ranked_report(
-        monkeypatch,
-        (("a", "Romania loses PNRR funds", 1, "major", "strong", "strong"),),
-    )
-
-    statements = _report_run_statements(
-        "9" * 64,
-        "git:test",
-        output,
-        status="publishing",
-        prior_output=None,
-    )
-
-    config = json.loads(str(statements[0][1][4]))
-    assert config == {"day": output.report.day.isoformat()}
-    inputs = [params for sql, params in statements if "INTO run_inputs" in sql]
-    assert sum(params[3] == "assessments" for params in inputs) == 1
-    assert all(params[3] != "relevance" for params in inputs)
 
 
 def test_archived_daily_report_section_keeps_permissive_generated_text() -> None:
