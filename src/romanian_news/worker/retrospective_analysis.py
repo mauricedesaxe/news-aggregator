@@ -30,7 +30,6 @@ from romanian_news.worker.operations import (
 )
 
 _ARTICLE_LIMIT = 200
-_AUTOMATED_END = ARCHIVE_START + timedelta(days=9)
 _ACTIVE_STATUSES = (
     dg.DagsterRunStatus.QUEUED,
     dg.DagsterRunStatus.NOT_STARTED,
@@ -95,9 +94,9 @@ def next_automated_day() -> date | None:
             if window is not None:
                 pending_months.append(window[0])
     reports = {
-        report.day: report for report in list_archive_daily_reports(ARCHIVE_START, _AUTOMATED_END)
+        report.day: report for report in list_archive_daily_reports(ARCHIVE_START, ARCHIVE_END)
     }
-    for month_start, month_end in month_windows(ARCHIVE_START, _AUTOMATED_END):
+    for month_start, month_end in month_windows(ARCHIVE_START, ARCHIVE_END):
         month_complete = not any(pending <= month_end for pending in pending_months)
         day = month_start
         while day <= month_end:
@@ -155,7 +154,7 @@ def scheduled_retrospective_analysis(
         return dg.SkipReason("A retrospective report is already running.")
     day = next_automated_day()
     if day is None:
-        return dg.SkipReason("No completed archive day needs a report in the pilot window.")
+        return dg.SkipReason("No archive day needs a report in the one-year window.")
     return dg.RunRequest(
         run_key=f"retrospective:{day.isoformat()}:{scheduled_at.isoformat()}",
         run_config={"ops": {"retrospective_analysis": {"config": {"day": day.isoformat()}}}},
