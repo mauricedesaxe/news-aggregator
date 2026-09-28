@@ -176,6 +176,11 @@ def test_collection_progress_is_separate_from_weekly_archive() -> None:
     assert "regular reports and reports reconstructed from archived pages" in response.text
     assert f'href="/reports/{DAILY_VERSION}"' in response.text
     assert "Daily reports and weekly reads appear only when published" in response.text
+    assert "URL entries may still exist" in response.text
+    assert response.text.count("<summary>Monthly breakdown</summary>") == 2
+    assert response.text.index('class="status-grid"') < response.text.index(
+        "Daily reports in this date range"
+    )
 
 
 def test_old_strong_assessment_shows_cited_evidence_instead_of_rating() -> None:

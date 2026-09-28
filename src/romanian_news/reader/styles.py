@@ -64,6 +64,8 @@ button { border-radius: 0; }
 }
 .brand::after { background: var(--acid); content: ""; height: .38em; margin-left: .45rem; width: .38em; }
 .header-actions { align-items: center; display: flex; gap: 1rem; }
+.site-links { align-items: center; display: flex; gap: 1rem; }
+.site-links a { white-space: nowrap; }
 .logout { margin: 0; }
 .logout button {
   background: transparent;
@@ -328,8 +330,10 @@ h3 { font-size: 1.2rem; line-height: 1.25; }
 }
 @media (max-width: 720px) {
   .site-header > .header-actions, .reader { width: min(100% - 1.25rem, 1100px); }
-  .site-header > .header-actions { min-height: 64px; }
+  .site-header > .header-actions { flex-wrap: wrap; min-height: 64px; padding-block: .35rem; }
   .brand { font-size: 1.55rem; }
+  .logout { margin-left: auto; }
+  .site-links { border-top: 1px solid var(--line-soft); justify-content: center; min-height: 44px; order: 3; width: 100%; }
   .reader { padding-top: .75rem; }
   .date-nav { grid-template-columns: 1fr 1fr; }
   .date-nav time { grid-column: 1 / -1; grid-row: 1; text-align: center; }

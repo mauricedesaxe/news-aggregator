@@ -9,6 +9,7 @@ from fasthtml.common import (
     H3,
     A,
     Article,
+    Details,
     Div,
     Li,
     Main,
@@ -16,6 +17,7 @@ from fasthtml.common import (
     P,
     Section,
     Style,
+    Summary,
     Title,
     Ul,
 )
@@ -43,12 +45,10 @@ _STATUS_STYLES = """
 .status-nav a, .status a { text-underline-offset: .2em; }
 .status-history { display: grid; gap: .8rem; list-style: none; padding: 0; }
 .status-history li { border-bottom: 1px solid var(--line); padding-bottom: .8rem; }
-.site-links { display: flex; gap: .8rem; align-items: center; }
 @media (max-width: 700px) {
   .status-grid { grid-template-columns: 1fr; }
   .status { padding: 1rem; }
   .status h1 { max-width: none; }
-  .site-links { font-size: .85rem; }
 }
 """
 
@@ -246,19 +246,22 @@ def _archive_discovery_summary(
                     f"{sum(item.retryable_pages for item in rows):,} awaiting retry"
                 ),
                 P(f"{sum(item.captured_articles for item in rows):,} articles captured"),
-                Ul(
-                    *(
-                        Li(
-                            f"{item.month.strftime('%B %Y')}: "
-                            f"{item.url_entries:,} URLs from {item.sitemap_count} sitemap"
-                            f"{'s' if item.sitemap_count != 1 else ''}; "
-                            f"{item.accepted_pages:,} verified, "
-                            f"{item.rejected_pages:,} rejected, "
-                            f"{item.retryable_pages:,} awaiting retry; "
-                            f"{item.captured_articles:,} articles captured"
+                Details(
+                    Summary("Monthly breakdown"),
+                    Ul(
+                        *(
+                            Li(
+                                f"{item.month.strftime('%B %Y')}: "
+                                f"{item.url_entries:,} URLs from {item.sitemap_count} sitemap"
+                                f"{'s' if item.sitemap_count != 1 else ''}; "
+                                f"{item.accepted_pages:,} verified, "
+                                f"{item.rejected_pages:,} rejected, "
+                                f"{item.retryable_pages:,} awaiting retry; "
+                                f"{item.captured_articles:,} articles captured"
+                            )
+                            for item in rows
                         )
-                        for item in rows
-                    )
+                    ),
                 ),
                 cls="status-card",
             )
@@ -270,6 +273,11 @@ def _archive_discovery_summary(
             "original publication date. Captured articles have stored text. Daily reports "
             "and weekly reads appear only when published."
         ),
+        P(
+            "A zero for verified pages or captured articles means none have been recorded "
+            "for that month; URL entries may still exist."
+        ),
+        Div(*cards, cls="status-grid"),
         H3("Daily reports in this date range"),
         P(
             f"{len(reports):,} daily "
@@ -288,6 +296,5 @@ def _archive_discovery_summary(
             ),
             cls="status-history",
         ),
-        Div(*cards, cls="status-grid"),
         cls="status-coverage",
     )
