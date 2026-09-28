@@ -32,7 +32,7 @@ def archive_page_backfill(
     context.log.info("Archive page backfill: %s", result)
 
 
-@dg.job(tags={"dagster/max_runtime": "900", "dagster/max_retries": "0"})
+@dg.job(tags={"dagster/max_runtime": "2400", "dagster/max_retries": "0"})
 def archive_page_backfill_job() -> None:
     archive_page_backfill()
 
