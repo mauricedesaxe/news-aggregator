@@ -36,7 +36,7 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --frozen --no-default-groups
 
-      - name: Read replay preflight
+      - name: Read catalog replay state
         env:
           NEWS_POSTGRES_DSN: ${{ secrets.NEWS_POSTGRES_DSN }}
           ARCHIVE_DAY: ${{ inputs.day }}
@@ -46,29 +46,60 @@ jobs:
           import os
           from datetime import date
 
-          from romanian_news.archive.replay_preflight import read_replay_preflight
+          from romanian_news.analysis.embeddings import read_pending_embedding_references
+          from romanian_news.analysis.relevance import read_pending_relevance_references
+          from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
+          from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_START
+          from romanian_news.catalog.archive_model_spend import (
+              read_archive_spend,
+              read_archive_spend_holds,
+          )
+          from romanian_news.catalog.archive_report_coverage import read_retrospective_coverage
+          from romanian_news.catalog.schema import NEWS_CATALOG_MIGRATIONS
+          from romanian_news.catalog_transport import catalog_query
+          from romanian_news.daily import read_daily_article_references
 
-          preflight = read_replay_preflight(date.fromisoformat(os.environ["ARCHIVE_DAY"]))
+          day = date.fromisoformat(os.environ["ARCHIVE_DAY"])
+          if not ARCHIVE_START <= day <= ARCHIVE_END:
+              raise ValueError("Day is outside the one-year archive")
+          schema = catalog_query(
+              "SELECT COALESCE(MAX(version), 0) AS latest FROM news_schema_migrations"
+          )[0]
+          access = catalog_query(
+              "SELECT has_schema_privilege(current_schema(), 'CREATE') AS can_create, "
+              "to_regclass('news_archive_model_reservations') IS NOT NULL AS table_present, "
+              "EXISTS (SELECT 1 FROM pg_class "
+              "WHERE oid = to_regclass('news_archive_model_reservations') "
+              "AND pg_get_userbyid(relowner) = current_user) AS table_owned"
+          )[0]
+          coverage = read_retrospective_coverage(day)
+          articles = read_daily_article_references(day).values
+          spend = read_archive_spend(day) if access["table_present"] else None
+          holds = read_archive_spend_holds(day) if access["table_present"] else ()
           print(json.dumps({
-              "day": preflight.day.isoformat(),
-              "outlets": preflight.outlets,
-              "verified_pages": preflight.verified_pages,
-              "captured_articles": preflight.captured_articles,
-              "selected_articles": len(preflight.article_version_ids),
-              "pending_relevance": preflight.pending_relevance,
-              "pending_embeddings": preflight.pending_embeddings,
-              "pending_summaries": preflight.pending_summaries,
-              "pending_sentiment": preflight.pending_sentiment,
-              "spent_usd": str(preflight.spend.spent_usd),
-              "held_usd": str(preflight.spend.held_usd),
-              "calls": preflight.spend.calls,
+              "day": day.isoformat(),
+              "schema_migration_latest": schema["latest"],
+              "schema_migration_required": NEWS_CATALOG_MIGRATIONS[-1].version,
+              "runtime_can_create": access["can_create"],
+              "spend_table_present": access["table_present"],
+              "runtime_owns_spend_table": access["table_owned"],
+              "outlets": coverage.included_outlets if coverage else (),
+              "verified_pages": coverage.verified_page_count if coverage else 0,
+              "captured_articles": coverage.captured_article_count if coverage else 0,
+              "selected_articles": len(articles),
+              "pending_relevance": len(read_pending_relevance_references(
+                  day=day, request_id_for_article=production_relevance_v3_request_id
+              )),
+              "pending_embeddings": len(read_pending_embedding_references(day=day)),
+              "spent_usd": str(spend.spent_usd) if spend else None,
+              "held_usd": str(spend.held_usd) if spend else None,
+              "calls": spend.calls if spend else None,
               "holds": [{
                   "reservation_id": str(hold.reservation_id),
                   "age_seconds": hold.age_seconds,
                   "operation": hold.operation_key,
                   "held_usd": str(hold.held_usd),
-              } for hold in preflight.outstanding_holds],
-              "source_ready": preflight.source_ready,
-              "paid_work_admissible": preflight.paid_work_admissible,
+              } for hold in holds],
+              "source_ready": bool(coverage and len(coverage.included_outlets) >= 2 and articles),
           }, sort_keys=True))
           PY
