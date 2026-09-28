@@ -2,12 +2,11 @@
 
 import dagster as dg
 
-from romanian_news.archive.backfill import (
+from romanian_news.archive.backfill import advance_page_checks, next_page_window
+from romanian_news.archive.campaign import (
     ARCHIVE_END,
     ARCHIVE_OUTLETS,
     ARCHIVE_START,
-    advance_page_checks,
-    next_page_window,
 )
 
 _ACTIVE_STATUSES = (

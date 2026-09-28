@@ -4,12 +4,13 @@ import argparse
 import json
 import sys
 
-from romanian_news.archive.backfill import ARCHIVE_END, ARCHIVE_START, advance_page_checks
+from romanian_news.archive.backfill import advance_page_checks
+from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_OUTLETS, ARCHIVE_START
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--outlet", choices=("hotnews", "digi24"), required=True)
+    parser.add_argument("--outlet", choices=ARCHIVE_OUTLETS, required=True)
     args = parser.parse_args()
     result = advance_page_checks(
         args.outlet,

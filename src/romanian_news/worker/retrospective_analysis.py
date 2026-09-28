@@ -6,11 +6,11 @@ import dagster as dg
 
 from romanian_news.analysis.relevance import read_pending_relevance_references
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
-from romanian_news.archive.backfill import (
+from romanian_news.archive.backfill import next_page_window
+from romanian_news.archive.campaign import (
     ARCHIVE_END,
     ARCHIVE_OUTLETS,
     ARCHIVE_START,
-    next_page_window,
 )
 from romanian_news.archive.capture_batch import next_capture_window
 from romanian_news.archive.windows import month_windows

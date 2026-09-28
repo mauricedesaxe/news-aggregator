@@ -2,15 +2,22 @@ from datetime import UTC, date, datetime
 
 import dagster as dg
 
+from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_OUTLETS, ARCHIVE_START
 from romanian_news.worker import archive_page_backfill
 from romanian_news.worker.definitions import defs
 
 
 def test_page_schedule_skips_outlet_with_active_batch(monkeypatch) -> None:
+    calls = []
+
+    def next_window(outlet, start, end):
+        calls.append((outlet, start, end))
+        return date(2025, 9, 27), date(2025, 9, 30)
+
     monkeypatch.setattr(
         archive_page_backfill,
         "next_page_window",
-        lambda _outlet, _start, _end: (date(2025, 9, 27), date(2025, 9, 30)),
+        next_window,
     )
     scheduled_at = datetime(2026, 9, 27, 17, 18, tzinfo=UTC)
     with dg.instance_for_test() as instance:
@@ -30,6 +37,7 @@ def test_page_schedule_skips_outlet_with_active_batch(monkeypatch) -> None:
             )
 
     assert evaluation.run_requests is not None
+    assert calls == [(outlet, ARCHIVE_START, ARCHIVE_END) for outlet in ARCHIVE_OUTLETS]
     assert len(evaluation.run_requests) == 1
     request = evaluation.run_requests[0]
     assert request.tags["news/archive_outlet"] == "digi24"

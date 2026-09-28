@@ -1,15 +1,13 @@
-"""Manual production job for bounded historical article capture."""
+"""Production job for bounded historical article capture."""
 
 from datetime import date
 
 import dagster as dg
 
+from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_OUTLETS, ARCHIVE_START
 from romanian_news.archive.capture_batch import capture_archive_batch, next_capture_window
 from romanian_news.config import IMPLEMENTATION_REF
 
-_ARCHIVE_START = date(2025, 9, 27)
-_ARCHIVE_END = date(2026, 9, 26)
-_ARCHIVE_OUTLETS = ("hotnews", "digi24")
 _ACTIVE_STATUSES = (
     dg.DagsterRunStatus.QUEUED,
     dg.DagsterRunStatus.NOT_STARTED,
@@ -67,8 +65,8 @@ def scheduled_archive_article_capture(
     if scheduled_at is None:
         raise ValueError("Archive capture schedule time is required")
     requests = []
-    for outlet in _ARCHIVE_OUTLETS:
-        window = next_capture_window(outlet, _ARCHIVE_START, _ARCHIVE_END)
+    for outlet in ARCHIVE_OUTLETS:
+        window = next_capture_window(outlet, ARCHIVE_START, ARCHIVE_END)
         if window is None:
             continue
         active = context.instance.get_runs(

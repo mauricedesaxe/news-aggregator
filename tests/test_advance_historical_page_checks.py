@@ -1,7 +1,13 @@
 from datetime import date
 
-from romanian_news.archive.backfill import ARCHIVE_END, ARCHIVE_START
+from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_OUTLETS, ARCHIVE_START
 from romanian_news.archive.windows import month_windows
+
+
+def test_archive_campaign_covers_one_year_and_two_outlets() -> None:
+    assert date(2025, 9, 27) == ARCHIVE_START
+    assert date(2026, 9, 26) == ARCHIVE_END
+    assert ARCHIVE_OUTLETS == ("hotnews", "digi24")
 
 
 def test_month_windows_keep_partial_first_and_last_months() -> None:
