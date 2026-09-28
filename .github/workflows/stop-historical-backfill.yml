@@ -22,6 +22,7 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import time
           from urllib.request import Request, urlopen
 
           endpoint = os.environ["DAGSTER_CLOUD_GRAPHQL_URL"]
@@ -107,4 +108,53 @@ jobs:
               raise RuntimeError("A historical schedule is still running")
           for name in ("hourly_registered_feed_poll", "scheduled_weekly_status"):
               print(f"{name}: {final[name]['scheduleState']['status']}")
+
+          jobs = (
+              "archive_page_backfill_job",
+              "archive_article_capture_batch",
+              "retrospective_analysis_pilot",
+          )
+          active_statuses = {
+              "QUEUED", "NOT_STARTED", "MANAGED", "STARTING", "STARTED", "CANCELING"
+          }
+
+          def active_runs():
+              found = {}
+              for job in jobs:
+                  result = execute("""
+                    query Runs($filter: RunsFilter!) {
+                      runsOrError(filter: $filter, limit: 20) {
+                        __typename
+                        ... on Runs { results { runId status } }
+                      }
+                    }
+                  """, {"filter": {"pipelineName": job}})["runsOrError"]
+                  if result["__typename"] != "Runs":
+                      raise RuntimeError(f"Dagster run lookup failed for {job}")
+                  for run in result["results"]:
+                      if run["status"] in active_statuses:
+                          found[run["runId"]] = (job, run["status"])
+              return found
+
+          running = active_runs()
+          for run_id, (job, status) in running.items():
+              if status == "CANCELING":
+                  continue
+              result = execute("""
+                mutation TerminateRun($runId: String!) {
+                  terminateRun(runId: $runId) { __typename }
+                }
+              """, {"runId": run_id})["terminateRun"]
+              if result["__typename"] != "TerminateRunSuccess":
+                  raise RuntimeError(f"Could not terminate {job} run {run_id}: {result}")
+              print(f"Termination requested: {job} {run_id}")
+
+          for _ in range(12):
+              remaining = active_runs()
+              if not remaining:
+                  break
+              time.sleep(5)
+          else:
+              raise RuntimeError(f"Historical runs still active: {remaining}")
+          print("No historical runs active")
           PY
