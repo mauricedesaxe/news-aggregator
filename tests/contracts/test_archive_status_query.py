@@ -120,7 +120,7 @@ def _daily_report_statements(
 ) -> list[tuple[str, list[object]]]:
     artifact_id = f"news:daily:{day.isoformat()}"
     created_at = datetime(2026, 9, 27, 10, tzinfo=UTC)
-    statements = [
+    statements: list[tuple[str, list[object]]] = [
         (
             "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, "
             "visibility, current_version_id, created_at) "

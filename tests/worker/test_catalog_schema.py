@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import psycopg
 import pytest
 
@@ -7,6 +9,11 @@ from romanian_news.catalog.schema import NEWS_CATALOG_MIGRATIONS
 from romanian_news.catalog_transport import ResearchCatalogError, catalog_query
 from romanian_news.worker import catalog_schema
 from tests.postgres_catalog import isolated_postgres_schema
+
+pytestmark = pytest.mark.skipif(
+    not os.getenv("NEWS_TEST_POSTGRES_DSN"),
+    reason="NEWS_TEST_POSTGRES_DSN is required",
+)
 
 
 def _ledger_versions() -> set[int]:
