@@ -22,12 +22,13 @@ jobs:
           import json
           import os
           import urllib.request
+          from datetime import UTC, datetime
 
           query = """
           query RecentRuns($filter: RunsFilter!) {
             runsOrError(filter: $filter, limit: 3) {
               __typename
-              ... on Runs { results { runId status } }
+              ... on Runs { results { runId status startTime endTime } }
               ... on PythonError { message }
             }
           }
@@ -59,5 +60,17 @@ jobs:
                   raise RuntimeError(f"Dagster run query failed for {job}: {runs}")
               print(f"{job}:")
               for run in runs["results"]:
-                  print(f"  {run['runId']} {run['status']}")
+                  started = run["startTime"]
+                  ended = run["endTime"]
+                  start_text = (
+                      datetime.fromtimestamp(started, UTC).isoformat() if started else "pending"
+                  )
+                  end_text = (
+                      datetime.fromtimestamp(ended, UTC).isoformat() if ended else "pending"
+                  )
+                  duration = round(ended - started, 1) if started and ended else None
+                  print(
+                      f"  {run['runId']} {run['status']} "
+                      f"start={start_text} end={end_text} seconds={duration}"
+                  )
           PY
