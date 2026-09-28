@@ -9,7 +9,12 @@ from romanian_news.analysis.groups.pending import read_pending_group_analysis_re
 from romanian_news.analysis.relevance import read_pending_relevance_references
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
 from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_START
-from romanian_news.catalog.archive_model_spend import ArchiveSpend, read_archive_spend
+from romanian_news.catalog.archive_model_spend import (
+    ArchiveSpend,
+    ArchiveSpendHold,
+    read_archive_spend,
+    read_archive_spend_holds,
+)
 from romanian_news.catalog.archive_report_coverage import read_retrospective_coverage
 from romanian_news.config import ARCHIVE_DAY_SPEND_LIMIT_USD
 from romanian_news.daily import read_daily_article_references
@@ -29,6 +34,7 @@ class ReplayPreflight:
     estimated_remaining_usd: Decimal
     estimate_basis: str
     spend: ArchiveSpend
+    outstanding_holds: tuple[ArchiveSpendHold, ...]
     limit_usd: Decimal
     available_usd: Decimal
     source_ready: bool
@@ -49,6 +55,7 @@ def read_replay_preflight(day: date) -> ReplayPreflight:
     pending_sentiment = sum(value.sentiment_needed for value in groups)
     pending_calls = len(relevance) + len(embeddings) + pending_summaries + pending_sentiment
     spend = read_archive_spend(day)
+    outstanding_holds = read_archive_spend_holds(day)
     return ReplayPreflight(
         day=day,
         outlets=coverage.included_outlets if coverage else (),
@@ -62,6 +69,7 @@ def read_replay_preflight(day: date) -> ReplayPreflight:
         estimated_remaining_usd=Decimal(pending_calls) * Decimal("0.0041"),
         estimate_basis="2026 report-linked relevance call proxy; excludes provider errors and future stages",
         spend=spend,
+        outstanding_holds=outstanding_holds,
         limit_usd=ARCHIVE_DAY_SPEND_LIMIT_USD,
         available_usd=max(
             Decimal(0), ARCHIVE_DAY_SPEND_LIMIT_USD - spend.spent_usd - spend.held_usd
