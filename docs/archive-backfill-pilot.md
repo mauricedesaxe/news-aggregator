@@ -32,6 +32,42 @@ The sample included HotNews general news, economy, sports, and family sections, 
 Digi24 domestic and foreign news. Editorial relevance still needs a separate gate.
 The check made no model calls, so it does not establish backfill model cost.
 
+## Pilot quality measurements
+
+The same 42-page probe ran again on 2026-09-28. Its
+[metadata-only result](../../artifacts/archive-pilot-2025-09-v1/metadata-sample.json)
+records all 14 outlet-days, sampled URLs, publication and modification times, section
+labels, body lengths, and failures. Each outlet had three valid, extractable sample pages
+on each day. All 42 pages had a modification timestamp; none failed the date or
+extraction check.
+
+| Outlet | Sitemap entries in pilot slice | Repeated exact URL entries | Sampled non-news minimum | Sample sections |
+| --- | ---: | ---: | ---: | --- |
+| HotNews | 643 | 0 | 2 of 21 | 16 Actualitate, 2 Copii&Părinți, 2 SuperLiga, 1 Economie |
+| Digi24 | 799 | 0 | 1 of 21 | 7 actualitate, 14 externe |
+
+The duplicate count compares exact URLs within the seven HotNews daily maps and the
+selected `lastmod` slice of Digi24's September map. It does not detect different URLs
+for the same story. A headline and section review found at least three pages that did
+not report a current event: [parenting advice](https://hotnews.ro/cum-sa-pui-ordine-in-haosul-de-dimineata-8-solutii-ca-sa-ajungeti-la-timp-la-scoala-2060846),
+[a genetic testing explainer](https://hotnews.ro/trei-boli-ereditare-grave-au-ferestre-de-preventie-testarea-genetica-pentru-cancer-mamar-distrofie-musculara-si-talasemie-ne-ajuta-sa-indrumam-si-sa-protejam-pacientii-si-2065788),
+and [a Digi24 item marked `(P)`](https://www.digi24.ro/stiri/actualitate/p-intelege-pretul-pe-kwh-si-ce-platesti-de-fapt-pe-factura-de-energie-3412835).
+The HotNews pages appear in a section labeled "Powered by MedLife." This is a lower
+bound of 3 in 42 sampled pages, not a measured rate for all 1,442 sitemap entries.
+
+The probe made no model calls. A separate
+[seven-day report cost snapshot](../../artifacts/jev-research-v1/news-report-model-cost-v1.json)
+attributes $2.032867430 to 497 relevance outputs from 2026-09-14 through 2026-09-20,
+about $0.00409 per relevance output including downstream report work. Applying that
+observed ratio to all 1,442 pilot-slice URLs gives roughly $5.90, if every URL became an
+analysis input and the later week's cost mix held. Digi24's `lastmod` slice misses
+articles edited later, and the estimate excludes rejected pages and unlinked attempts.
+It is not a measured 2025 pilot cost or a spend limit.
+
+The sample supports extraction and two-source availability on seven days. It does not
+establish full-day coverage, acceptable editorial mix, a model budget, or permission
+for bulk full-text retention. Those checks still gate a pilot go decision.
+
 ## Publication boundary
 
 The current [Digi24 terms](https://www.digi24.ro/termeni-si-conditii) restrict copying
