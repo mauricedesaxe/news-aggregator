@@ -2,7 +2,7 @@
 
 import time
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from urllib.parse import urlsplit
 from urllib.robotparser import RobotFileParser
 
@@ -15,6 +15,7 @@ from romanian_news.archive.windows import month_windows
 from romanian_news.articles.extraction import normalize_article_url
 from romanian_news.catalog.archive_articles import publish_archive_article
 from romanian_news.catalog_transport import catalog_query
+from romanian_news.daily import bucharest_day_window
 from romanian_news.feeds.registry import feed_registry
 
 
@@ -47,6 +48,8 @@ def pending_archive_articles(
         raise ValueError("Archive article window must span at most 31 days")
     if not 1 <= limit <= 50:
         raise ValueError("Archive article limit must be between 1 and 50")
+    window_start = bucharest_day_window(start)[0]
+    window_end = bucharest_day_window(end)[1]
     rows = catalog_query(
         """
         SELECT accepted.observation_id, accepted.canonical_url, accepted.published_at
@@ -66,7 +69,7 @@ def pending_archive_articles(
         ORDER BY accepted.published_at, accepted.canonical_url
         LIMIT %s
         """,
-        [outlet_id, start.isoformat(), (end + timedelta(days=1)).isoformat(), limit],
+        [outlet_id, window_start, window_end, limit],
     )
     return tuple(
         AcceptedArchivePage(
