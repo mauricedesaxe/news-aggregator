@@ -50,6 +50,14 @@ def test_analysis_rejects_days_after_the_archive_window() -> None:
 
 
 def test_pilot_publishes_and_returns_report_version(monkeypatch) -> None:
+    stage_logs = []
+    ticks = iter(range(16))
+    monkeypatch.setattr(retrospective_analysis, "perf_counter", lambda: next(ticks))
+    monkeypatch.setattr(
+        retrospective_analysis.dg,
+        "get_dagster_logger",
+        lambda: SimpleNamespace(info=lambda *args: stage_logs.append(args)),
+    )
     monkeypatch.setattr(
         retrospective_analysis,
         "read_retrospective_coverage",
@@ -82,6 +90,17 @@ def test_pilot_publishes_and_returns_report_version(monkeypatch) -> None:
         lambda _day, _ref: SimpleNamespace(version_id="a" * 64),
     )
     assert retrospective_analysis.analyze_retrospective_day(DAY, "git:test") == "a" * 64
+    assert [entry[2] for entry in stage_logs] == [
+        "relevance",
+        "embeddings",
+        "clusters",
+        "group_summaries",
+        "group_sentiment",
+        "daily_themes",
+        "subject_assessments",
+        "publication",
+    ]
+    assert all(entry[1] == DAY and entry[3] == 1 for entry in stage_logs)
 
 
 def test_pilot_rejects_sparse_coverage_before_model_work(monkeypatch) -> None:

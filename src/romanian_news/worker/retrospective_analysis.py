@@ -1,6 +1,9 @@
 """Run one bounded historical analysis pilot and publish its sourced report."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, timedelta
+from time import perf_counter
 
 import dagster as dg
 
@@ -48,6 +51,20 @@ class RetrospectiveAnalysisConfig(dg.Config):
     day: str
 
 
+@contextmanager
+def _timed_stage(day: date, stage: str) -> Iterator[None]:
+    started_at = perf_counter()
+    try:
+        yield
+    finally:
+        dg.get_dagster_logger().info(
+            "Retrospective stage day=%s stage=%s elapsed_seconds=%.3f",
+            day,
+            stage,
+            perf_counter() - started_at,
+        )
+
+
 def analyze_retrospective_day(day: date, implementation_ref: str) -> str | None:
     if not ARCHIVE_START <= day <= ARCHIVE_END:
         raise ValueError("Retrospective analysis day is outside the one-year archive")
@@ -63,21 +80,25 @@ def analyze_retrospective_day(day: date, implementation_ref: str) -> str | None:
     if spend.spent_usd + spend.held_usd > ARCHIVE_DAY_SPEND_LIMIT_USD:
         raise ArchiveSpendLimitReached(f"Archive day {day} is over its model spend limit")
     with archive_model_day(day):
-        materialize_relevance(day, implementation_ref, limit=_ARTICLE_LIMIT)
-        if read_pending_relevance_references(
-            day=day, request_id_for_article=production_relevance_v3_request_id
-        ):
+        with _timed_stage(day, "relevance"):
+            materialize_relevance(day, implementation_ref, limit=_ARTICLE_LIMIT)
+            pending_relevance = read_pending_relevance_references(
+                day=day, request_id_for_article=production_relevance_v3_request_id
+            )
+        if pending_relevance:
             return None
-        for stage in (
-            materialize_embeddings,
-            materialize_clusters,
-            materialize_group_summaries,
-            materialize_group_sentiment,
-            materialize_daily_themes,
-            materialize_subject_assessments,
+        for stage_name, stage in (
+            ("embeddings", materialize_embeddings),
+            ("clusters", materialize_clusters),
+            ("group_summaries", materialize_group_summaries),
+            ("group_sentiment", materialize_group_sentiment),
+            ("daily_themes", materialize_daily_themes),
+            ("subject_assessments", materialize_subject_assessments),
         ):
-            stage(day, implementation_ref)
-    return publish_retrospective_daily_report(day, implementation_ref).version_id
+            with _timed_stage(day, stage_name):
+                stage(day, implementation_ref)
+    with _timed_stage(day, "publication"):
+        return publish_retrospective_daily_report(day, implementation_ref).version_id
 
 
 @dg.op
