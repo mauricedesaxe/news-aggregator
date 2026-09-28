@@ -22,7 +22,7 @@ jobs:
           import json
           import os
           import urllib.request
-          from datetime import UTC, datetime
+          from datetime import datetime, timezone
 
           query = """
           query RecentRuns($filter: RunsFilter!) {
@@ -63,10 +63,14 @@ jobs:
                   started = run["startTime"]
                   ended = run["endTime"]
                   start_text = (
-                      datetime.fromtimestamp(started, UTC).isoformat() if started else "pending"
+                      datetime.fromtimestamp(started, timezone.utc).isoformat()
+                      if started
+                      else "pending"
                   )
                   end_text = (
-                      datetime.fromtimestamp(ended, UTC).isoformat() if ended else "pending"
+                      datetime.fromtimestamp(ended, timezone.utc).isoformat()
+                      if ended
+                      else "pending"
                   )
                   duration = round(ended - started, 1) if started and ended else None
                   print(
