@@ -200,8 +200,8 @@ class _R2Library:
 
 def _seed_week_of_daily_reports(
     catalog: PostgresCatalog, library: _R2Library, week_start: date
-) -> dict[date, str]:
-    versions: dict[date, str] = {}
+) -> dict[date, ArtifactReference]:
+    references: dict[date, ArtifactReference] = {}
     for offset in range(7):
         day = week_start + timedelta(days=offset)
         payload = daily_report(day).model_dump_json().encode()
@@ -237,25 +237,22 @@ def _seed_week_of_daily_reports(
             "UPDATE artifacts SET current_version_id = %s WHERE id = %s",
             (version_id, artifact_id),
         )
-        versions[day] = version_id
-    return versions
+        references[day] = ArtifactReference(
+            artifact_id=artifact_id,
+            version_id=version_id,
+            content_digest=digest,
+            r2_key=r2_key,
+        )
+    return references
 
 
-def _week_input(versions: dict[date, str], week_start: date) -> WeekInput:
+def _week_input(references: dict[date, ArtifactReference], week_start: date) -> WeekInput:
     return WeekInput(
         week_start=week_start,
         days=tuple(
             WeekInputDay(
                 day=week_start + timedelta(days=offset),
-                report=ArtifactReference(
-                    artifact_id=f"news:daily:{(week_start + timedelta(days=offset)).isoformat()}",
-                    version_id=versions[week_start + timedelta(days=offset)],
-                    content_digest=versions[week_start + timedelta(days=offset)],
-                    r2_key=(
-                        f"news/reports/daily/"
-                        f"{(week_start + timedelta(days=offset)).isoformat()}/x.json"
-                    ),
-                ),
+                report=references[week_start + timedelta(days=offset)],
             )
             for offset in range(7)
         ),
@@ -301,8 +298,8 @@ def _draft(sources) -> GeneratedStatus:
 def test_weekly_status_pages_render_from_the_real_catalog(monkeypatch, postgres_catalog) -> None:
     library = _R2Library()
     monkeypatch.setattr("romanian_news.storage._r2_client", lambda: cast(Any, library))
-    versions = _seed_week_of_daily_reports(postgres_catalog, library, WEEK_START)
-    inputs = _week_input(versions, WEEK_START)
+    references = _seed_week_of_daily_reports(postgres_catalog, library, WEEK_START)
+    inputs = _week_input(references, WEEK_START)
     reports = {
         slot.report.version_id: daily_report(slot.day) for slot in inputs.days if slot.report
     }

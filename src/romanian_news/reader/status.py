@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
 
 from fasthtml.common import (
@@ -25,6 +26,7 @@ from fasthtml.common import (
 from romanian_news import Sha256
 from romanian_news.catalog.archive_progress import ArchiveDailyReport, ArchiveDiscoveryMonth
 from romanian_news.catalog.weekly_status import WeeklyStatusSummary
+from romanian_news.reports import DailyReportDocument, RetrospectiveDailyReport
 from romanian_news.weekly_status import AreaAssessment, StatusSource, WeeklyStatusRead
 
 _STATUS_STYLES = """
@@ -102,6 +104,7 @@ def render_status(
     header: Any,
     *,
     exact_version: bool = False,
+    source_reports: tuple[DailyReportDocument, ...],
 ) -> tuple[Any, ...]:
     sources = {source.handle: source for source in read.sources}
     missing = tuple(slot.day for slot in read.days if slot.report is None)
@@ -149,6 +152,7 @@ def render_status(
                     P(
                         "This read uses selected daily highlights. Open a source to check the exact saved report."
                     ),
+                    _retrospective_source_notice(read, source_reports),
                     cls="status-coverage",
                 ),
                 Section(
@@ -171,6 +175,45 @@ def render_status(
                 else None,
                 cls="status",
             )
+        ),
+    )
+
+
+def _retrospective_source_notice(
+    read: WeeklyStatusRead, reports: tuple[DailyReportDocument, ...]
+) -> FT | None:
+    historical = tuple(report for report in reports if isinstance(report, RetrospectiveDailyReport))
+    if not historical:
+        return None
+    started = min(
+        report.retrospective.capture_started_at.astimezone(UTC) for report in historical
+    ).strftime("%Y-%m-%d %H:%M UTC")
+    ended = max(
+        report.retrospective.capture_ended_at.astimezone(UTC) for report in historical
+    ).strftime("%Y-%m-%d %H:%M UTC")
+    historical_days = {report.day for report in historical}
+    versions = {
+        slot.day: slot.report.version_id
+        for slot in read.days
+        if slot.report is not None and slot.day in historical_days
+    }
+    return Section(
+        H2("Historical source capture"),
+        P(
+            f"This weekly read uses {len(historical)} historical daily "
+            f"report{'s' if len(historical) != 1 else ''} whose source pages were captured "
+            f"later, from {started} to {ended}."
+        ),
+        P(
+            "Open the exact saved daily reports for outlet and coverage details: ",
+            *(
+                item
+                for index, report in enumerate(historical)
+                for item in (
+                    A(report.day.isoformat(), href=f"/reports/exact/{versions[report.day]}"),
+                    ", " if index < len(historical) - 1 else ".",
+                )
+            ),
         ),
     )
 
