@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, date, timedelta
 from typing import Any
 
 from fasthtml.common import (
@@ -24,7 +24,12 @@ from fasthtml.common import (
 )
 
 from romanian_news import Sha256
-from romanian_news.catalog.archive_progress import ArchiveDailyReport, ArchiveDiscoveryMonth
+from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_START
+from romanian_news.catalog.archive_progress import (
+    ArchiveDailyReport,
+    ArchiveDayEvidence,
+    ArchiveDiscoveryMonth,
+)
 from romanian_news.catalog.weekly_status import WeeklyStatusSummary
 from romanian_news.reports import DailyReportDocument, RetrospectiveDailyReport
 from romanian_news.weekly_status import AreaAssessment, StatusSource, WeeklyStatusRead
@@ -260,19 +265,23 @@ def render_status_archive(
 def render_archive_progress(
     discovery: tuple[ArchiveDiscoveryMonth, ...],
     archive_reports: tuple[ArchiveDailyReport, ...],
+    day_evidence: tuple[ArchiveDayEvidence, ...],
     header: Any,
 ) -> tuple[Any, ...]:
     return (
         Title("Historical collection | Press review"),
         Style(_STATUS_STYLES),
         header,
-        Main(Div(_archive_discovery_summary(discovery, archive_reports), cls="status")),
+        Main(
+            Div(_archive_discovery_summary(discovery, archive_reports, day_evidence), cls="status")
+        ),
     )
 
 
 def _archive_discovery_summary(
     months: tuple[ArchiveDiscoveryMonth, ...],
     reports: tuple[ArchiveDailyReport, ...],
+    day_evidence: tuple[ArchiveDayEvidence, ...],
 ) -> Any:
     cards = []
     for outlet_id, label in (("hotnews", "HotNews"), ("digi24", "Digi24")):
@@ -321,23 +330,67 @@ def _archive_discovery_summary(
             "for that month; URL entries may still exist."
         ),
         Div(*cards, cls="status-grid"),
-        H3("Daily reports in this date range"),
+        H3("Daily coverage by publication date"),
         P(
             f"{len(reports):,} daily "
             f"{'report' if len(reports) == 1 else 'reports'} published. "
             "This includes regular reports and reports reconstructed from archived pages."
         ),
-        Ul(
-            *(
-                Li(
-                    A(
-                        report.day.strftime("%-d %B %Y"),
-                        href=f"/reports/{report.version_id}",
-                    )
-                )
-                for report in reports
-            ),
-            cls="status-history",
+        P(
+            "Pending means a report has not been published. Insufficient source means captured "
+            "articles exist from fewer than two outlets. Counts cover only pages with a "
+            "verified publication date. An empty day does not prove there was no news."
         ),
+        _archive_day_list(reports, day_evidence),
         cls="status-coverage",
+    )
+
+
+def _archive_day_list(
+    reports: tuple[ArchiveDailyReport, ...],
+    evidence: tuple[ArchiveDayEvidence, ...],
+) -> Any:
+    published = {report.day: report for report in reports}
+    observed = {item.day: item for item in evidence}
+    months: dict[date, list[Any]] = {}
+    month_states: dict[date, dict[str, int]] = {}
+    day = ARCHIVE_START
+    while day <= ARCHIVE_END:
+        item = observed.get(day)
+        report = published.get(day)
+        if report is not None:
+            state = "Published"
+        elif item is not None and item.captured_articles and len(item.captured_outlets) < 2:
+            state = "Insufficient source"
+        else:
+            state = "Pending"
+        verified = item.verified_pages if item else 0
+        captured = item.captured_articles if item else 0
+        outlets = len(item.captured_outlets) if item else 0
+        label = (
+            f"{day:%-d %B %Y}: {state}; {verified} verified, "
+            f"{captured} captured from {outlets} outlet{'s' if outlets != 1 else ''}"
+        )
+        month = day.replace(day=1)
+        months.setdefault(month, []).append(
+            Li(A(label, href=f"/reports/{report.version_id}") if report else label)
+        )
+        counts = month_states.setdefault(
+            month, {"Published": 0, "Insufficient source": 0, "Pending": 0}
+        )
+        counts[state] += 1
+        day += timedelta(days=1)
+    return Div(
+        *(
+            Details(
+                Summary(
+                    f"{month:%B %Y}: {month_states[month]['Published']} published, "
+                    f"{month_states[month]['Insufficient source']} insufficient source, "
+                    f"{month_states[month]['Pending']} pending"
+                ),
+                Ul(*days, cls="status-history"),
+                open=month == ARCHIVE_START.replace(day=1),
+            )
+            for month, days in months.items()
+        )
     )

@@ -9,8 +9,10 @@ from romanian_news import Sha256
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.archive_progress import (
     ArchiveDailyReport,
+    ArchiveDayEvidence,
     ArchiveDiscoveryMonth,
     list_archive_daily_reports,
+    list_archive_day_evidence,
     list_archive_discovery_months,
 )
 from romanian_news.catalog.research_triggers import read_daily_research_trigger_set
@@ -97,6 +99,9 @@ class ReaderDomain:
     list_archive_reports: Callable[[date, date], tuple[ArchiveDailyReport, ...]] = (
         lambda _start, _end: ()
     )
+    list_archive_day_evidence: Callable[[date, date], tuple[ArchiveDayEvidence, ...]] = (
+        lambda _start, _end: ()
+    )
     read_status: Callable[[date], tuple[Sha256, WeeklyStatusRead]] | None = None
     read_status_version: Callable[[Sha256], tuple[Sha256, WeeklyStatusRead]] | None = None
     read_report_reference: Callable[[ArtifactReference], DailyReportDocument] = (
@@ -117,6 +122,7 @@ PRODUCTION_DOMAIN = ReaderDomain(
     list_status=list_weekly_status,
     list_archive_discovery=list_archive_discovery_months,
     list_archive_reports=list_archive_daily_reports,
+    list_archive_day_evidence=list_archive_day_evidence,
     read_status=read_weekly_status,
     read_status_version=read_weekly_status_version,
     resolve_current_report_version=resolve_current_daily_report_version,

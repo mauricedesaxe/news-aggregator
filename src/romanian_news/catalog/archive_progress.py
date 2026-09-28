@@ -7,6 +7,7 @@ from datetime import date
 from urllib.parse import parse_qs, urlsplit
 
 from romanian_news.catalog_transport import catalog_query
+from romanian_news.daily import bucharest_day_window
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,66 @@ class ArchiveDiscoveryMonth:
 class ArchiveDailyReport:
     day: date
     version_id: str
+
+
+@dataclass(frozen=True)
+class ArchiveDayEvidence:
+    day: date
+    verified_pages: int
+    captured_articles: int
+    captured_outlets: tuple[str, ...]
+
+
+def list_archive_day_evidence(start: date, end: date) -> tuple[ArchiveDayEvidence, ...]:
+    start_at = bucharest_day_window(start)[0]
+    end_at = bucharest_day_window(end)[1]
+    rows = catalog_query(
+        """
+        SELECT * FROM (
+        WITH latest_checks AS (
+            SELECT DISTINCT ON (outlet_id, canonical_url)
+                   outlet_id, canonical_url, status, published_at
+            FROM news_archive_page_checks
+            WHERE outlet_id IN ('hotnews', 'digi24')
+            ORDER BY outlet_id, canonical_url, fetched_at DESC, id DESC
+        ), evidence AS (
+            SELECT (published_at AT TIME ZONE 'Europe/Bucharest')::date AS day,
+                   outlet_id, 'verified' AS kind, canonical_url AS url
+            FROM latest_checks
+            WHERE status = 'accepted' AND published_at >= %s AND published_at < %s
+            UNION ALL
+            SELECT (capture.published_at AT TIME ZONE 'Europe/Bucharest')::date AS day,
+                   observation.outlet_id, 'captured' AS kind, capture.discovered_url AS url
+            FROM news_archive_article_captures capture
+            JOIN news_archive_sitemap_observations observation
+              ON observation.id = capture.observation_id
+            WHERE observation.outlet_id IN ('hotnews', 'digi24')
+              AND capture.published_at >= %s AND capture.published_at < %s
+        )
+        SELECT day, outlet_id, kind, COUNT(DISTINCT url) AS article_count
+        FROM evidence
+        GROUP BY day, outlet_id, kind
+        ORDER BY day
+        ) day_evidence
+        """,
+        [start_at, end_at, start_at, end_at],
+    )
+    verified: dict[date, int] = defaultdict(int)
+    captured: dict[date, int] = defaultdict(int)
+    outlets: dict[date, set[str]] = defaultdict(set)
+    for row in rows:
+        day = date.fromisoformat(str(row["day"]))
+        count = int(row["article_count"])
+        if row["kind"] == "verified":
+            verified[day] += count
+        else:
+            captured[day] += count
+            if count:
+                outlets[day].add(str(row["outlet_id"]))
+    return tuple(
+        ArchiveDayEvidence(day, verified[day], captured[day], tuple(sorted(outlets[day])))
+        for day in sorted(verified.keys() | captured.keys())
+    )
 
 
 def list_archive_daily_reports(start: date, end: date) -> tuple[ArchiveDailyReport, ...]:

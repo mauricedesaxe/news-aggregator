@@ -332,10 +332,14 @@ def _register_daily_routes(app: FastHTML, settings: ReaderSettings, domain: Read
         try:
             discovery = domain.list_archive_discovery()
             archive_reports = domain.list_archive_reports(ARCHIVE_START, ARCHIVE_END)
+            day_evidence = domain.list_archive_day_evidence(ARCHIVE_START, ARCHIVE_END)
         except ResearchCatalogError:
             return _unavailable_page(request)
         return render_archive_progress(
-            discovery, archive_reports, _site_header(str(request.session["csrf_token"]))
+            discovery,
+            archive_reports,
+            day_evidence,
+            _site_header(str(request.session["csrf_token"])),
         )
 
     @_route(app, "get", "/reports/exact/{report_version_id}")
