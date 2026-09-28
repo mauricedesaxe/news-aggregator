@@ -31,7 +31,13 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --frozen --no-default-groups
 
-      - name: Apply and verify catalog migrations
+      - name: Apply migrations as schema owner
+        env:
+          NEWS_POSTGRES_DSN: ${{ secrets.NEWS_POSTGRES_MIGRATION_DSN }}
+          NEWS_POSTGRES_RUNTIME_DSN: ${{ secrets.NEWS_POSTGRES_DSN }}
+        run: uv run --no-sync python scripts/activate_news_catalog_schema.py
+
+      - name: Verify catalog migrations in Dagster runtime
         env:
           DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
           DAGSTER_CLOUD_DEPLOYMENT: ${{ secrets.DAGSTER_CLOUD_DEPLOYMENT }}
