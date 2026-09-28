@@ -76,11 +76,18 @@ def test_report_archive_shows_year_break_for_historical_report() -> None:
 
 
 def test_exact_report_keeps_requested_version() -> None:
-    seen: list[str] = []
+    days = {
+        REPORT_VERSION: date(2026, 9, 27),
+        OLD_VERSION: date(2025, 9, 29),
+    }
+
+    def read_report(version: str):
+        return _daily_report().model_copy(update={"day": days[version]})
+
     domain = replace(
         _client_domain(reports=()),
         resolve_current_report_version=lambda _version: REPORT_VERSION,
-        read_report=lambda version: seen.append(version) or _daily_report(),
+        read_report=read_report,
     )
     app = create_app(
         ReaderSettings(app_password="correct horse", session_secret="s" * 32),
@@ -91,6 +98,7 @@ def test_exact_report_keeps_requested_version() -> None:
         response = client.get(f"/reports/exact/{OLD_VERSION}", follow_redirects=False)
 
     assert response.status_code == 200
-    assert seen == [OLD_VERSION]
+    assert "29 September 2025" in response.text
+    assert "27 September 2026" not in response.text
     assert "Saved version" in response.text
     assert f'id="source-{"f" * 64}"' in response.text

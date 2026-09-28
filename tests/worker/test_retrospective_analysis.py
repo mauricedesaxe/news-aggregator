@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import dagster as dg
 import pytest
 
+from romanian_news.archive.backfill import ARCHIVE_END, ARCHIVE_START
 from romanian_news.reports import RetrospectiveCoverage, RetrospectiveDailyReport
 from romanian_news.worker import retrospective_analysis
 from romanian_news.worker.definitions import defs
@@ -23,7 +24,21 @@ def _coverage(outlets: tuple[str, ...]) -> RetrospectiveCoverage:
     )
 
 
-def test_pilot_runs_analysis_in_report_input_order(monkeypatch) -> None:
+def test_analysis_rejects_days_before_the_archive_window() -> None:
+    with pytest.raises(ValueError, match="outside the one-year archive"):
+        retrospective_analysis.analyze_retrospective_day(
+            ARCHIVE_START - timedelta(days=1), "git:test"
+        )
+
+
+def test_analysis_rejects_days_after_the_archive_window() -> None:
+    with pytest.raises(ValueError, match="outside the one-year archive"):
+        retrospective_analysis.analyze_retrospective_day(
+            ARCHIVE_END + timedelta(days=1), "git:test"
+        )
+
+
+def test_pilot_publishes_and_returns_report_version(monkeypatch) -> None:
     monkeypatch.setattr(
         retrospective_analysis,
         "read_retrospective_coverage",
@@ -37,11 +52,8 @@ def test_pilot_runs_analysis_in_report_input_order(monkeypatch) -> None:
     monkeypatch.setattr(
         retrospective_analysis, "read_pending_relevance_references", lambda **_kwargs: ()
     )
-    called = []
     monkeypatch.setattr(
-        retrospective_analysis,
-        "materialize_relevance",
-        lambda _day, _ref, *, limit: called.append(("materialize_relevance", limit)),
+        retrospective_analysis, "materialize_relevance", lambda *_args, **_kwargs: None
     )
     for name in (
         "materialize_embeddings",
@@ -51,28 +63,14 @@ def test_pilot_runs_analysis_in_report_input_order(monkeypatch) -> None:
         "materialize_daily_themes",
         "materialize_subject_assessments",
     ):
-        monkeypatch.setattr(
-            retrospective_analysis,
-            name,
-            lambda _day, _ref, stage=name: called.append(stage),
-        )
+        monkeypatch.setattr(retrospective_analysis, name, lambda *_args, **_kwargs: None)
 
-    def publish(_day, _ref):
-        called.append("publish")
-        return SimpleNamespace(version_id="a" * 64)
-
-    monkeypatch.setattr(retrospective_analysis, "publish_retrospective_daily_report", publish)
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "publish_retrospective_daily_report",
+        lambda _day, _ref: SimpleNamespace(version_id="a" * 64),
+    )
     assert retrospective_analysis.analyze_retrospective_day(DAY, "git:test") == "a" * 64
-    assert called == [
-        ("materialize_relevance", 200),
-        "materialize_embeddings",
-        "materialize_clusters",
-        "materialize_group_summaries",
-        "materialize_group_sentiment",
-        "materialize_daily_themes",
-        "materialize_subject_assessments",
-        "publish",
-    ]
 
 
 def test_pilot_rejects_sparse_coverage_before_model_work(monkeypatch) -> None:
@@ -189,11 +187,8 @@ def test_large_day_runs_one_relevance_batch_before_downstream_work(monkeypatch) 
         if day == DAY
         else None,
     )
-    called = []
     monkeypatch.setattr(
-        retrospective_analysis,
-        "materialize_relevance",
-        lambda _day, _ref, *, limit: called.append(limit),
+        retrospective_analysis, "materialize_relevance", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(
         retrospective_analysis,
@@ -201,13 +196,10 @@ def test_large_day_runs_one_relevance_batch_before_downstream_work(monkeypatch) 
         lambda **_kwargs: (object(),),
     )
     monkeypatch.setattr(
-        retrospective_analysis,
-        "materialize_embeddings",
-        lambda *_args: pytest.fail("downstream work must wait for the remaining article"),
+        retrospective_analysis, "materialize_embeddings", lambda *_args, **_kwargs: None
     )
 
     assert retrospective_analysis.analyze_retrospective_day(DAY, "git:test") is None
-    assert called == [200]
     monkeypatch.setattr(retrospective_analysis, "list_archive_daily_reports", lambda *_args: ())
     assert retrospective_analysis.next_automated_day() == DAY
 

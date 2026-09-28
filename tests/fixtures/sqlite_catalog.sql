@@ -1749,6 +1749,7 @@ CREATE TABLE IF NOT EXISTS news_archive_page_checks (
     rejection TEXT,
     status TEXT NOT NULL CHECK (status IN ('accepted', 'rejected', 'retryable')),
     CHECK ((status = 'accepted') = (published_at IS NOT NULL)),
+    CHECK (status != 'accepted' OR (page_sha256 IS NOT NULL AND title IS NOT NULL)),
     UNIQUE (observation_id, canonical_url, page_sha256)
 );
 

@@ -65,6 +65,7 @@ def test_full_evaluation_runs_independent_gates_with_the_same_article(monkeypatc
     )
     calls = []
     attempts = []
+    request_budgets = []
 
     def trace(operation, request_id, inputs, call):
         calls.append((operation, request_id, inputs))
@@ -74,14 +75,14 @@ def test_full_evaluation_runs_independent_gates_with_the_same_article(monkeypatc
             trace=_trace(len(calls)),
         )
 
+    def create(**kwargs):
+        request_budgets.append(kwargs)
+        return next(responses)
+
     monkeypatch.setattr(
         relevance_v3,
         "openrouter_client",
-        lambda: SimpleNamespace(
-            chat=SimpleNamespace(
-                completions=SimpleNamespace(create=lambda **_kwargs: next(responses))
-            )
-        ),
+        lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))),
     )
     monkeypatch.setattr(relevance_v3, "trace_provider_call", trace)
     monkeypatch.setattr(
@@ -95,6 +96,11 @@ def test_full_evaluation_runs_independent_gates_with_the_same_article(monkeypatc
     )
 
     assert output.impact is not None
+    assert [(kwargs["model"], kwargs["max_tokens"]) for kwargs in request_budgets] == [
+        (RELEVANCE_V3_POLICY.context.model, RELEVANCE_V3_POLICY.context.max_tokens),
+        (RELEVANCE_V3_POLICY.impact.model, RELEVANCE_V3_POLICY.impact.max_tokens),
+    ]
+    assert RELEVANCE_V3_POLICY.impact.max_tokens > RELEVANCE_V3_POLICY.context.max_tokens
     article_message = calls[0][2]["messages"][1]
     assert {
         "accepted": output.accepted,
@@ -646,7 +652,6 @@ def test_policy_and_request_identity_cover_schemas_acceptance_and_mode() -> None
     payload = relevance_v3_policy_payload(RELEVANCE_V3_POLICY)
     reference = _reference()
 
-    assert RELEVANCE_V3_POLICY.impact.max_tokens == 2048
     assert relevance_v3_policy_digest() == (
         "9420c08458d20768bf2a202d9b28ea222805da76f518bf85a85d5b043995978c"
     )
