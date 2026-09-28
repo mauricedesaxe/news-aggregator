@@ -8,8 +8,10 @@ import pytest
 from romanian_news.archive.discovery import sitemap_targets
 from romanian_news.catalog.archive_progress import (
     ArchiveDailyReport,
+    ArchiveDayEvidence,
     ArchiveDiscoveryMonth,
     list_archive_daily_reports,
+    list_archive_day_evidence,
     list_archive_discovery_months,
 )
 from romanian_news.catalog.archive_report_coverage import read_retrospective_coverage
@@ -17,6 +19,71 @@ from romanian_news.catalog.schema import ensure_news_catalog_schema
 from romanian_news.catalog_transport import catalog_batch
 
 DAY = date(2025, 9, 19)
+
+
+@pytest.mark.skipif(
+    os.getenv("NEWS_TEST_POSTGRES_DSN") is None,
+    reason="NEWS_TEST_POSTGRES_DSN is required",
+)
+def test_archive_day_evidence_uses_bucharest_dates_and_distinct_captures(
+    postgres_news_schema: str,
+) -> None:
+    del postgres_news_schema
+    ensure_news_catalog_schema()
+    observation_id = "a" * 64
+    first_url = "https://hotnews.ro/story-1"
+    second_url = "https://hotnews.ro/story-2"
+    fetched_at = datetime(2026, 9, 27, 10, tzinfo=UTC)
+    catalog_batch(
+        [
+            _observation_statement(
+                observation_id,
+                "hotnews",
+                sitemap_targets("hotnews", DAY, DAY)[0],
+                "b" * 64,
+                fetched_at,
+                2,
+            ),
+            _entry_statement(observation_id, first_url),
+            _entry_statement(observation_id, second_url),
+            _page_check_statement(
+                "c" * 64,
+                observation_id,
+                "hotnews",
+                first_url,
+                fetched_at,
+                "accepted",
+                published_at=datetime(2025, 9, 19, 20, 59, tzinfo=UTC),
+                page_sha256="d" * 64,
+                title="First",
+            ),
+            _page_check_statement(
+                "1" * 64,
+                observation_id,
+                "hotnews",
+                second_url,
+                fetched_at,
+                "accepted",
+                published_at=datetime(2025, 9, 19, 21, tzinfo=UTC),
+                page_sha256="2" * 64,
+                title="Second",
+            ),
+            *_capture_statements(
+                "3" * 64,
+                "4" * 64,
+                "news:article:second",
+                observation_id,
+                second_url,
+                fetched_at,
+                datetime(2025, 9, 19, 21, tzinfo=UTC),
+            ),
+        ]
+    )
+
+    assert list_archive_day_evidence(DAY, DAY + timedelta(days=1)) == (
+        ArchiveDayEvidence(DAY, 1, 0, ()),
+        ArchiveDayEvidence(DAY + timedelta(days=1), 1, 1, ("hotnews",)),
+    )
 
 
 def _observation_statement(

@@ -9,7 +9,11 @@ import pytest
 from starlette.testclient import TestClient
 
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.archive_progress import ArchiveDailyReport, ArchiveDiscoveryMonth
+from romanian_news.catalog.archive_progress import (
+    ArchiveDailyReport,
+    ArchiveDayEvidence,
+    ArchiveDiscoveryMonth,
+)
 from romanian_news.catalog.weekly_status import WeeklyStatusNotFound, WeeklyStatusSummary
 from romanian_news.catalog_transport import ResearchCatalogError
 from romanian_news.reader.app import PRODUCTION_DOMAIN, ReaderSettings, create_app
@@ -84,6 +88,7 @@ def _app(
     discovery: tuple[ArchiveDiscoveryMonth, ...] = (),
     archive_reports: tuple[ArchiveDailyReport, ...] = (),
     report_reader: Callable[[ArtifactReference], DailyReportDocument] | None = None,
+    day_evidence: tuple[ArchiveDayEvidence, ...] = (),
 ):
     domain = replace(
         PRODUCTION_DOMAIN,
@@ -92,6 +97,7 @@ def _app(
         ),
         list_archive_discovery=lambda: discovery,
         list_archive_reports=lambda _start, _end: archive_reports,
+        list_archive_day_evidence=lambda _start, _end: day_evidence,
         read_status=lambda _week: (STATUS_VERSION, _read()),
         read_status_version=lambda _version: (STATUS_VERSION, _read()),
         read_report_reference=report_reader
@@ -259,8 +265,32 @@ def test_collection_progress_is_separate_from_weekly_archive() -> None:
     assert "URL entries may still exist" in response.text
     assert response.text.count("<summary>Monthly breakdown</summary>") == 2
     assert response.text.index('class="status-grid"') < response.text.index(
-        "Daily reports in this date range"
+        "Daily coverage by publication date"
     )
+
+
+def test_collection_progress_lists_unreported_days_without_claiming_completeness() -> None:
+    reports = (ArchiveDailyReport(date(2025, 9, 29), DAILY_VERSION),)
+    evidence = (
+        ArchiveDayEvidence(date(2025, 9, 28), 8, 3, ("hotnews",)),
+        ArchiveDayEvidence(date(2025, 9, 29), 12, 7, ("digi24", "hotnews")),
+        ArchiveDayEvidence(date(2025, 9, 30), 10, 5, ("digi24", "hotnews")),
+    )
+    with TestClient(_app(archive_reports=reports, day_evidence=evidence)) as client:
+        _sign_in(client)
+        response = client.get("/reports/backfill")
+
+    assert response.status_code == 200
+    assert "27 September 2025: Pending; 0 verified, 0 captured from 0 outlets" in response.text
+    assert (
+        "28 September 2025: Insufficient source; 8 verified, 3 captured from 1 outlet"
+        in response.text
+    )
+    assert "29 September 2025: Published; 12 verified, 7 captured from 2 outlets" in response.text
+    assert "30 September 2025: Pending; 10 verified, 5 captured from 2 outlets" in response.text
+    assert "26 September 2026: Pending" in response.text
+    assert "An empty day does not prove there was no news" in response.text
+    assert response.text.count("<summary>") >= 13
 
 
 def test_old_strong_assessment_shows_cited_evidence_instead_of_rating() -> None:
