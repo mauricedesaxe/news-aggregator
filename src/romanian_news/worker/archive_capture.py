@@ -56,7 +56,7 @@ def archive_article_capture_batch() -> None:
     job=archive_article_capture_batch,
     cron_schedule="10,25,40,55 * * * *",
     execution_timezone="UTC",
-    default_status=dg.DefaultScheduleStatus.RUNNING,
+    default_status=dg.DefaultScheduleStatus.STOPPED,
 )
 def scheduled_archive_article_capture(
     context: dg.ScheduleEvaluationContext,

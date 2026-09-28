@@ -40,7 +40,7 @@ def archive_page_backfill_job() -> None:
     job=archive_page_backfill_job,
     cron_schedule="3,18,33,48 * * * *",
     execution_timezone="UTC",
-    default_status=dg.DefaultScheduleStatus.RUNNING,
+    default_status=dg.DefaultScheduleStatus.STOPPED,
 )
 def scheduled_archive_page_backfill(
     context: dg.ScheduleEvaluationContext,

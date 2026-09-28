@@ -1,0 +1,110 @@
+name: Stop historical archive backfill
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stop:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - name: Stop historical schedules
+        env:
+          DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          DAGSTER_CLOUD_GRAPHQL_URL: ${{ secrets.DAGSTER_CLOUD_GRAPHQL_URL }}
+          DAGSTER_CLOUD_LOCATION: ${{ secrets.DAGSTER_CLOUD_LOCATION }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from urllib.request import Request, urlopen
+
+          endpoint = os.environ["DAGSTER_CLOUD_GRAPHQL_URL"]
+          headers = {
+              "Content-Type": "application/json",
+              "Dagster-Cloud-Api-Token": os.environ["DAGSTER_CLOUD_API_TOKEN"],
+          }
+          historical = {
+              "scheduled_historical_weekly_status",
+              "scheduled_archive_page_backfill",
+              "scheduled_archive_article_capture",
+              "scheduled_retrospective_analysis",
+          }
+
+          def execute(query, variables=None):
+              payload = json.dumps({"query": query, "variables": variables or {}}).encode()
+              request = Request(endpoint, data=payload, headers=headers)
+              with urlopen(request, timeout=30) as response:
+                  result = json.load(response)
+              if result.get("errors"):
+                  raise RuntimeError(result["errors"])
+              return result["data"]
+
+          repositories = execute("""
+            query Repositories {
+              repositoriesOrError {
+                __typename
+                ... on RepositoryConnection { nodes { name location { name } } }
+              }
+            }
+          """)["repositoriesOrError"]
+          if repositories["__typename"] != "RepositoryConnection":
+              raise RuntimeError("Dagster repository lookup failed")
+          matches = [
+              node for node in repositories["nodes"]
+              if node["location"]["name"] == os.environ["DAGSTER_CLOUD_LOCATION"]
+          ]
+          if len(matches) != 1:
+              raise RuntimeError(f"Expected one Romanian news repository, found {len(matches)}")
+          selector = {
+              "repositoryLocationName": os.environ["DAGSTER_CLOUD_LOCATION"],
+              "repositoryName": matches[0]["name"],
+          }
+
+          def schedule_states():
+              result = execute("""
+                query Schedules($selector: RepositorySelector!) {
+                  schedulesOrError(repositorySelector: $selector) {
+                    __typename
+                    ... on Schedules {
+                      results { id name scheduleState { id status } }
+                    }
+                    ... on PythonError { message }
+                  }
+                }
+              """, {"selector": selector})["schedulesOrError"]
+              if result["__typename"] != "Schedules":
+                  raise RuntimeError(f"Dagster schedule lookup failed: {result}")
+              return {schedule["name"]: schedule for schedule in result["results"]}
+
+          schedules = schedule_states()
+          missing = historical - schedules.keys()
+          if missing:
+              raise RuntimeError(f"Historical schedules missing: {sorted(missing)}")
+          for name in sorted(historical):
+              schedule = schedules[name]
+              if schedule["scheduleState"]["status"] != "STOPPED":
+                  execute("""
+                    mutation StopSchedule($origin: String!, $selector: String!) {
+                      stopRunningSchedule(
+                        scheduleOriginId: $origin,
+                        scheduleSelectorId: $selector
+                      ) { __typename }
+                    }
+                  """, {
+                      "origin": schedule["scheduleState"]["id"],
+                      "selector": schedule["id"],
+                  })
+              print(f"{name}: {schedule_states()[name]['scheduleState']['status']}")
+
+          final = schedule_states()
+          if any(final[name]["scheduleState"]["status"] != "STOPPED" for name in historical):
+              raise RuntimeError("A historical schedule is still running")
+          for name in ("hourly_registered_feed_poll", "scheduled_weekly_status"):
+              print(f"{name}: {final[name]['scheduleState']['status']}")
+          PY

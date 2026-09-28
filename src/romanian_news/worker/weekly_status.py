@@ -78,7 +78,7 @@ def next_historical_week(today: date) -> date | None:
     job=weekly_status_refresh,
     cron_schedule="20 */2 * * *",
     execution_timezone="UTC",
-    default_status=dg.DefaultScheduleStatus.RUNNING,
+    default_status=dg.DefaultScheduleStatus.STOPPED,
 )
 def scheduled_historical_weekly_status(
     context: dg.ScheduleEvaluationContext,

@@ -163,7 +163,7 @@ def next_automated_day() -> date | None:
     job=retrospective_analysis_pilot,
     cron_schedule="5,35 * * * *",
     execution_timezone="UTC",
-    default_status=dg.DefaultScheduleStatus.RUNNING,
+    default_status=dg.DefaultScheduleStatus.STOPPED,
 )
 def scheduled_retrospective_analysis(
     context: dg.ScheduleEvaluationContext,

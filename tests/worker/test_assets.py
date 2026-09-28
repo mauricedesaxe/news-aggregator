@@ -62,22 +62,26 @@ def test_weekly_partitions_start_on_monday() -> None:
     assert window.end.date().isoformat() == "2026-09-07"
 
 
-def test_automation_starts_running_and_uses_bucharest_time() -> None:
+def test_current_automation_runs_while_historical_backfill_is_stopped() -> None:
     assert hourly_registered_feed_poll.default_status == dg.DefaultScheduleStatus.RUNNING
     assert daily_morning_report_check.default_status == dg.DefaultScheduleStatus.RUNNING
     assert (
         definitions.scheduled_archive_page_backfill.default_status
-        == dg.DefaultScheduleStatus.RUNNING
+        == dg.DefaultScheduleStatus.STOPPED
     )
     assert (
         definitions.scheduled_archive_article_capture.default_status
-        == dg.DefaultScheduleStatus.RUNNING
+        == dg.DefaultScheduleStatus.STOPPED
     )
     assert (
         definitions.scheduled_retrospective_analysis.default_status
-        == dg.DefaultScheduleStatus.RUNNING
+        == dg.DefaultScheduleStatus.STOPPED
     )
     assert definitions.scheduled_weekly_status.default_status == dg.DefaultScheduleStatus.RUNNING
+    assert (
+        definitions.scheduled_historical_weekly_status.default_status
+        == dg.DefaultScheduleStatus.STOPPED
+    )
     assert weekly_freshness.default_status == dg.DefaultSensorStatus.RUNNING
     assert weekly_freshness.minimum_interval_seconds == 3600
     assert scheduled_video_digest.default_status == dg.DefaultScheduleStatus.STOPPED
