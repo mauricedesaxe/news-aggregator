@@ -6,6 +6,7 @@ import dagster as dg
 
 from romanian_news.analysis.relevance import read_pending_relevance_references
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
+from romanian_news.analysis.tracing import archive_model_day
 from romanian_news.archive.backfill import next_page_window
 from romanian_news.archive.campaign import (
     ARCHIVE_END,
@@ -14,9 +15,10 @@ from romanian_news.archive.campaign import (
 )
 from romanian_news.archive.capture_batch import next_capture_window
 from romanian_news.archive.windows import month_windows
+from romanian_news.catalog.archive_model_spend import ArchiveSpendLimitReached, read_archive_spend
 from romanian_news.catalog.archive_progress import list_archive_daily_reports
 from romanian_news.catalog.archive_report_coverage import read_retrospective_coverage
-from romanian_news.config import IMPLEMENTATION_REF
+from romanian_news.config import ARCHIVE_DAY_SPEND_LIMIT_USD, IMPLEMENTATION_REF
 from romanian_news.daily import read_daily_article_references
 from romanian_news.feedback import read_daily_report_version
 from romanian_news.reports import RetrospectiveDailyReport
@@ -57,20 +59,24 @@ def analyze_retrospective_day(day: date, implementation_ref: str) -> str | None:
         raise ValueError("Retrospective analysis requires published articles")
     if article_count > coverage.captured_article_count:
         raise ValueError("Published articles exceed recorded archive captures")
-    materialize_relevance(day, implementation_ref, limit=_ARTICLE_LIMIT)
-    if read_pending_relevance_references(
-        day=day, request_id_for_article=production_relevance_v3_request_id
-    ):
-        return None
-    for stage in (
-        materialize_embeddings,
-        materialize_clusters,
-        materialize_group_summaries,
-        materialize_group_sentiment,
-        materialize_daily_themes,
-        materialize_subject_assessments,
-    ):
-        stage(day, implementation_ref)
+    spend = read_archive_spend(day)
+    if spend.spent_usd + spend.held_usd > ARCHIVE_DAY_SPEND_LIMIT_USD:
+        raise ArchiveSpendLimitReached(f"Archive day {day} is over its model spend limit")
+    with archive_model_day(day):
+        materialize_relevance(day, implementation_ref, limit=_ARTICLE_LIMIT)
+        if read_pending_relevance_references(
+            day=day, request_id_for_article=production_relevance_v3_request_id
+        ):
+            return None
+        for stage in (
+            materialize_embeddings,
+            materialize_clusters,
+            materialize_group_summaries,
+            materialize_group_sentiment,
+            materialize_daily_themes,
+            materialize_subject_assessments,
+        ):
+            stage(day, implementation_ref)
     return publish_retrospective_daily_report(day, implementation_ref).version_id
 
 
@@ -115,6 +121,10 @@ def next_automated_day() -> date | None:
             if coverage is not None and len(coverage.included_outlets) >= 2:
                 article_count = len(read_daily_article_references(day).values)
                 if article_count >= 1:
+                    spend = read_archive_spend(day)
+                    if spend.spent_usd + spend.held_usd >= ARCHIVE_DAY_SPEND_LIMIT_USD:
+                        day += timedelta(days=1)
+                        continue
                     if published is None:
                         return day
                     current = read_daily_report_version(published.version_id)

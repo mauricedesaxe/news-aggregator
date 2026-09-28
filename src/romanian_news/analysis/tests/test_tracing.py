@@ -1,8 +1,10 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 
 import pytest
 
 from romanian_news.analysis import tracing
+from romanian_news.catalog import archive_model_spend
 
 
 class _Response:
@@ -82,6 +84,53 @@ def test_tracing_disabled_calls_provider_without_observation(monkeypatch, _reset
     assert result.response is response
     assert result.trace is None
     assert _reset_tracing.observations == []
+
+
+def test_archive_call_reserves_before_provider_and_settles_response(monkeypatch) -> None:
+    monkeypatch.setattr(tracing, "LANGFUSE_PUBLIC_KEY", None)
+    events = []
+    monkeypatch.setattr(
+        archive_model_spend,
+        "reserve_archive_spend",
+        lambda day, reservation_id, operation, request, **kwargs: events.append(
+            ("reserve", day, reservation_id, operation, request, kwargs["limit_usd"])
+        ),
+    )
+    monkeypatch.setattr(
+        archive_model_spend,
+        "settle_archive_spend",
+        lambda reservation_id, cost: events.append(("settle", reservation_id, cost)),
+    )
+    monkeypatch.setattr(
+        archive_model_spend,
+        "read_archive_spend",
+        lambda _day: archive_model_spend.ArchiveSpend(Decimal("0.003"), Decimal(0), 1),
+    )
+    with tracing.archive_model_day(date(2025, 9, 27)):
+        result = tracing.trace_provider_call(
+            "news.relevance", "request-1", {}, lambda: (events.append(("call",)), _Response())[1]
+        )
+
+    assert result.response.model_dump(mode="json")["id"] == "response-1"
+    assert [value[0] for value in events] == ["reserve", "call", "settle"]
+    assert events[0][2] == result.call_id == events[2][1]
+    assert events[2][2] == Decimal("0.003")
+
+
+def test_archive_limit_refusal_never_calls_provider(monkeypatch) -> None:
+    monkeypatch.setattr(tracing, "LANGFUSE_PUBLIC_KEY", None)
+    monkeypatch.setattr(
+        archive_model_spend,
+        "reserve_archive_spend",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            archive_model_spend.ArchiveSpendLimitReached("full")
+        ),
+    )
+    with tracing.archive_model_day(date(2025, 9, 27)):
+        with pytest.raises(archive_model_spend.ArchiveSpendLimitReached, match="full"):
+            tracing.trace_provider_call(
+                "news.relevance", "request-1", {}, lambda: pytest.fail("provider called")
+            )
 
 
 def test_successful_trace_records_full_observation(_reset_tracing) -> None:

@@ -3,8 +3,11 @@ from __future__ import annotations
 import copy
 import logging
 from collections.abc import Callable, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal, InvalidOperation
 from functools import cache
 from typing import Generic, Literal, NotRequired, Protocol, TypedDict, TypeVar
 from uuid import UUID, uuid4
@@ -19,6 +22,7 @@ from openai.types.chat import (
 from openai.types.shared_params import ResponseFormatJSONSchema
 
 from romanian_news.config import (
+    ARCHIVE_DAY_SPEND_LIMIT_USD,
     LANGFUSE_BASE_URL,
     LANGFUSE_PROJECT_ID,
     LANGFUSE_PUBLIC_KEY,
@@ -27,6 +31,20 @@ from romanian_news.config import (
 
 logger = logging.getLogger(__name__)
 _TRACE_PROVIDER = "langfuse"
+_ARCHIVE_DAY: ContextVar[date | None] = ContextVar("archive_model_day", default=None)
+
+
+@contextmanager
+def archive_model_day(day: date):
+    token = _ARCHIVE_DAY.set(day)
+    try:
+        yield
+    finally:
+        _ARCHIVE_DAY.reset(token)
+
+
+def archive_model_day_active() -> bool:
+    return _ARCHIVE_DAY.get() is not None
 
 
 class ProviderChatRequest(TypedDict):
@@ -82,8 +100,46 @@ def trace_provider_call(
 ) -> ProviderCallResult[ProviderResponseT]:
     """Call one provider and return its durable trace identity when available."""
     call_id = uuid4()
+    day = _ARCHIVE_DAY.get()
+    if day is not None:
+        from romanian_news.catalog.archive_model_spend import reserve_archive_spend
+
+        reserve_archive_spend(
+            day,
+            call_id,
+            operation_key,
+            request_id,
+            limit_usd=ARCHIVE_DAY_SPEND_LIMIT_USD,
+        )
+
+    def metered_call() -> ProviderResponseT:
+        response = call()
+        if day is not None:
+            from romanian_news.catalog.archive_model_spend import (
+                ArchiveSpendLimitReached,
+                read_archive_spend,
+                settle_archive_spend,
+            )
+
+            payload = response.model_dump(mode="json")
+            usage = payload.get("usage")
+            cost = usage.get("cost") if isinstance(usage, Mapping) else None
+            if isinstance(cost, int | float | str) and not isinstance(cost, bool):
+                try:
+                    measured = Decimal(str(cost))
+                except InvalidOperation:
+                    measured = None
+                if measured is not None and measured.is_finite() and measured >= 0:
+                    settle_archive_spend(call_id, measured)
+                    spent = read_archive_spend(day)
+                    if spent.spent_usd + spent.held_usd > ARCHIVE_DAY_SPEND_LIMIT_USD:
+                        raise ArchiveSpendLimitReached(
+                            f"Archive day {day} exceeded ${ARCHIVE_DAY_SPEND_LIMIT_USD} after provider accounting"
+                        )
+        return response
+
     if not langfuse_tracing_available():
-        return ProviderCallResult(response=call(), call_id=call_id, trace=None)
+        return ProviderCallResult(response=metered_call(), call_id=call_id, trace=None)
     assert LANGFUSE_PROJECT_ID is not None
 
     try:
@@ -100,7 +156,7 @@ def trace_provider_call(
         )
     except Exception:
         logger.exception("Langfuse trace setup failed for %s", operation_key)
-        return ProviderCallResult(response=call(), call_id=call_id, trace=None)
+        return ProviderCallResult(response=metered_call(), call_id=call_id, trace=None)
 
     reference = ModelTraceReference(
         provider=_TRACE_PROVIDER,
@@ -110,7 +166,7 @@ def trace_provider_call(
         recorded_at=datetime.now(UTC),
     )
     try:
-        response = call()
+        response = metered_call()
     except Exception as error:
         _finish_observation(
             observation,

@@ -125,6 +125,9 @@ NEWS_CATALOG_MIGRATIONS = (
     NewsCatalogMigration(
         21, "archive_article_provenance", MIGRATIONS_PATH / "0021_archive_article_provenance.sql"
     ),
+    NewsCatalogMigration(
+        22, "archive_model_spend", MIGRATIONS_PATH / "0022_archive_model_spend.sql"
+    ),
 )
 
 

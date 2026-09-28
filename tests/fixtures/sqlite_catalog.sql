@@ -1784,3 +1784,15 @@ BEGIN SELECT RAISE(ABORT, 'archive article captures are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS news_archive_article_captures_reject_deletes
 BEFORE DELETE ON news_archive_article_captures
 BEGIN SELECT RAISE(ABORT, 'archive article captures are immutable'); END;
+
+CREATE TABLE IF NOT EXISTS news_archive_model_reservations (
+    reservation_id TEXT PRIMARY KEY,
+    day TEXT NOT NULL,
+    operation_key TEXT NOT NULL,
+    request_id TEXT NOT NULL,
+    reserved_usd REAL NOT NULL CHECK (reserved_usd > 0),
+    actual_usd REAL CHECK (actual_usd >= 0),
+    created_at TEXT NOT NULL,
+    settled_at TEXT,
+    CHECK ((actual_usd IS NULL) = (settled_at IS NULL))
+);
