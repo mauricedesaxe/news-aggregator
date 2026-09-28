@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -284,3 +284,57 @@ def test_pending_archive_articles_batches_earliest_publications_first(
         "https://hotnews.ro/story-middle",
     )
     assert selected[0].published_at < selected[1].published_at
+
+
+@pytest.mark.parametrize(
+    ("day", "start", "end", "expected_hours"),
+    (
+        (
+            date(2025, 3, 30),
+            datetime(2025, 3, 29, 22, tzinfo=UTC),
+            datetime(2025, 3, 30, 21, tzinfo=UTC),
+            23,
+        ),
+        (
+            date(2025, 10, 26),
+            datetime(2025, 10, 25, 21, tzinfo=UTC),
+            datetime(2025, 10, 26, 22, tzinfo=UTC),
+            25,
+        ),
+        (
+            date(2025, 9, 27),
+            datetime(2025, 9, 26, 21, tzinfo=UTC),
+            datetime(2025, 9, 27, 21, tzinfo=UTC),
+            24,
+        ),
+    ),
+)
+@pytest.mark.skipif(
+    os.getenv("NEWS_TEST_POSTGRES_DSN") is None,
+    reason="NEWS_TEST_POSTGRES_DSN is required",
+)
+def test_pending_archive_articles_uses_bucharest_day_boundaries(
+    postgres_news_schema: str,
+    day: date,
+    start: datetime,
+    end: datetime,
+    expected_hours: int,
+) -> None:
+    del postgres_news_schema
+    ensure_news_catalog_schema()
+    assert (end - start) == timedelta(hours=expected_hours)
+    _seed_accepted_page_checks(
+        (
+            ("https://hotnews.ro/before-window", start - timedelta(microseconds=1)),
+            ("https://hotnews.ro/at-window-start", start),
+            ("https://hotnews.ro/before-window-end", end - timedelta(microseconds=1)),
+            ("https://hotnews.ro/at-window-end", end),
+        )
+    )
+
+    selected = pending_archive_articles("hotnews", day, day, 10)
+
+    assert tuple(page.canonical_url for page in selected) == (
+        "https://hotnews.ro/at-window-start",
+        "https://hotnews.ro/before-window-end",
+    )
