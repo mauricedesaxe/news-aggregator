@@ -37,7 +37,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from romanian_news.archive.backfill import ARCHIVE_END, ARCHIVE_START
+from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_START
 from romanian_news.catalog.weekly_status import (
     WeeklyStatusNotFound,
 )

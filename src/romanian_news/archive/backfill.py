@@ -6,10 +6,6 @@ from datetime import date
 from romanian_news.archive.page_checks import check_archive_pages, pending_page_candidates
 from romanian_news.archive.windows import month_windows
 
-ARCHIVE_START = date(2025, 9, 27)
-ARCHIVE_END = date(2026, 9, 26)
-ARCHIVE_OUTLETS = ("hotnews", "digi24")
-
 
 def next_page_window(outlet_id: str, start: date, end: date) -> tuple[date, date] | None:
     for month_start, month_end in month_windows(start, end):

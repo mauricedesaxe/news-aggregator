@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import dagster as dg
 import pytest
 
-from romanian_news.archive.backfill import ARCHIVE_END, ARCHIVE_START
+from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_START
 from romanian_news.reports import RetrospectiveCoverage, RetrospectiveDailyReport
 from romanian_news.worker import retrospective_analysis
 from romanian_news.worker.definitions import defs

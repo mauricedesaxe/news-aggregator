@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 import dagster as dg
 
 from romanian_news import BUCHAREST
-from romanian_news.archive.backfill import ARCHIVE_END, ARCHIVE_START
+from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_START
 from romanian_news.catalog.weekly_status import (
     WeeklyStatusNotFound,
     publish_weekly_status,

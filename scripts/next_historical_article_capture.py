@@ -5,6 +5,7 @@ import json
 import sys
 from datetime import date
 
+from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_OUTLETS, ARCHIVE_START
 from romanian_news.archive.capture_batch import next_capture_window
 
 
@@ -29,13 +30,9 @@ def next_capture_config(outlet_id: str, start: date, end: date) -> dict[str, obj
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--outlet", choices=("hotnews", "digi24"), required=True)
+    parser.add_argument("--outlet", choices=ARCHIVE_OUTLETS, required=True)
     args = parser.parse_args()
-    config = next_capture_config(
-        args.outlet,
-        date(2025, 9, 27),
-        date(2026, 9, 26),
-    )
+    config = next_capture_config(args.outlet, ARCHIVE_START, ARCHIVE_END)
     sys.stdout.write(json.dumps(config, sort_keys=True) if config else "complete")
     sys.stdout.write("\n")
 
