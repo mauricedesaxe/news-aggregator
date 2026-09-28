@@ -108,17 +108,23 @@ def _seed_published_daily_reports(
 
 
 def _weekly_status_row_counts(catalog: PostgresCatalog) -> dict[str, int]:
+    artifact_count = catalog.execute(
+        "SELECT count(*) AS count FROM artifacts WHERE kind = 'news_weekly_read'"
+    ).fetchone()
+    version_count = catalog.execute(
+        "SELECT count(*) AS count FROM artifact_versions WHERE artifact_id = %s",
+        (WEEKLY_ARTIFACT,),
+    ).fetchone()
+    run_count = catalog.execute(
+        "SELECT count(*) AS count FROM runs WHERE operation_key = 'news.publish_weekly_status'"
+    ).fetchone()
+    assert artifact_count is not None
+    assert version_count is not None
+    assert run_count is not None
     return {
-        "artifacts": catalog.execute(
-            "SELECT count(*) AS count FROM artifacts WHERE kind = 'news_weekly_read'"
-        ).fetchone()["count"],
-        "versions": catalog.execute(
-            "SELECT count(*) AS count FROM artifact_versions WHERE artifact_id = %s",
-            (WEEKLY_ARTIFACT,),
-        ).fetchone()["count"],
-        "runs": catalog.execute(
-            "SELECT count(*) AS count FROM runs WHERE operation_key = 'news.publish_weekly_status'"
-        ).fetchone()["count"],
+        "artifacts": artifact_count["count"],
+        "versions": version_count["count"],
+        "runs": run_count["count"],
     }
 
 
@@ -156,13 +162,12 @@ def test_fresh_refresh_publishes_a_completed_weekly_read_end_to_end(
     ).fetchall()
     assert len(artifact_rows) == 1
     published_version = artifact_rows[0]["current_version_id"]
-    assert (
-        postgres_catalog.execute(
-            "SELECT count(*) AS count FROM artifact_versions WHERE artifact_id = %s",
-            (WEEKLY_ARTIFACT,),
-        ).fetchone()["count"]
-        == 1
-    )
+    version_count = postgres_catalog.execute(
+        "SELECT count(*) AS count FROM artifact_versions WHERE artifact_id = %s",
+        (WEEKLY_ARTIFACT,),
+    ).fetchone()
+    assert version_count is not None
+    assert version_count["count"] == 1
     file_rows = postgres_catalog.execute(
         "SELECT r2_key, content_digest FROM artifact_files WHERE artifact_version_id = %s",
         (published_version,),
@@ -255,8 +260,9 @@ def test_retry_after_head_loss_reuses_the_saved_weekly_output_when_model_text_di
     }
     head = postgres_catalog.execute(
         "SELECT current_version_id FROM artifacts WHERE id = %s", (WEEKLY_ARTIFACT,)
-    ).fetchone()["current_version_id"]
-    assert head == saved_version
+    ).fetchone()
+    assert head is not None
+    assert head["current_version_id"] == saved_version
     version_id, read = read_weekly_status(WEEK)
     assert version_id == saved_version
     assert read == saved_read

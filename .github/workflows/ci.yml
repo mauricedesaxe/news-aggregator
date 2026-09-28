@@ -88,7 +88,11 @@ jobs:
         run: |
           uv run --no-sync pytest \
             tests/contracts/postgres_*.py \
+            tests/contracts/test_archive_backfill_advance.py \
+            tests/contracts/test_archive_capture_batch.py \
+            tests/contracts/test_archive_status_query.py \
             tests/worker/postgres_operations_contract.py \
+            tests/worker/test_catalog_schema.py \
             tests/worker/test_weekly_status.py \
             tests/worker/test_morning_report.py \
             tests/worker/test_video_digest_worker.py \
