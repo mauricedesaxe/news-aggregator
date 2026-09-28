@@ -128,6 +128,11 @@ NEWS_CATALOG_MIGRATIONS = (
     NewsCatalogMigration(
         22, "archive_model_spend", MIGRATIONS_PATH / "0022_archive_model_spend.sql"
     ),
+    NewsCatalogMigration(
+        23,
+        "archive_spend_reconciliation",
+        MIGRATIONS_PATH / "0023_archive_spend_reconciliation.sql",
+    ),
 )
 
 
@@ -194,7 +199,7 @@ def _apply_migrations(connection: psycopg.Connection[dict[str, Any]]) -> None:
                     (migration.version, migration.name, migration.sha256),
                 )
         except psycopg.errors.InsufficientPrivilege:
-            continue
+            break
 
 
 def _verify_schema(connection: psycopg.Connection[dict[str, Any]]) -> None:

@@ -43,6 +43,7 @@ def test_preflight_reads_exact_inputs_without_provider_work(monkeypatch) -> None
         "read_archive_spend",
         lambda _day: ArchiveSpend(Decimal("0.1"), Decimal(0), 4),
     )
+    monkeypatch.setattr(replay_preflight, "read_archive_spend_holds", lambda _day: ())
 
     result = replay_preflight.read_replay_preflight(day)
 
@@ -51,3 +52,4 @@ def test_preflight_reads_exact_inputs_without_provider_work(monkeypatch) -> None
     assert (result.pending_summaries, result.pending_sentiment) == (1, 0)
     assert result.estimated_remaining_usd == Decimal("0.0082")
     assert result.source_ready and result.paid_work_admissible
+    assert result.outstanding_holds == ()

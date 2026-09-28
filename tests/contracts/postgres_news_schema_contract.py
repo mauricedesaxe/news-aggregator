@@ -1933,7 +1933,7 @@ def test_generation_requests_are_rejected_once_the_slot_is_failed(
             )
 
 
-def test_schema_check_skips_migrations_denied_to_the_news_role(
+def test_schema_check_stops_at_first_migration_denied_to_the_news_role(
     postgres_news_schema: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
