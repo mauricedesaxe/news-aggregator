@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
+import pytest
 from starlette.testclient import TestClient
 
 from romanian_news.artifacts import ArtifactReference
@@ -11,6 +13,13 @@ from romanian_news.catalog.archive_progress import ArchiveDailyReport, ArchiveDi
 from romanian_news.catalog.weekly_status import WeeklyStatusNotFound, WeeklyStatusSummary
 from romanian_news.catalog_transport import ResearchCatalogError
 from romanian_news.reader.app import PRODUCTION_DOMAIN, ReaderSettings, create_app
+from romanian_news.reports import (
+    DailyReport,
+    DailyReportDocument,
+    RetrospectiveCoverage,
+    RetrospectiveDailyReport,
+)
+from romanian_news.storage import ResearchObjectIntegrityError, ResearchObjectUnavailable
 from romanian_news.weekly_status import (
     AreaAssessment,
     StatusSource,
@@ -74,6 +83,7 @@ def _read() -> WeeklyStatusRead:
 def _app(
     discovery: tuple[ArchiveDiscoveryMonth, ...] = (),
     archive_reports: tuple[ArchiveDailyReport, ...] = (),
+    report_reader: Callable[[ArtifactReference], DailyReportDocument] | None = None,
 ):
     domain = replace(
         PRODUCTION_DOMAIN,
@@ -84,10 +94,39 @@ def _app(
         list_archive_reports=lambda _start, _end: archive_reports,
         read_status=lambda _week: (STATUS_VERSION, _read()),
         read_status_version=lambda _version: (STATUS_VERSION, _read()),
+        read_report_reference=report_reader
+        or (
+            lambda reference: DailyReport(
+                day=date.fromisoformat(reference.artifact_id.removeprefix("news:daily:")),
+                accepted_article_count=0,
+                theme_count=0,
+                group_count=0,
+                sections=(),
+            )
+        ),
     )
     return create_app(
         ReaderSettings(app_password="correct horse", session_secret="s" * 32),
         domain,
+    )
+
+
+def _retrospective_report() -> RetrospectiveDailyReport:
+    return RetrospectiveDailyReport(
+        day=WEEK_START,
+        accepted_article_count=25,
+        theme_count=0,
+        group_count=0,
+        sections=(),
+        retrospective=RetrospectiveCoverage(
+            capture_started_at=datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
+            capture_ended_at=datetime(2026, 9, 27, 10, 5, tzinfo=UTC),
+            included_outlets=("hotnews", "digi24"),
+            discovered_url_count=200,
+            verified_page_count=80,
+            captured_article_count=40,
+            coverage_note="Other configured outlets were not included.",
+        ),
     )
 
 
@@ -138,6 +177,47 @@ def test_status_archive_and_exact_version_render() -> None:
     assert "Permanent link to this read" not in exact.text
     assert "cited highlight" not in exact.text
     assert "INSUFFICIENT" not in exact.text
+    assert "source pages were captured later" not in week.text
+    assert "source pages were captured later" not in exact.text
+
+
+def test_historical_week_discloses_exact_daily_capture_provenance() -> None:
+    captured: list[ArtifactReference] = []
+
+    def read_report(reference: ArtifactReference) -> RetrospectiveDailyReport:
+        captured.append(reference)
+        return _retrospective_report()
+
+    with TestClient(_app(report_reader=read_report)) as client:
+        _sign_in(client)
+        week = client.get("/status/weeks/2026-09-14")
+        exact = client.get(f"/status/versions/{STATUS_VERSION}")
+
+    for response in (week, exact):
+        assert response.status_code == 200
+        assert "source pages were captured later" in response.text
+        assert "2026-09-27 10:00 UTC" in response.text
+        assert "Open the exact saved daily reports for outlet and coverage details" in response.text
+        assert f'href="/reports/exact/{DAILY_VERSION}"' in response.text
+    assert captured == [_read().days[0].report, _read().days[0].report]
+
+
+@pytest.mark.parametrize(
+    "error", [ResearchObjectUnavailable("missing"), ResearchObjectIntegrityError("digest mismatch")]
+)
+def test_historical_week_fails_if_an_exact_daily_source_is_unavailable(
+    error: Exception,
+) -> None:
+    def corrupt(_reference: ArtifactReference) -> DailyReportDocument:
+        raise error
+
+    with TestClient(_app(report_reader=corrupt)) as client:
+        _sign_in(client)
+        response = client.get("/status/weeks/2026-09-14")
+
+    assert response.status_code == 503
+    assert "Report unavailable" in response.text
+    assert "source pages were captured later" not in response.text
 
 
 def test_collection_progress_is_separate_from_weekly_archive() -> None:
@@ -215,6 +295,13 @@ def test_old_strong_assessment_shows_cited_evidence_instead_of_rating() -> None:
     domain = replace(
         PRODUCTION_DOMAIN,
         read_status_version=lambda _version: (STATUS_VERSION, legacy_read),
+        read_report_reference=lambda reference: DailyReport(
+            day=date.fromisoformat(reference.artifact_id.removeprefix("news:daily:")),
+            accepted_article_count=0,
+            theme_count=0,
+            group_count=0,
+            sections=(),
+        ),
     )
     app = create_app(ReaderSettings(app_password="correct horse", session_secret="s" * 32), domain)
     with TestClient(app) as client:

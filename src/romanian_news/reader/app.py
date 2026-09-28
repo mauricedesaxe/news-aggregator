@@ -89,6 +89,7 @@ from romanian_news.reader.views import (
     _unavailable_page,
     _video_feedback_control,
 )
+from romanian_news.reports import DailyReportDocument
 from romanian_news.storage import (
     ResearchObjectIntegrityError,
     ResearchObjectUnavailable,
@@ -99,6 +100,7 @@ from romanian_news.video_digest.models import EditionId, StoryId
 from romanian_news.video_digest_feedback import (
     VideoDigestFeedbackCommand,
 )
+from romanian_news.weekly_status import WeeklyStatusRead
 
 SESSION_COOKIE = "romanian_news_session"
 SESSION_MAX_AGE = 14 * 24 * 60 * 60
@@ -387,7 +389,16 @@ def _register_status_routes(app: FastHTML, domain: ReaderDomain) -> None:
             return FtResponse(_not_found_page(request), status_code=404)
         except (ResearchCatalogError, ResearchObjectUnavailable, ResearchObjectIntegrityError):
             return _unavailable_page(request)
-        return render_status(read, version_id, _site_header(str(request.session["csrf_token"])))
+        try:
+            source_reports = _read_status_source_reports(read, domain)
+        except (ResearchObjectUnavailable, ResearchObjectIntegrityError, ValueError):
+            return _unavailable_page(request)
+        return render_status(
+            read,
+            version_id,
+            _site_header(str(request.session["csrf_token"])),
+            source_reports=source_reports,
+        )
 
     @_route(app, "get", "/status/versions/{version_id}")
     def status_version(request: Request, version_id: str) -> tuple[Any, ...] | FtResponse:
@@ -399,12 +410,33 @@ def _register_status_routes(app: FastHTML, domain: ReaderDomain) -> None:
             return FtResponse(_not_found_page(request), status_code=404)
         except (ResearchCatalogError, ResearchObjectUnavailable, ResearchObjectIntegrityError):
             return _unavailable_page(request)
+        try:
+            source_reports = _read_status_source_reports(read, domain)
+        except (ResearchObjectUnavailable, ResearchObjectIntegrityError, ValueError):
+            return _unavailable_page(request)
         return render_status(
             read,
             exact_id,
             _site_header(str(request.session["csrf_token"])),
             exact_version=True,
+            source_reports=source_reports,
         )
+
+
+def _read_status_source_reports(
+    read: WeeklyStatusRead, domain: ReaderDomain
+) -> tuple[DailyReportDocument, ...]:
+    reports: list[DailyReportDocument] = []
+    for slot in read.days:
+        if slot.report is None:
+            continue
+        report = domain.read_report_reference(slot.report)
+        if report.day != slot.day:
+            raise ResearchObjectIntegrityError(
+                f"Weekly source report date does not match {slot.day.isoformat()}"
+            )
+        reports.append(report)
+    return tuple(reports)
 
 
 def _register_action_routes(app: FastHTML, domain: ReaderDomain) -> None:

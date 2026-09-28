@@ -3,8 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from functools import lru_cache
 
 from romanian_news import Sha256
+from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.archive_progress import (
     ArchiveDailyReport,
     ArchiveDiscoveryMonth,
@@ -42,10 +44,12 @@ from romanian_news.reader.dagster_repair import (
 )
 from romanian_news.reports import (
     DailyReportDocument,
+    parse_daily_report,
 )
 from romanian_news.research_triggers import DailyResearchTriggerSet
 from romanian_news.storage import (
     check_r2_access,
+    read_verified_r2_object,
 )
 from romanian_news.video_digest.models import EditionId
 from romanian_news.video_digest.reader import (
@@ -58,6 +62,15 @@ from romanian_news.video_digest_feedback import (
     submit_video_digest_feedback,
 )
 from romanian_news.weekly_status import WeeklyStatusRead
+
+
+def _read_report_reference(reference: ArtifactReference) -> DailyReportDocument:
+    return _read_report_content(reference.r2_key, reference.content_digest)
+
+
+@lru_cache(maxsize=64)
+def _read_report_content(r2_key: str, content_digest: Sha256) -> DailyReportDocument:
+    return parse_daily_report(read_verified_r2_object(r2_key, content_digest))
 
 
 @dataclass(frozen=True)
@@ -86,6 +99,9 @@ class ReaderDomain:
     )
     read_status: Callable[[date], tuple[Sha256, WeeklyStatusRead]] | None = None
     read_status_version: Callable[[Sha256], tuple[Sha256, WeeklyStatusRead]] | None = None
+    read_report_reference: Callable[[ArtifactReference], DailyReportDocument] = (
+        _read_report_reference
+    )
     submit_video_feedback: Callable[[VideoDigestFeedbackCommand], VideoDigestFeedbackEvent] = (
         lambda _command: _written_only_video_feedback()
     )
