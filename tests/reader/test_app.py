@@ -357,7 +357,7 @@ def test_report_uses_english_reader_copy_without_a_promotional_hero(
     assert response.status_code == 200
     assert '<html lang="en">' in response.text
     assert "Press review" in response.text
-    assert "Previous day" in response.text
+    assert "Previous report" in response.text
     assert "Subject 01" in response.text
     assert "Key points" in response.text
     assert "Tone assessment" in response.text
@@ -457,14 +457,31 @@ def test_today_route_reports_storage_unavailability() -> None:
     assert f'href="/reports/{REPORT_VERSION}"' in response.text
 
 
-def test_newest_published_report_links_next_day_to_today(harness: Harness) -> None:
+def test_newest_published_report_links_to_today(harness: Harness) -> None:
     with TestClient(harness.app) as client:
         _login(harness.app, client)
         response = client.get(f"/reports/{REPORT_VERSION}")
 
     assert response.status_code == 200
     assert 'href="/today"' in response.text
+    assert "Today →" in response.text
     assert f'href="/reports/{OLDER_REPORT_VERSION}"' in response.text
+
+
+def test_sparse_report_navigation_names_published_reports() -> None:
+    reports = (
+        DailyReportSummary(report_version_id=REPORT_VERSION, day=date(2026, 8, 31)),
+        DailyReportSummary(report_version_id=OLDER_REPORT_VERSION, day=date(2025, 10, 1)),
+    )
+    response = _read_report_response(
+        _daily_report().model_copy(update={"day": date(2025, 10, 1)}),
+        reports=reports,
+        path=f"/reports/{OLDER_REPORT_VERSION}",
+    )
+
+    assert response.status_code == 200
+    assert f'href="/reports/{REPORT_VERSION}">Next report →</a>' in response.text
+    assert "Next day" not in response.text
 
 
 def test_current_report_metadata_uses_typed_counts_in_display_order() -> None:

@@ -519,9 +519,11 @@ def _date_navigation(
     )
     selected = reports[selected_index]
     navigation = Nav(
-        A("← Previous day", href=older_path) if older_path else Span(),
+        A("← Previous report", href=older_path) if older_path else Span(),
         Time(_format_date(selected.day), datetime=selected.day.isoformat()),
-        A("Next day →", href=newer_path) if newer_path else Span(),
+        A("Today →" if newer_path == "/today" else "Next report →", href=newer_path)
+        if newer_path
+        else Span(),
         aria_label="Report date navigation",
         cls="date-nav",
     )
