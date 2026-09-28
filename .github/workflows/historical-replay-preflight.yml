@@ -1,0 +1,74 @@
+name: Inspect historical replay day
+
+on:
+  workflow_dispatch:
+    inputs:
+      day:
+        description: Historical day to inspect (YYYY-MM-DD)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.12.5"
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --no-default-groups
+
+      - name: Read replay preflight
+        env:
+          NEWS_POSTGRES_DSN: ${{ secrets.NEWS_POSTGRES_DSN }}
+          ARCHIVE_DAY: ${{ inputs.day }}
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          import os
+          from datetime import date
+
+          from romanian_news.archive.replay_preflight import read_replay_preflight
+
+          preflight = read_replay_preflight(date.fromisoformat(os.environ["ARCHIVE_DAY"]))
+          print(json.dumps({
+              "day": preflight.day.isoformat(),
+              "outlets": preflight.outlets,
+              "verified_pages": preflight.verified_pages,
+              "captured_articles": preflight.captured_articles,
+              "selected_articles": len(preflight.article_version_ids),
+              "pending_relevance": preflight.pending_relevance,
+              "pending_embeddings": preflight.pending_embeddings,
+              "pending_summaries": preflight.pending_summaries,
+              "pending_sentiment": preflight.pending_sentiment,
+              "spent_usd": str(preflight.spend.spent_usd),
+              "held_usd": str(preflight.spend.held_usd),
+              "calls": preflight.spend.calls,
+              "holds": [{
+                  "reservation_id": str(hold.reservation_id),
+                  "age_seconds": hold.age_seconds,
+                  "operation": hold.operation_key,
+                  "held_usd": str(hold.held_usd),
+              } for hold in preflight.outstanding_holds],
+              "source_ready": preflight.source_ready,
+              "paid_work_admissible": preflight.paid_work_admissible,
+          }, sort_keys=True))
+          PY
