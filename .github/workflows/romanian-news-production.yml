@@ -149,10 +149,6 @@ jobs:
               "daily_morning_report_check",
               "quarter_hourly_news_feedback_sync",
               "scheduled_weekly_status",
-              "scheduled_historical_weekly_status",
-              "scheduled_archive_page_backfill",
-              "scheduled_archive_article_capture",
-              "scheduled_retrospective_analysis",
           ):
               result = execute(
                   """
