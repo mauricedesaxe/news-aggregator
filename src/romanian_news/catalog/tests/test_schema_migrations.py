@@ -122,6 +122,7 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         (19, "archive_sitemap_discovery"),
         (20, "archive_page_checks"),
         (21, "archive_article_provenance"),
+        (22, "archive_model_spend"),
     )
     assert tuple(migration.version for migration in NEWS_CATALOG_MIGRATIONS) == tuple(
         range(1, len(NEWS_CATALOG_MIGRATIONS) + 1)
@@ -154,4 +155,5 @@ def test_news_migrations_are_ordered_and_immutable_by_identity() -> None:
         "2cbf6fae66a225ef45870822969867acb08995da82a7739c74ed06ee312a4e0f",
         "cbf31220b7c51ba6a3a4a6620fa1bb1554900a3b3a595c4976cf553ee61ea5cd",
         "1cd2a09173d399057e86ddbd74002812c1e5ca6ff555c9e8013e16c63c2026e0",
+        "e4a3f79a0b902131dd132974dbf79085b88d6cf70521739b1e6b7a7ff83cbe33",
     )

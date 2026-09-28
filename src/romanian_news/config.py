@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -33,6 +34,7 @@ BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL: str | None = os.getenv(
     "BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL"
 )
 OPENROUTER_API_KEY: str | None = os.getenv("OPENROUTER_API_KEY")
+ARCHIVE_DAY_SPEND_LIMIT_USD = Decimal(os.getenv("ARCHIVE_DAY_SPEND_LIMIT_USD", "10"))
 TYPESAFE_API_KEY: str | None = os.getenv("TYPESAFE_API_KEY")
 NEWS_JEV_RELEVANCE_SHADOW_ENABLED: bool = os.getenv(
     "NEWS_JEV_RELEVANCE_SHADOW_ENABLED", ""

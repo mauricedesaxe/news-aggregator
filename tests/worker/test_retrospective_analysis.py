@@ -1,10 +1,12 @@
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 
 import dagster as dg
 import pytest
 
 from romanian_news.archive.campaign import ARCHIVE_END, ARCHIVE_START
+from romanian_news.catalog.archive_model_spend import ArchiveSpend
 from romanian_news.reports import RetrospectiveCoverage, RetrospectiveDailyReport
 from romanian_news.worker import retrospective_analysis
 from romanian_news.worker.definitions import defs
@@ -21,6 +23,15 @@ def _coverage(outlets: tuple[str, ...]) -> RetrospectiveCoverage:
         verified_page_count=50,
         captured_article_count=45,
         coverage_note="Verified publisher pages only.",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _empty_archive_spend(monkeypatch) -> None:
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_archive_spend",
+        lambda _day: ArchiveSpend(Decimal(0), Decimal(0), 0),
     )
 
 
@@ -85,6 +96,36 @@ def test_pilot_rejects_sparse_coverage_before_model_work(monkeypatch) -> None:
         lambda _day: pytest.fail("article inputs should not load for one outlet"),
     )
     with pytest.raises(ValueError, match="two outlets"):
+        retrospective_analysis.analyze_retrospective_day(DAY, "git:test")
+
+
+def test_over_limit_day_cannot_start_model_work_or_publish(monkeypatch) -> None:
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_retrospective_coverage",
+        lambda _day: _coverage(("digi24", "hotnews")),
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_daily_article_references",
+        lambda _day: SimpleNamespace(values=(object(),)),
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_archive_spend",
+        lambda _day: ArchiveSpend(Decimal("10.01"), Decimal(0), 1),
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "materialize_relevance",
+        lambda *_args, **_kwargs: pytest.fail("model work started"),
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "publish_retrospective_daily_report",
+        lambda *_args: pytest.fail("report published"),
+    )
+    with pytest.raises(retrospective_analysis.ArchiveSpendLimitReached):
         retrospective_analysis.analyze_retrospective_day(DAY, "git:test")
 
 
