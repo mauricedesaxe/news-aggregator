@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from datetime import date, timedelta
 
@@ -7,7 +8,8 @@ from starlette.testclient import TestClient
 
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.archive_progress import ArchiveDailyReport, ArchiveDiscoveryMonth
-from romanian_news.catalog.weekly_status import WeeklyStatusSummary
+from romanian_news.catalog.weekly_status import WeeklyStatusNotFound, WeeklyStatusSummary
+from romanian_news.catalog_transport import ResearchCatalogError
 from romanian_news.reader.app import PRODUCTION_DOMAIN, ReaderSettings, create_app
 from romanian_news.weekly_status import (
     AreaAssessment,
@@ -218,3 +220,107 @@ def test_old_strong_assessment_shows_cited_evidence_instead_of_rating() -> None:
     assert "1 cited highlight across 1 report day" in response.text
     assert "Only selected daily highlights were reviewed." in response.text
     assert "STRONG" not in response.text
+
+
+def test_status_routes_report_catalog_and_object_failures() -> None:
+    def _raise(*_args):
+        raise ResearchCatalogError("catalog unavailable")
+
+    domain = replace(
+        PRODUCTION_DOMAIN,
+        list_status=_raise,
+        list_archive_discovery=_raise,
+        read_status=_raise,
+        read_status_version=_raise,
+    )
+    app = create_app(ReaderSettings(app_password="correct horse", session_secret="s" * 32), domain)
+    with TestClient(app) as client:
+        _sign_in(client)
+        latest = client.get("/status")
+        archive = client.get("/status/archive")
+        backfill = client.get("/reports/backfill")
+        week = client.get("/status/weeks/2026-09-14")
+        version = client.get(f"/status/versions/{STATUS_VERSION}")
+
+    for response in (latest, archive, backfill, week, version):
+        assert response.status_code == 503
+        assert "Report unavailable" in response.text
+
+
+def test_latest_status_reports_not_ready_before_any_week_exists() -> None:
+    domain = replace(PRODUCTION_DOMAIN, list_status=lambda _limit, _offset: ())
+    app = create_app(ReaderSettings(app_password="correct horse", session_secret="s" * 32), domain)
+    with TestClient(app) as client:
+        _sign_in(client)
+        response = client.get("/status")
+
+    assert response.status_code == 503
+    assert "Weekly status is not ready yet" in response.text
+
+
+def test_status_weeks_rejects_unknown_and_malformed_weeks() -> None:
+    domain = replace(
+        PRODUCTION_DOMAIN,
+        read_status=lambda _week: (_ for _ in ()).throw(WeeklyStatusNotFound("missing")),
+    )
+    app = create_app(ReaderSettings(app_password="correct horse", session_secret="s" * 32), domain)
+    with TestClient(app) as client:
+        _sign_in(client)
+        unknown = client.get("/status/weeks/2026-09-14")
+        malformed = client.get("/status/weeks/not-a-date")
+
+    assert unknown.status_code == 404
+    assert malformed.status_code == 404
+
+
+def test_status_versions_rejects_unknown_versions() -> None:
+    domain = replace(
+        PRODUCTION_DOMAIN,
+        read_status_version=lambda _version: (_ for _ in ()).throw(WeeklyStatusNotFound("missing")),
+    )
+    app = create_app(ReaderSettings(app_password="correct horse", session_secret="s" * 32), domain)
+    with TestClient(app) as client:
+        _sign_in(client)
+        response = client.get(f"/status/versions/{STATUS_VERSION}")
+
+    assert response.status_code == 404
+
+
+def test_status_archive_rejects_out_of_range_pages() -> None:
+    with TestClient(_app()) as client:
+        _sign_in(client)
+        not_a_number = client.get("/status/archive?page=soon")
+        too_far = client.get("/status/archive?page=1001")
+
+    assert not_a_number.status_code == 404
+    assert too_far.status_code == 404
+
+
+def test_status_archive_pages_through_completed_weeks() -> None:
+    summaries = tuple(
+        WeeklyStatusSummary(
+            week_start=WEEK_START - timedelta(weeks=offset), version_id=STATUS_VERSION
+        )
+        for offset in range(21)
+    )
+    domain = replace(
+        PRODUCTION_DOMAIN, list_status=lambda limit, offset: summaries[offset : offset + limit]
+    )
+    app = create_app(ReaderSettings(app_password="correct horse", session_secret="s" * 32), domain)
+    with TestClient(app) as client:
+        _sign_in(client)
+        first = client.get("/status/archive")
+        second = client.get("/status/archive?page=2")
+
+    assert first.status_code == 200
+    assert len(_week_hrefs(first.text)) == 20
+    assert 'href="/status/archive?page=2"' in first.text
+    assert "Older" in first.text
+    assert second.status_code == 200
+    assert len(_week_hrefs(second.text)) == 1
+    assert 'href="/status/archive?page=1"' in second.text
+    assert "Newer" in second.text
+
+
+def _week_hrefs(page: str) -> list[str]:
+    return re.findall(r'href="/status/weeks/[0-9]{4}-[0-9]{2}-[0-9]{2}"', page)

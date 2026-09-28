@@ -695,6 +695,148 @@ def test_relevance_materializer_uses_production_v3(
     )
 
 
+def test_materialize_relevance_processes_large_days_in_batches(
+    postgres_catalog,
+    fake_r2,
+    monkeypatch,
+    news_day,
+) -> None:
+    articles = tuple(
+        ExtractedArticle(
+            article_id=letter * 64,
+            outlet_id="testoutlet",
+            canonical_url=HttpUrl(f"https://feed.test/stire-inceputata-{index}"),
+            title=(
+                f"Analiza de politici publice numărul {index} pentru infrastructura din România"
+            ),
+            body=(
+                "Guvernul a prezentat un plan de investiții care schimbă prioritățile naționale "
+                "și reașază bugetul pentru următorii ani."
+            ),
+            author=None,
+            published_at=NOW,
+            source_updated_at=None,
+            bucharest_day=news_day,
+            material_digest=str(index) * 64,
+            extraction_digest=str(index + 7) * 64,
+        )
+        for index, letter in enumerate(("a", "b", "c"))
+    )
+    references = tuple(
+        _seed_analysis_article(postgres_catalog, fake_r2, news_day, article) for article in articles
+    )
+    analyzed: list[ArtifactReference] = []
+
+    def analyze(
+        value: ArticleAnalysisInput, *, mode: ExecutionMode, **_kwargs: object
+    ) -> RelevanceV3Output:
+        analyzed.append(value.reference)
+        request_id = relevance_v3_request_id(value.reference, mode=mode)
+        context = ContextGateResult(
+            decision=ContextDecision(
+                subject_role="incidental",
+                news_cycle="current_cycle",
+                romanian_consequence="absent",
+                certainty="clear",
+                evidence_quote=value.article.title,
+                reason_ro="Articolul nu descrie o consecință românească directă.",
+            ),
+            provider=GateCall(
+                request_id=request_id,
+                call=ModelCall(
+                    response_id="resp-test",
+                    model="test-model",
+                    input_tokens=64,
+                    output_tokens=32,
+                    latency_ms=10,
+                ),
+                cost_usd=0.0,
+                response_count=1,
+                traces=(),
+                accounting_complete=True,
+            ),
+        )
+        payload = json.dumps(
+            {
+                "request_id": request_id,
+                "mode": mode,
+                "context_provider_responses": [
+                    {"id": "resp-test", "usage": {"prompt_tokens": 64, "completion_tokens": 32}}
+                ],
+            },
+            sort_keys=True,
+        ).encode()
+        return RelevanceV3Output(
+            request_id=request_id,
+            policy=RELEVANCE_V3_POLICY,
+            mode=mode,
+            execution_ref=None,
+            article=value.reference,
+            context=context,
+            impact=None,
+            accepted=False,
+            content=payload,
+        )
+
+    monkeypatch.setattr(operations, "analyze_relevance_v3", analyze)
+    monkeypatch.setattr(operations, "flush_langfuse_traces", lambda: None)
+
+    first = operations.materialize_relevance(news_day, "git:test", limit=2)
+
+    assert len(first.values) == 2
+    assert len(analyzed) == 2
+    assert (
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM news_relevance_versions"
+        ).fetchone()["count"]
+        == 2
+    )
+    article_for_relevance = {
+        f"news:relevance:{production_relevance_v3_request_id(reference)}": reference.artifact_id
+        for reference in references
+    }
+    assert {value.artifact_id for value in first.values} <= set(article_for_relevance)
+    remaining = operations.read_pending_relevance_references(
+        day=news_day,
+        request_id_for_article=production_relevance_v3_request_id,
+    )
+    assert len(remaining) == 1
+    assert {value.reference.artifact_id for value in remaining} == (
+        {reference.artifact_id for reference in references}
+        - {article_for_relevance[value.artifact_id] for value in first.values}
+    )
+
+    second = operations.materialize_relevance(news_day, "git:test")
+
+    assert len(second.values) == 3
+    assert len(analyzed) == 3
+    assert (
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM news_relevance_versions"
+        ).fetchone()["count"]
+        == 3
+    )
+    assert (
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM artifacts WHERE kind = 'news_relevance'"
+        ).fetchone()["count"]
+        == 3
+    )
+    assert (
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM news_relevance_versions version "
+            "JOIN artifacts artifact ON artifact.current_version_id = version.artifact_version_id "
+            "WHERE artifact.kind = 'news_relevance'"
+        ).fetchone()["count"]
+        == 3
+    )
+
+    repeat = operations.materialize_relevance(news_day, "git:test")
+
+    assert repeat == second
+    assert len(analyzed) == 3
+
+
 @pytest.mark.parametrize(
     ("run", "patches", "message"),
     [

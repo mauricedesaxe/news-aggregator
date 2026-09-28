@@ -1,286 +1,295 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 
 import dagster as dg
 import pytest
-from botocore.exceptions import ClientError
 
-from romanian_news.analysis import corrected_structured
-from romanian_news.catalog.weekly_status import (
-    list_weekly_status,
-    publish_weekly_status,
-    read_weekly_status,
-)
+from romanian_news import BUCHAREST, weekly_status_generation
+from romanian_news.catalog.weekly_status import publish_weekly_status, read_weekly_status
 from romanian_news.weekly_status import (
+    MIN_REPORT_DAYS,
     WEEKLY_STATUS_POLICY,
     AreaAssessment,
     Development,
     WeekInput,
 )
-from romanian_news.weekly_status_generation import (
-    GeneratedStatus,
-    build_weekly_status,
-    read_week_input,
-)
+from romanian_news.weekly_status_generation import GeneratedStatus, StatusAudit
 from romanian_news.worker import weekly_status
 from romanian_news.worker.definitions import defs
-from romanian_news.worker.weekly_status import (
-    recent_completed_week_starts,
-    refresh_weekly_status,
-    scheduled_weekly_status,
+from tests import daily_report_catalog
+from tests.daily_report_catalog import daily_report, seed_daily_report
+from tests.postgres_catalog import TEST_POSTGRES_DSN, PostgresCatalog
+from tests.worker.conftest import FakeR2Client
+
+pytestmark = pytest.mark.skipif(
+    TEST_POSTGRES_DSN is None,
+    reason="NEWS_TEST_POSTGRES_DSN is required",
 )
-from tests.postgres_catalog import TEST_POSTGRES_DSN, PostgresCatalog, postgres_catalog_fixture
-from tests.reader.test_app import _daily_report
 
-postgres_catalog = postgres_catalog_fixture("news_weekly_worker")
-WEEK_START = date(2026, 9, 14)
-CAPTURED_AT = "2026-09-21T06:00:00+00:00"
+WEEK = date(2026, 9, 14)
+WEEKLY_ARTIFACT = f"news:weekly_status:{WEEK.isoformat()}"
+HISTORICAL_WEEK = date(2026, 6, 1)
 
 
-class _R2Library:
-    """In-memory stand-in for the R2 S3 client at the storage network boundary."""
-
+class StatusModelStub:
     def __init__(self) -> None:
-        self.objects: dict[str, bytes] = {}
+        self.compositions = 0
 
-    def head_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
-        if Key not in self.objects:
-            raise ClientError({"Error": {"Code": "404", "Message": "Not found"}}, "HeadObject")
-        return {}
+    def __call__(self, **kwargs: Any) -> object:
+        if kwargs["operation"] == "news.verify_weekly_status":
+            audit = StatusAudit(supported=True)
+            return SimpleNamespace(value=kwargs["parse"](audit.model_dump_json()))
+        self.compositions += 1
+        context = json.loads(kwargs["initial_messages"][1].content)
+        handle = context["sources"][0]["handle"]
+        draft = GeneratedStatus(
+            developments=(
+                Development(
+                    title=f"Model wording {self.compositions}",
+                    what_changed="Budget policy stayed central across the whole week.",
+                    source_handles=(handle,),
+                ),
+            ),
+            assessments=(
+                AreaAssessment(
+                    area="overall",
+                    judgment="The week centered on budget policy.",
+                    what_changed="The draft budget framed each sitting day.",
+                    why_it_matters="Fiscal decisions shape the autumn agenda.",
+                    source_handles=(handle,),
+                    coverage="limited",
+                    coverage_note="Only ranked daily excerpts were available.",
+                ),
+                *(
+                    AreaAssessment(
+                        area=area,
+                        judgment=None,
+                        what_changed=None,
+                        why_it_matters=None,
+                        source_handles=(),
+                        coverage="insufficient",
+                        coverage_note=f"Not enough cited {area} evidence in the daily reads.",
+                    )
+                    for area in ("economy", "politics", "society")
+                ),
+            ),
+        )
+        return SimpleNamespace(value=kwargs["parse"](draft.model_dump_json()))
 
-    def put_object(self, *, Bucket: str, Key: str, Body: bytes, **_kwargs: object) -> None:
-        self.objects[Key] = Body
 
-    def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
-        if Key not in self.objects:
-            raise ClientError({"Error": {"Code": "NoSuchKey", "Message": "Not found"}}, "GetObject")
-        return {"Body": io.BytesIO(self.objects[Key])}
+def _install_status_model_stub(monkeypatch: pytest.MonkeyPatch) -> StatusModelStub:
+    stub = StatusModelStub()
+    monkeypatch.setattr(weekly_status_generation, "run_corrected_structured_openrouter", stub)
+    return stub
 
 
-@pytest.fixture
-def r2(monkeypatch: pytest.MonkeyPatch) -> _R2Library:
-    library = _R2Library()
-    monkeypatch.setattr("romanian_news.storage._r2_client", lambda: cast(Any, library))
-    return library
+def _seed_published_daily_reports(
+    monkeypatch: pytest.MonkeyPatch,
+    catalog: PostgresCatalog,
+    fake_r2: FakeR2Client,
+    week_start: date,
+    day_count: int,
+) -> None:
+    for position in range(day_count):
+        for name in ("RUN_ID", "REPORT_VERSION", "INPUT_VERSION", "FILE_ID"):
+            seed_id = hashlib.sha256(f"weekly-status-seed:{name}:{position}".encode()).hexdigest()
+            monkeypatch.setattr(daily_report_catalog, name, seed_id)
+        day = week_start + timedelta(days=position)
+        payload = seed_daily_report(catalog, daily_report(day))
+        digest = hashlib.sha256(payload).hexdigest()
+        key = f"news/reports/daily/{day.isoformat()}/{digest}.json"
+        fake_r2.objects[key] = payload
+        fake_r2.metadata[key] = {"sha256": digest}
+
+
+def _weekly_status_row_counts(catalog: PostgresCatalog) -> dict[str, int]:
+    return {
+        "artifacts": catalog.execute(
+            "SELECT count(*) AS count FROM artifacts WHERE kind = 'news_weekly_read'"
+        ).fetchone()["count"],
+        "versions": catalog.execute(
+            "SELECT count(*) AS count FROM artifact_versions WHERE artifact_id = %s",
+            (WEEKLY_ARTIFACT,),
+        ).fetchone()["count"],
+        "runs": catalog.execute(
+            "SELECT count(*) AS count FROM runs WHERE operation_key = 'news.publish_weekly_status'"
+        ).fetchone()["count"],
+    }
+
+
+def _weekly_r2_keys(fake_r2: FakeR2Client, week_start: date) -> list[str]:
+    prefix = f"news/reports/weekly-status/{week_start.isoformat()}/"
+    return sorted(key for key in fake_r2.objects if key.startswith(prefix))
 
 
 def test_recent_completed_weeks_exclude_current_week() -> None:
-    assert recent_completed_week_starts(date(2026, 9, 27), 3) == (
+    assert weekly_status.recent_completed_week_starts(date(2026, 9, 27), 3) == (
         date(2026, 9, 14),
         date(2026, 9, 7),
         date(2026, 8, 31),
     )
 
 
-def test_schedule_requests_the_last_four_completed_mondays() -> None:
-    scheduled_at = datetime(2026, 9, 27, 8, 0, tzinfo=UTC)
-
-    with dg.build_schedule_context(scheduled_execution_time=scheduled_at) as context:
-        evaluation = scheduled_weekly_status.evaluate_tick(context)
-
-    assert evaluation.run_requests is not None
-    (request,) = evaluation.run_requests
-    assert request.run_key == "weekly-status:2026-09-27"
-    weeks = request.run_config["ops"]["refresh_weekly_statuses"]["config"]["week_starts"]
-    assert [date.fromisoformat(week) for week in weeks] == [
-        date(2026, 9, 14),
-        date(2026, 9, 7),
-        date(2026, 8, 31),
-        date(2026, 8, 24),
-    ]
-
-
-def _seed_daily_report(catalog: PostgresCatalog, library: _R2Library, day: date) -> None:
-    payload = _daily_report().model_copy(update={"day": day}).model_dump_json().encode()
-    digest = hashlib.sha256(payload).hexdigest()
-    artifact_id = f"news:daily:{day.isoformat()}"
-    version_id = hashlib.sha256(day.isoformat().encode()).hexdigest()
-    r2_key = f"news/reports/daily/{day.isoformat()}/{digest}.json"
-    library.objects[r2_key] = payload
-    catalog.execute(
-        "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, "
-        "visibility, created_at) VALUES (%s, 'news_daily_report', %s, 'derived', "
-        "'current', 'private', %s) ON CONFLICT DO NOTHING",
-        (artifact_id, f"Daily report {day.isoformat()}", CAPTURED_AT),
-    )
-    catalog.execute(
-        "INSERT INTO artifact_versions (id, artifact_id, schema_version, content_digest, "
-        "created_at) VALUES (%s, %s, 3, %s, %s) ON CONFLICT DO NOTHING",
-        (version_id, artifact_id, digest, CAPTURED_AT),
-    )
-    catalog.execute(
-        "INSERT INTO artifact_files (id, artifact_version_id, r2_key, media_type, "
-        "content_digest, byte_size, row_count, schema_fingerprint) "
-        "VALUES (%s, %s, %s, 'application/json', %s, %s, NULL, NULL)",
-        (
-            hashlib.sha256(r2_key.encode()).hexdigest(),
-            version_id,
-            r2_key,
-            digest,
-            len(payload),
-        ),
-    )
-    catalog.execute(
-        "UPDATE artifacts SET current_version_id = %s WHERE id = %s", (version_id, artifact_id)
-    )
-
-
-def _seed_week(catalog: PostgresCatalog, library: _R2Library, present_days: int) -> None:
-    for offset in range(present_days):
-        _seed_daily_report(catalog, library, WEEK_START + timedelta(days=offset))
-
-
-def _weekly_provider(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
-    requests: list[dict[str, object]] = []
-
-    def create(**kwargs):
-        requests.append(kwargs)
-        user_content = kwargs["messages"][1]["content"]
-        handles = tuple(source["handle"] for source in json.loads(user_content)["sources"])
-        if kwargs["response_format"]["json_schema"]["name"] == "weekly_status":
-            content = _limited_draft(handles).model_dump_json()
-        else:
-            content = json.dumps({"supported": True, "problems": []})
-        return SimpleNamespace(
-            id=f"response-{len(requests)}",
-            model=str(kwargs["model"]),
-            usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5),
-            choices=(SimpleNamespace(message=SimpleNamespace(content=content)),),
-            model_dump=lambda *, mode: {"id": f"response-{len(requests)}"},
-        )
-
-    monkeypatch.setattr(
-        corrected_structured,
-        "openrouter_client",
-        lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))),
-    )
-    monkeypatch.setattr(corrected_structured.time, "monotonic", lambda: 0.0)
-    monkeypatch.setattr(
-        corrected_structured,
-        "record_model_attempt",
-        lambda _response, **_kwargs: SimpleNamespace(attempt_id="1" * 64, response_id="response"),
-    )
-    return requests
-
-
-def _limited_draft(handles: tuple[str, ...]) -> GeneratedStatus:
-    return GeneratedStatus(
-        developments=(
-            Development(
-                title="Budget debate",
-                what_changed="The budget discussion continued during the week.",
-                source_handles=handles[:2],
-            ),
-        ),
-        assessments=(
-            AreaAssessment(
-                area="overall",
-                judgment="The budget debate dominated the selected reports.",
-                what_changed="The draft entered public debate.",
-                why_it_matters="The budget could affect national spending.",
-                source_handles=handles[:2],
-                coverage="limited",
-                coverage_note="Selected report highlights only.",
-            ),
-            *(
-                AreaAssessment(
-                    area=area,
-                    judgment=None,
-                    what_changed=None,
-                    why_it_matters=None,
-                    source_handles=(),
-                    coverage="insufficient",
-                    coverage_note="Not enough selected reporting.",
-                )
-                for area in ("economy", "politics", "society")
-            ),
-        ),
-    )
-
-
-@pytest.mark.skipif(TEST_POSTGRES_DSN is None, reason="NEWS_TEST_POSTGRES_DSN is required")
-def test_refresh_publishes_once_then_stays_current_without_model_spend(
-    monkeypatch, postgres_catalog: PostgresCatalog, r2: _R2Library
+def test_fresh_refresh_publishes_a_completed_weekly_read_end_to_end(
+    postgres_catalog: PostgresCatalog,
+    fake_r2: FakeR2Client,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _seed_week(postgres_catalog, r2, present_days=6)
-    provider_requests = _weekly_provider(monkeypatch)
+    _seed_published_daily_reports(monkeypatch, postgres_catalog, fake_r2, WEEK, MIN_REPORT_DAYS)
+    _install_status_model_stub(monkeypatch)
 
-    assert refresh_weekly_status(WEEK_START, "test-implementation") == "published"
-    assert len(provider_requests) == 2
-    first_version, read = read_weekly_status(WEEK_START)
+    result = weekly_status.refresh_weekly_status(WEEK, "git:test")
 
-    assert refresh_weekly_status(WEEK_START, "test-implementation") == "current"
-    assert len(provider_requests) == 2
-    assert read_weekly_status(WEEK_START) == (first_version, read)
+    assert result == "published"
+    status_rows = postgres_catalog.execute(
+        "SELECT status FROM runs WHERE operation_key = 'news.publish_weekly_status'"
+    ).fetchall()
+    assert [row["status"] for row in status_rows] == ["completed"]
+    artifact_rows = postgres_catalog.execute(
+        "SELECT current_version_id FROM artifacts WHERE id = %s AND kind = 'news_weekly_read'",
+        (WEEKLY_ARTIFACT,),
+    ).fetchall()
+    assert len(artifact_rows) == 1
+    published_version = artifact_rows[0]["current_version_id"]
+    assert (
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM artifact_versions WHERE artifact_id = %s",
+            (WEEKLY_ARTIFACT,),
+        ).fetchone()["count"]
+        == 1
+    )
+    file_rows = postgres_catalog.execute(
+        "SELECT r2_key, content_digest FROM artifact_files WHERE artifact_version_id = %s",
+        (published_version,),
+    ).fetchall()
+    assert len(file_rows) == 1
+
+    version_id, read = read_weekly_status(WEEK)
+
+    assert version_id == published_version
+    assert read.week_start == WEEK
+    assert read.week_end == WEEK + timedelta(days=6)
+    assert sum(slot.report is not None for slot in read.days) == MIN_REPORT_DAYS
+    weekly_keys = _weekly_r2_keys(fake_r2, WEEK)
+    assert weekly_keys == [file_rows[0]["r2_key"]]
+    stored = fake_r2.objects[weekly_keys[0]]
+    assert hashlib.sha256(stored).hexdigest() == file_rows[0]["content_digest"]
+    assert json.loads(stored)["developments"][0]["title"] == "Model wording 1"
 
 
-@pytest.mark.skipif(TEST_POSTGRES_DSN is None, reason="NEWS_TEST_POSTGRES_DSN is required")
-def test_refresh_requires_five_daily_reports_and_writes_nothing(
-    monkeypatch, postgres_catalog: PostgresCatalog, r2: _R2Library
+def test_second_refresh_with_unchanged_daily_reports_returns_current_without_new_versions(
+    postgres_catalog: PostgresCatalog,
+    fake_r2: FakeR2Client,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _seed_week(postgres_catalog, r2, present_days=4)
-    provider_requests = _weekly_provider(monkeypatch)
+    _seed_published_daily_reports(monkeypatch, postgres_catalog, fake_r2, WEEK, MIN_REPORT_DAYS)
+    stub = _install_status_model_stub(monkeypatch)
+    assert weekly_status.refresh_weekly_status(WEEK, "git:test") == "published"
 
-    assert refresh_weekly_status(WEEK_START, "test-implementation") == "insufficient"
-    assert provider_requests == []
-    assert list_weekly_status() == ()
-    inputs = read_week_input(WEEK_START)
-    assert inputs.available_days == 4
+    result = weekly_status.refresh_weekly_status(WEEK, "git:test")
+
+    assert result == "current"
+    assert stub.compositions == 1
+    assert _weekly_status_row_counts(postgres_catalog) == {
+        "artifacts": 1,
+        "versions": 1,
+        "runs": 1,
+    }
+    assert len(_weekly_r2_keys(fake_r2, WEEK)) == 1
 
 
-@pytest.mark.skipif(TEST_POSTGRES_DSN is None, reason="NEWS_TEST_POSTGRES_DSN is required")
 def test_refresh_regenerates_when_the_saved_policy_changes(
-    monkeypatch, postgres_catalog: PostgresCatalog, r2: _R2Library
+    postgres_catalog: PostgresCatalog,
+    fake_r2: FakeR2Client,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _seed_week(postgres_catalog, r2, present_days=6)
-    stale_policy = "completed-week-ranked-sources-v1"
+    _seed_published_daily_reports(monkeypatch, postgres_catalog, fake_r2, WEEK, MIN_REPORT_DAYS)
     stale_inputs = WeekInput(
-        week_start=WEEK_START,
-        policy=stale_policy,
-        days=read_week_input(WEEK_START).days,
+        week_start=WEEK,
+        policy="completed-week-ranked-sources-v1",
+        days=weekly_status.read_week_input(WEEK).days,
     )
     reports = {
-        slot.report.version_id: _daily_report().model_copy(update={"day": slot.day})
+        slot.report.version_id: daily_report(slot.day)
         for slot in stale_inputs.days
         if slot.report is not None
     }
-    stale_output = build_weekly_status(
-        stale_inputs,
-        reports,
-        compose=lambda _inputs, sources: _limited_draft(tuple(source.handle for source in sources)),
-        verify=lambda *_args: None,
-    )
-    stale_publication = publish_weekly_status(stale_output, "test-implementation")
-    provider_requests = _weekly_provider(monkeypatch)
+    stub = _install_status_model_stub(monkeypatch)
+    stale_output = weekly_status_generation.build_weekly_status(stale_inputs, reports)
+    stale_publication = publish_weekly_status(stale_output, "git:test")
 
-    result = refresh_weekly_status(WEEK_START, "test-implementation")
-
-    assert result == "published"
-    assert provider_requests
-    version, read = read_weekly_status(WEEK_START)
+    assert weekly_status.refresh_weekly_status(WEEK, "git:test") == "published"
+    assert stub.compositions == 2
+    version, read = read_weekly_status(WEEK)
     assert version != stale_publication.version_id
     assert read.policy == WEEKLY_STATUS_POLICY
 
 
-def test_historical_schedule_selects_first_week_with_five_reports(monkeypatch) -> None:
-    first_ready = date(2025, 9, 29)
-    monkeypatch.setattr(
-        weekly_status,
-        "read_week_input",
-        lambda week: SimpleNamespace(available_days=5 if week == first_ready else 0),
+def test_retry_after_head_loss_reuses_the_saved_weekly_output_when_model_text_differs(
+    postgres_catalog: PostgresCatalog,
+    fake_r2: FakeR2Client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_published_daily_reports(monkeypatch, postgres_catalog, fake_r2, WEEK, MIN_REPORT_DAYS)
+    stub = _install_status_model_stub(monkeypatch)
+    assert weekly_status.refresh_weekly_status(WEEK, "git:test") == "published"
+    saved_version, saved_read = read_weekly_status(WEEK)
+    postgres_catalog.execute(
+        "UPDATE artifacts SET current_version_id = NULL, current_run_id = NULL WHERE id = %s",
+        (WEEKLY_ARTIFACT,),
     )
-    monkeypatch.setattr(
-        weekly_status,
-        "read_weekly_status",
-        lambda _week: (_ for _ in ()).throw(weekly_status.WeeklyStatusNotFound()),
+
+    result = weekly_status.refresh_weekly_status(WEEK, "git:test")
+
+    assert result == "published"
+    assert stub.compositions == 2
+    assert _weekly_status_row_counts(postgres_catalog) == {
+        "artifacts": 1,
+        "versions": 1,
+        "runs": 1,
+    }
+    head = postgres_catalog.execute(
+        "SELECT current_version_id FROM artifacts WHERE id = %s", (WEEKLY_ARTIFACT,)
+    ).fetchone()["current_version_id"]
+    assert head == saved_version
+    version_id, read = read_weekly_status(WEEK)
+    assert version_id == saved_version
+    assert read == saved_read
+    assert read.developments[0].title == "Model wording 1"
+
+
+def test_refresh_returns_insufficient_and_publishes_nothing_below_five_daily_reports(
+    postgres_catalog: PostgresCatalog,
+    fake_r2: FakeR2Client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_published_daily_reports(monkeypatch, postgres_catalog, fake_r2, WEEK, MIN_REPORT_DAYS - 1)
+    _install_status_model_stub(monkeypatch)
+
+    result = weekly_status.refresh_weekly_status(WEEK, "git:test")
+
+    assert result == "insufficient"
+    assert _weekly_status_row_counts(postgres_catalog) == {
+        "artifacts": 0,
+        "versions": 0,
+        "runs": 0,
+    }
+    assert _weekly_r2_keys(fake_r2, WEEK) == []
+
+
+def test_historical_schedule_tick_targets_the_first_week_with_five_daily_reports(
+    postgres_catalog: PostgresCatalog,
+    fake_r2: FakeR2Client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_published_daily_reports(
+        monkeypatch, postgres_catalog, fake_r2, HISTORICAL_WEEK, MIN_REPORT_DAYS
     )
-    assert weekly_status.next_historical_week(date(2026, 9, 27)) == first_ready
 
     with dg.instance_for_test() as instance:
         with dg.build_schedule_context(
@@ -289,26 +298,66 @@ def test_historical_schedule_selects_first_week_with_five_reports(monkeypatch) -
             repository_def=defs.get_repository_def(),
         ) as context:
             evaluation = weekly_status.scheduled_historical_weekly_status.evaluate_tick(context)
+
     assert evaluation.run_requests is not None
     assert len(evaluation.run_requests) == 1
     request = evaluation.run_requests[0]
-    assert request.tags["news/archive_week"] == first_ready.isoformat()
+    assert request.tags["news/archive_week"] == HISTORICAL_WEEK.isoformat()
     assert request.run_config == {
-        "ops": {"refresh_weekly_statuses": {"config": {"week_starts": ["2025-09-29"]}}}
+        "ops": {
+            "refresh_weekly_statuses": {"config": {"week_starts": [HISTORICAL_WEEK.isoformat()]}}
+        }
     }
 
 
-def test_historical_schedule_skips_unchanged_week(monkeypatch) -> None:
-    ready = date(2025, 9, 29)
-    inputs = SimpleNamespace(available_days=5, policy="policy", days=("exact",))
-    monkeypatch.setattr(
-        weekly_status,
-        "read_week_input",
-        lambda week: inputs if week == ready else SimpleNamespace(available_days=0),
+def test_historical_schedule_tick_skips_when_the_ready_week_is_already_published(
+    postgres_catalog: PostgresCatalog,
+    fake_r2: FakeR2Client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_published_daily_reports(
+        monkeypatch, postgres_catalog, fake_r2, HISTORICAL_WEEK, MIN_REPORT_DAYS
     )
-    monkeypatch.setattr(
-        weekly_status,
-        "read_weekly_status",
-        lambda _week: ("v" * 64, SimpleNamespace(policy="policy", days=("exact",))),
-    )
-    assert weekly_status.next_historical_week(date(2026, 9, 27)) is None
+    _install_status_model_stub(monkeypatch)
+    assert weekly_status.refresh_weekly_status(HISTORICAL_WEEK, "git:test") == "published"
+
+    with dg.instance_for_test() as instance:
+        with dg.build_schedule_context(
+            instance=instance,
+            scheduled_execution_time=datetime(2026, 9, 27, 20, 20, tzinfo=UTC),
+            repository_def=defs.get_repository_def(),
+        ) as context:
+            evaluation = weekly_status.scheduled_historical_weekly_status.evaluate_tick(context)
+
+    assert not evaluation.run_requests
+    assert evaluation.skip_message == "No historical week has new published daily reports."
+
+
+def test_weekly_schedule_tick_refreshes_the_four_most_recent_completed_mondays() -> None:
+    scheduled_at = datetime(2026, 9, 27, 11, 0, tzinfo=BUCHAREST)
+
+    with dg.instance_for_test() as instance:
+        with dg.build_schedule_context(
+            instance=instance,
+            scheduled_execution_time=scheduled_at,
+            repository_def=defs.get_repository_def(),
+        ) as context:
+            evaluation = weekly_status.scheduled_weekly_status.evaluate_tick(context)
+
+    assert evaluation.run_requests is not None
+    (request,) = evaluation.run_requests
+    assert request.run_key == "weekly-status:2026-09-27"
+    assert request.run_config == {
+        "ops": {
+            "refresh_weekly_statuses": {
+                "config": {
+                    "week_starts": [
+                        "2026-09-14",
+                        "2026-09-07",
+                        "2026-08-31",
+                        "2026-08-24",
+                    ]
+                }
+            }
+        }
+    }
