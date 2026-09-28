@@ -1,0 +1,562 @@
+{
+  "window_start": "2025-09-15",
+  "window_end": "2025-09-21",
+  "sample_per_day": 3,
+  "totals": {
+    "hotnews": {
+      "sitemap_candidates": 643,
+      "sampled": 21,
+      "valid_day": 21,
+      "extracted": 21
+    },
+    "digi24": {
+      "sitemap_candidates": 799,
+      "sampled": 21,
+      "valid_day": 21,
+      "extracted": 21
+    }
+  },
+  "sample_sections": {
+    "hotnews": {
+      "Copii&Părinți": 2,
+      "Actualitate": 16,
+      "SuperLiga": 2,
+      "Economie": 1
+    },
+    "digi24": {
+      "actualitate": 7,
+      "externe": 14
+    }
+  },
+  "days": [
+    {
+      "outlet": "hotnews",
+      "day": "2025-09-15",
+      "sitemap_candidates": 93,
+      "sitemap_bytes": 25465,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://hotnews.ro/cum-sa-pui-ordine-in-haosul-de-dimineata-8-solutii-ca-sa-ajungeti-la-timp-la-scoala-2060846",
+          "published_at": "2025-09-15T08:06:59+00:00",
+          "updated_at": "2025-09-15T08:07:14+00:00",
+          "precision": "exact",
+          "body_chars": 3707,
+          "section": "Copii&Părinți"
+        },
+        {
+          "url": "https://hotnews.ro/o-celebra-marca-a-inceput-sa-vanda-ceasuri-cu-orele-9-si-3-inversate-e-un-fel-de-a-face-cu-ochiul-2066201",
+          "published_at": "2025-09-15T12:32:15+00:00",
+          "updated_at": "2025-09-15T12:32:16+00:00",
+          "precision": "exact",
+          "body_chars": 948,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/superliga-unirea-slobozia-castiga-la-sibiu-si-urca-pe-loc-de-play-off-2066491",
+          "published_at": "2025-09-15T16:59:06+00:00",
+          "updated_at": "2025-09-15T17:02:53+00:00",
+          "precision": "exact",
+          "body_chars": 619,
+          "section": "SuperLiga"
+        }
+      ]
+    },
+    {
+      "outlet": "hotnews",
+      "day": "2025-09-16",
+      "sitemap_candidates": 100,
+      "sitemap_bytes": 27194,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://hotnews.ro/doar-trei-partide-vor-intra-in-parlamentul-republicii-moldova-arata-un-nou-sondaj-inaintea-alegerilor-din-28-septembrie-cine-sunt-favoritii-scrutinului-2066856",
+          "published_at": "2025-09-16T10:57:11+00:00",
+          "updated_at": "2025-09-16T11:39:04+00:00",
+          "precision": "exact",
+          "body_chars": 3873,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/pressone-influenceri-de-pe-tiktok-care-au-trecut-brusc-de-la-monden-si-tutoriale-de-make-up-la-videoclipuri-de-sustinere-pentru-aur-si-calin-georgescu-2067140",
+          "published_at": "2025-09-16T16:03:50+00:00",
+          "updated_at": "2025-09-16T16:03:52+00:00",
+          "precision": "exact",
+          "body_chars": 3226,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/trei-boli-ereditare-grave-au-ferestre-de-preventie-testarea-genetica-pentru-cancer-mamar-distrofie-musculara-si-talasemie-ne-ajuta-sa-indrumam-si-sa-protejam-pacientii-si-2065788",
+          "published_at": "2025-09-16T09:06:36+00:00",
+          "updated_at": "2025-09-16T09:07:14+00:00",
+          "precision": "exact",
+          "body_chars": 6344,
+          "section": "Copii&Părinți"
+        }
+      ]
+    },
+    {
+      "outlet": "hotnews",
+      "day": "2025-09-17",
+      "sitemap_candidates": 114,
+      "sitemap_bytes": 30141,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://hotnews.ro/ceo-ul-hidroelectrica-divulga-problemele-existente-cu-clientii-casnici-la-preluarea-mandatului-2067920",
+          "published_at": "2025-09-17T13:49:16+00:00",
+          "updated_at": "2025-09-17T13:49:17+00:00",
+          "precision": "exact",
+          "body_chars": 654,
+          "section": "Economie"
+        },
+        {
+          "url": "https://hotnews.ro/noi-informatii-despre-venirea-lui-michelle-obama-la-bucuresti-2068062",
+          "published_at": "2025-09-17T16:05:12+00:00",
+          "updated_at": "2025-09-18T12:54:31+00:00",
+          "precision": "exact",
+          "body_chars": 1572,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/tulsa-king-serialul-cu-sylvester-stallone-care-i-a-impresionat-pe-critici-a-fost-reinnoit-pentru-inca-un-sezon-2067442",
+          "published_at": "2025-09-17T08:25:33+00:00",
+          "updated_at": "2025-09-17T08:25:43+00:00",
+          "precision": "exact",
+          "body_chars": 2765,
+          "section": "Actualitate"
+        }
+      ]
+    },
+    {
+      "outlet": "hotnews",
+      "day": "2025-09-18",
+      "sitemap_candidates": 112,
+      "sitemap_bytes": 30488,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://hotnews.ro/de-ce-il-admira-traian-basescu-pe-bolojan-sfaturile-fostului-presedinte-privind-relatia-cu-psd-pentru-ce-te-certi-cu-ei-sa-vedem-cine-va-indrazni-sa-pice-guvernul-2068763",
+          "published_at": "2025-09-18T16:03:05+00:00",
+          "updated_at": "2025-09-18T18:01:14+00:00",
+          "precision": "exact",
+          "body_chars": 3169,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/oana-gheorghiu-asociatia-daruieste-viata-a-fost-desemnata-de-nicusor-dan-pentru-un-nou-mandat-in-institutia-pentru-acreditarea-spitalelor-2068812",
+          "published_at": "2025-09-18T17:33:54+00:00",
+          "updated_at": "2025-09-18T17:38:32+00:00",
+          "precision": "exact",
+          "body_chars": 4268,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/trei-sferturi-dintre-romani-ingrijorati-de-razboiul-din-ucraina-arata-un-sondaj-inscop-doua-motive-principale-ale-anxietatii-cetatenilor-2068327",
+          "published_at": "2025-09-18T08:14:44+00:00",
+          "updated_at": "2025-09-18T08:14:46+00:00",
+          "precision": "exact",
+          "body_chars": 1784,
+          "section": "Actualitate"
+        }
+      ]
+    },
+    {
+      "outlet": "hotnews",
+      "day": "2025-09-19",
+      "sitemap_candidates": 90,
+      "sitemap_bytes": 24126,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://hotnews.ro/cei-mai-multi-profesionisti-in-investitii-spun-ca-preturile-locuintelor-sunt-supra-evaluate-2068973",
+          "published_at": "2025-09-19T07:00:42+00:00",
+          "updated_at": "2025-09-19T09:00:28+00:00",
+          "precision": "exact",
+          "body_chars": 2621,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/ministrul-sanatatii-despre-problema-intreruperilor-de-tratament-unde-ajungem-la-o-presiune-din-partea-furnizorului-incercam-sa-o-mediem-ne-dorim-sa-lasam-cnas-fara-dato-2069615",
+          "published_at": "2025-09-19T20:28:19+00:00",
+          "updated_at": "2025-09-19T20:28:21+00:00",
+          "precision": "exact",
+          "body_chars": 2920,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/sylvester-stallone-spune-ca-a-vrut-sa-joace-intr-un-nou-film-rambo-care-sa-l-intinereasca-pana-la-18-ani-nu-ar-fi-chiar-atat-de-fortat-2069049",
+          "published_at": "2025-09-19T08:32:58+00:00",
+          "updated_at": "2025-09-19T08:33:00+00:00",
+          "precision": "exact",
+          "body_chars": 2771,
+          "section": "Actualitate"
+        }
+      ]
+    },
+    {
+      "outlet": "hotnews",
+      "day": "2025-09-20",
+      "sitemap_candidates": 69,
+      "sitemap_bytes": 19018,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://hotnews.ro/ce-modele-noi-va-lansa-dacia-pana-in-2029-si-cum-se-explica-transformarea-marcii-in-ultimii-cinci-ani-2066673",
+          "published_at": "2025-09-20T04:00:19+00:00",
+          "updated_at": "2025-09-20T05:17:57+00:00",
+          "precision": "exact",
+          "body_chars": 4116,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/moscova-neaga-ca-trei-avioane-mig-31-rusesti-au-violat-spatiul-aerian-al-estoniei-au-fost-la-o-distanta-de-peste-trei-kilometri-2069631",
+          "published_at": "2025-09-20T04:34:51+00:00",
+          "updated_at": "2025-09-20T04:36:18+00:00",
+          "precision": "exact",
+          "body_chars": 1704,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/ultima-ora-foto-aeroportul-bucuresti-sud-atrage-parteneri-de-renume-o-poarta-catre-prosperitatea-viitoare-a-romaniei-2069679",
+          "published_at": "2025-09-20T06:08:31+00:00",
+          "updated_at": "2025-09-20T06:08:33+00:00",
+          "precision": "exact",
+          "body_chars": 440,
+          "section": "Actualitate"
+        }
+      ]
+    },
+    {
+      "outlet": "hotnews",
+      "day": "2025-09-21",
+      "sitemap_candidates": 65,
+      "sitemap_bytes": 17822,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://hotnews.ro/chiar-inaintea-atacului-cibernetic-care-a-adus-haos-pe-aeroporturi-compania-vizata-a-semnat-cu-nato-un-contract-pentru-un-soft-militar-strategic-2070004",
+          "published_at": "2025-09-21T07:54:24+00:00",
+          "updated_at": "2025-09-21T07:54:26+00:00",
+          "precision": "exact",
+          "body_chars": 3606,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/liderul-unei-tari-din-europa-spune-ca-nato-trebuie-sa-raspunda-inclusiv-prin-mijloace-militare-la-incalcarile-comise-de-rusia-2069961",
+          "published_at": "2025-09-21T05:32:35+00:00",
+          "updated_at": "2025-09-21T05:40:06+00:00",
+          "precision": "exact",
+          "body_chars": 2967,
+          "section": "Actualitate"
+        },
+        {
+          "url": "https://hotnews.ro/superliga-prima-infrangerea-pentru-rapid-din-acest-sezon-dupa-un-final-incandescent-in-giulesti-2070240",
+          "published_at": "2025-09-21T20:04:24+00:00",
+          "updated_at": "2025-09-21T20:05:41+00:00",
+          "precision": "exact",
+          "body_chars": 848,
+          "section": "SuperLiga"
+        }
+      ]
+    },
+    {
+      "outlet": "digi24",
+      "day": "2025-09-15",
+      "sitemap_candidates": 125,
+      "sitemap_bytes": 2714631,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://www.digi24.ro/stiri/actualitate/nepotul-lui-gheorghe-dinca-criminalul-din-caracal-a-fost-retinut-dupa-ce-a-furat-un-geamantan-din-gara-3413791",
+          "published_at": "2025-09-15T14:20:29+00:00",
+          "updated_at": "2025-09-15T14:20:29+00:00",
+          "precision": "exact",
+          "body_chars": 1169,
+          "section": "actualitate"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/lula-da-silva-ii-raspunde-lui-trump-dupa-condamnarea-lui-bolsonaro-justitia-din-brazilia-a-dat-o-decizie-istorica-3412659",
+          "published_at": "2025-09-14T21:01:02+00:00",
+          "updated_at": "2025-09-14T21:01:02+00:00",
+          "precision": "exact",
+          "body_chars": 2312,
+          "section": "externe"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/ue/cat-au-costat-valurile-de-canicula-seceta-si-inundatiile-din-vara-anului-2025-din-europa-si-care-au-fost-cele-mai-afectate-tari-3412799",
+          "published_at": "2025-09-15T05:59:38+00:00",
+          "updated_at": "2025-09-15T05:59:38+00:00",
+          "precision": "exact",
+          "body_chars": 2491,
+          "section": "externe"
+        }
+      ]
+    },
+    {
+      "outlet": "digi24",
+      "day": "2025-09-16",
+      "sitemap_candidates": 136,
+      "sitemap_bytes": 2714631,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://www.digi24.ro/stiri/actualitate/p-intelege-pretul-pe-kwh-si-ce-platesti-de-fapt-pe-factura-de-energie-3412835",
+          "published_at": "2025-09-16T07:00:33+00:00",
+          "updated_at": "2025-09-16T13:01:42+00:00",
+          "precision": "exact",
+          "body_chars": 4163,
+          "section": "actualitate"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/cine-este-proprietarul-navei-care-a-dus-la-explozia-devastatoare-din-beirut-de-acum-cinci-ani-barbatul-a-fost-arestat-in-sofia-3414987",
+          "published_at": "2025-09-16T10:17:30+00:00",
+          "updated_at": "2025-09-16T11:05:42+00:00",
+          "precision": "exact",
+          "body_chars": 1288,
+          "section": "externe"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/sua/sua-au-aprobat-primele-livrari-de-arme-catre-ucraina-pe-cheltuiala-membrilor-europeni-ai-nato-reuters-3415815",
+          "published_at": "2025-09-16T19:18:30+00:00",
+          "updated_at": "2025-09-16T19:18:30+00:00",
+          "precision": "exact",
+          "body_chars": 1734,
+          "section": "externe"
+        }
+      ]
+    },
+    {
+      "outlet": "digi24",
+      "day": "2025-09-17",
+      "sitemap_candidates": 126,
+      "sitemap_bytes": 2714631,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://www.digi24.ro/stiri/actualitate/politica/aur-a-depus-motiune-simpla-impotriva-ministrului-mediului-diana-buzoianu-nu-cunoaste-domeniul-pe-care-il-coordoneaza-3417153",
+          "published_at": "2025-09-17T15:04:47+00:00",
+          "updated_at": "2025-09-17T15:04:47+00:00",
+          "precision": "exact",
+          "body_chars": 3199,
+          "section": "actualitate"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/mapamond/ue-va-incepe-negocierile-cu-marea-britanie-si-canada-privind-fondul-de-aparare-in-valoare-de-150-de-miliarde-de-euro-3417345",
+          "published_at": "2025-09-17T17:18:05+00:00",
+          "updated_at": "2025-09-17T17:31:06+00:00",
+          "precision": "exact",
+          "body_chars": 4876,
+          "section": "externe"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/ue/proteste-la-londra-fata-de-vizita-presedintelui-american-donald-trump-reprezinta-tot-ceea-ce-uram-3416919",
+          "published_at": "2025-09-17T14:12:56+00:00",
+          "updated_at": "2025-09-17T16:11:10+00:00",
+          "precision": "exact",
+          "body_chars": 2265,
+          "section": "externe"
+        }
+      ]
+    },
+    {
+      "outlet": "digi24",
+      "day": "2025-09-18",
+      "sitemap_candidates": 137,
+      "sitemap_bytes": 2714631,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://www.digi24.ro/stiri/actualitate/justitie/perchezitii-dna-la-compania-de-apa-brasov-si-in-judetul-galati-mai-multi-liberali-vizati-intr-un-dosar-de-mita-si-trafic-de-influenta-3417971",
+          "published_at": "2025-09-18T07:10:04+00:00",
+          "updated_at": "2025-09-18T08:44:02+00:00",
+          "precision": "exact",
+          "body_chars": 1618,
+          "section": "actualitate"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/donald-trump-si-melania-nevoiti-sa-schimbe-elicopterul-in-marea-britanie-aeronava-prezidentiala-a-avut-o-defectiune-hidraulica-3419517",
+          "published_at": "2025-09-18T20:37:24+00:00",
+          "updated_at": "2025-09-18T20:37:24+00:00",
+          "precision": "exact",
+          "body_chars": 1925,
+          "section": "externe"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/tirania-ameninta-din-nou-europa-noi-si-aliatii-nostri-suntem-uniti-in-sprijinul-ucrainei-i-a-amintit-regele-charles-lui-trump-3417803",
+          "published_at": "2025-09-18T05:31:20+00:00",
+          "updated_at": "2025-09-18T16:16:48+00:00",
+          "precision": "exact",
+          "body_chars": 5423,
+          "section": "externe"
+        }
+      ]
+    },
+    {
+      "outlet": "digi24",
+      "day": "2025-09-19",
+      "sitemap_candidates": 119,
+      "sitemap_bytes": 2714631,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://www.digi24.ro/stiri/actualitate/nicusor-dan-romania-are-nevoie-de-o-generatie-de-juristi-competenti-si-implicati-civic-3420069",
+          "published_at": "2025-09-19T10:04:58+00:00",
+          "updated_at": "2025-09-19T10:04:58+00:00",
+          "precision": "exact",
+          "body_chars": 2808,
+          "section": "actualitate"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/democratii-propun-o-lege-pentru-protejarea-libertatii-de-exprimare-amenintate-de-presedintele-trump-3419573",
+          "published_at": "2025-09-19T04:00:43+00:00",
+          "updated_at": "2025-09-19T04:00:43+00:00",
+          "precision": "exact",
+          "body_chars": 2875,
+          "section": "externe"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/sua/procesul-intentat-de-trump-impotriva-the-new-york-times-a-fost-respins-de-un-judecator-plangerea-e-necorespunzatoare-si-enervanta-3421063",
+          "published_at": "2025-09-19T18:47:32+00:00",
+          "updated_at": "2025-09-19T18:50:47+00:00",
+          "precision": "exact",
+          "body_chars": 3451,
+          "section": "externe"
+        }
+      ]
+    },
+    {
+      "outlet": "digi24",
+      "day": "2025-09-20",
+      "sitemap_candidates": 82,
+      "sitemap_bytes": 2714631,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://www.digi24.ro/stiri/actualitate/o-persoana-a-murit-si-trei-au-fost-ranite-pe-munte-in-ultimele-24-de-ore-avertismentul-salvamont-3421397",
+          "published_at": "2025-09-20T05:35:34+00:00",
+          "updated_at": "2025-09-20T05:35:34+00:00",
+          "precision": "exact",
+          "body_chars": 1142,
+          "section": "actualitate"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/cum-ajuta-cultivatorii-de-lalele-din-olanda-apararea-ucrainenilor-in-fata-dronelor-sunt-foarte-rezistente-3421293",
+          "published_at": "2025-09-20T04:00:57+00:00",
+          "updated_at": "2025-09-20T04:00:57+00:00",
+          "precision": "exact",
+          "body_chars": 4013,
+          "section": "externe"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/turcia-a-dat-un-exemplu-acum-10-ani-solutia-radicala-propusa-de-un-oficial-european-dupa-incidentul-cu-avioane-rusesti-in-estonia-3421581",
+          "published_at": "2025-09-20T10:18:42+00:00",
+          "updated_at": "2025-09-20T12:46:03+00:00",
+          "precision": "exact",
+          "body_chars": 3782,
+          "section": "externe"
+        }
+      ]
+    },
+    {
+      "outlet": "digi24",
+      "day": "2025-09-21",
+      "sitemap_candidates": 74,
+      "sitemap_bytes": 2714631,
+      "sampled": 3,
+      "valid_day": 3,
+      "extracted": 3,
+      "failures": [],
+      "examples": [
+        {
+          "url": "https://www.digi24.ro/stiri/actualitate/politica/sondaj-curs-70-dintre-romani-cred-ca-tara-merge-intr-o-directie-gresita-aur-depaseste-psd-si-pnl-in-intentiile-de-vot-3422477",
+          "published_at": "2025-09-21T12:34:39+00:00",
+          "updated_at": "2025-09-21T12:34:39+00:00",
+          "precision": "exact",
+          "body_chars": 3124,
+          "section": "actualitate"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/mapamond/cine-a-castigat-intervision-rivalul-rusesc-al-competitiei-muzicale-eurovision-3422301",
+          "published_at": "2025-09-21T07:16:38+00:00",
+          "updated_at": "2025-09-21T07:16:38+00:00",
+          "precision": "exact",
+          "body_chars": 3618,
+          "section": "externe"
+        },
+        {
+          "url": "https://www.digi24.ro/stiri/externe/venezuela-a-inceput-antrenamentele-militare-cu-civilii-pe-fondul-tensiunilor-cu-statele-unite-3422363",
+          "published_at": "2025-09-21T09:12:30+00:00",
+          "updated_at": "2025-09-21T09:12:30+00:00",
+          "precision": "exact",
+          "body_chars": 1582,
+          "section": "externe"
+        }
+      ]
+    }
+  ],
+  "sitemap_duplicate_counts": {
+    "hotnews": {
+      "entries_in_pilot_slice": 643,
+      "unique_exact_urls": 643,
+      "duplicate_exact_url_occurrences": 0,
+      "repeated_urls": {}
+    },
+    "digi24": {
+      "entries_in_pilot_slice": 799,
+      "unique_exact_urls": 799,
+      "duplicate_exact_url_occurrences": 0,
+      "repeated_urls": {}
+    }
+  },
+  "sample_review": {
+    "method": "Manual headline and section review of the 42 sampled URLs. Current reported events count as news; evergreen guidance or labeled sponsored content counts as non-news.",
+    "reviewed": 42,
+    "non_news_minimum_count": 3,
+    "non_news_urls": [
+      "https://hotnews.ro/cum-sa-pui-ordine-in-haosul-de-dimineata-8-solutii-ca-sa-ajungeti-la-timp-la-scoala-2060846",
+      "https://hotnews.ro/trei-boli-ereditare-grave-au-ferestre-de-preventie-testarea-genetica-pentru-cancer-mamar-distrofie-musculara-si-talasemie-ne-ajuta-sa-indrumam-si-sa-protejam-pacientii-si-2065788",
+      "https://www.digi24.ro/stiri/actualitate/p-intelege-pretul-pe-kwh-si-ce-platesti-de-fapt-pe-factura-de-energie-3412835"
+    ],
+    "limitation": "This is a bounded headline and section sample, not a full editorial review or an estimate for all sitemap URLs."
+  }
+}
