@@ -63,6 +63,7 @@ from romanian_news.worker.retrospective_analysis import (
     scheduled_retrospective_analysis,
 )
 from romanian_news.worker.retrospective_report import retrospective_daily_report_job
+from romanian_news.worker.run_overlap import OVERLAP_BLOCKING_RUN_STATUSES
 from romanian_news.worker.theme_comparison import fresh_theme_comparison
 from romanian_news.worker.video_digest import scheduled_video_digest, video_digest_job
 from romanian_news.worker.video_digest_monitor import (
@@ -109,14 +110,6 @@ article_batch_job = dg.define_asset_job(
     },
 )
 weekly_backfill_job = dg.define_asset_job("weekly_backfill", selection=WEEKLY_ASSETS)
-NONTERMINAL_RUN_STATUSES = (
-    dg.DagsterRunStatus.QUEUED,
-    dg.DagsterRunStatus.NOT_STARTED,
-    dg.DagsterRunStatus.MANAGED,
-    dg.DagsterRunStatus.STARTING,
-    dg.DagsterRunStatus.STARTED,
-    dg.DagsterRunStatus.CANCELING,
-)
 
 
 @dg.schedule(
@@ -149,7 +142,7 @@ def youtube_source_poll(
         active = context.instance.get_runs(
             filters=dg.RunsFilter(
                 job_name=youtube_source_job.name,
-                statuses=NONTERMINAL_RUN_STATUSES,
+                statuses=OVERLAP_BLOCKING_RUN_STATUSES,
                 tags={"news/youtube_source_id": source.source_id},
             ),
             limit=1,
@@ -193,7 +186,7 @@ def youtube_relevance_controller(
     active = context.instance.get_runs(
         filters=dg.RunsFilter(
             job_name=youtube_relevance_job.name,
-            statuses=NONTERMINAL_RUN_STATUSES,
+            statuses=OVERLAP_BLOCKING_RUN_STATUSES,
             tags=tags,
         ),
         limit=1,
@@ -223,10 +216,6 @@ def _asset_event_storage_id(
     if len(matching) != 1:
         raise ValueError("YouTube publication materialization storage ID is unavailable")
     return matching[0]
-
-
-def _youtube_publication_day(asset_event: dg.EventLogEntry) -> str:
-    return _youtube_publication(asset_event)[0]
 
 
 def _youtube_publication(asset_event: dg.EventLogEntry) -> tuple[str, str]:
@@ -295,7 +284,7 @@ def _active_article_batch_work(instance: dg.DagsterInstance) -> set[str] | None:
     """
     partitions: set[str] = set()
     for run in instance.get_runs(
-        filters=dg.RunsFilter(job_name="article_batch", statuses=NONTERMINAL_RUN_STATUSES),
+        filters=dg.RunsFilter(job_name="article_batch", statuses=OVERLAP_BLOCKING_RUN_STATUSES),
     ):
         partition = run.tags.get("dagster/partition")
         if partition is None:
@@ -304,7 +293,7 @@ def _active_article_batch_work(instance: dg.DagsterInstance) -> set[str] | None:
     legacy = instance.get_runs(
         filters=dg.RunsFilter(
             job_name="__ASSET_JOB",
-            statuses=NONTERMINAL_RUN_STATUSES,
+            statuses=OVERLAP_BLOCKING_RUN_STATUSES,
             tags={"dagster/auto_materialize": "true"},
         ),
     )

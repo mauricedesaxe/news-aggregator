@@ -195,7 +195,6 @@ def test_youtube_relevance_uses_publication_day_metadata() -> None:
         )
     )
     asset_event = cast(dg.EventLogEntry, cast(object, event))
-    assert definitions._youtube_publication_day(asset_event) == DAY
     assert definitions._youtube_publication(asset_event) == (DAY, "a" * 64)
 
 

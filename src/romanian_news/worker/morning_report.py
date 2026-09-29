@@ -9,6 +9,7 @@ from romanian_news.config import IMPLEMENTATION_REF
 from romanian_news.current_report import build_and_publish_current_daily_report
 from romanian_news.daily import read_daily_report_reference
 from romanian_news.worker.assets import daily_reports
+from romanian_news.worker.run_overlap import OVERLAP_BLOCKING_RUN_STATUSES
 
 BUCHAREST_TIMEZONE = "Europe/Bucharest"
 
@@ -54,23 +55,13 @@ def daily_morning_report_check(
     active = context.instance.get_runs(
         filters=dg.RunsFilter(
             job_name=morning_report_check.name,
-            statuses=_NONTERMINAL_RUN_STATUSES,
+            statuses=OVERLAP_BLOCKING_RUN_STATUSES,
         ),
         limit=1,
     )
     if active:
         return dg.SkipReason("Skipping because morning_report_check already has an active run.")
     return dg.RunRequest(run_key=f"morning-report-check:{scheduled_at.date().isoformat()}")
-
-
-_NONTERMINAL_RUN_STATUSES: tuple[dg.DagsterRunStatus, ...] = (
-    dg.DagsterRunStatus.QUEUED,
-    dg.DagsterRunStatus.NOT_STARTED,
-    dg.DagsterRunStatus.MANAGED,
-    dg.DagsterRunStatus.STARTING,
-    dg.DagsterRunStatus.STARTED,
-    dg.DagsterRunStatus.CANCELING,
-)
 
 
 def _bucharest_today() -> date:

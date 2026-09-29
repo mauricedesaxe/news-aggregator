@@ -27,6 +27,7 @@ from romanian_news.video_digest.orchestration import (
     VideoDigestRunOutcome,
 )
 from romanian_news.worker.assets import BUCHAREST_TIMEZONE
+from romanian_news.worker.run_overlap import OVERLAP_BLOCKING_RUN_STATUSES
 from romanian_news.worker.video_digest_runtime import ProductionVideoDigestRuntime
 
 VIDEO_DIGEST_CRON = "0 8,13,20 * * *"
@@ -130,14 +131,7 @@ def scheduled_video_digest(
     active = context.instance.get_runs(
         filters=dg.RunsFilter(
             job_name=video_digest_job.name,
-            statuses=(
-                dg.DagsterRunStatus.QUEUED,
-                dg.DagsterRunStatus.NOT_STARTED,
-                dg.DagsterRunStatus.MANAGED,
-                dg.DagsterRunStatus.STARTING,
-                dg.DagsterRunStatus.STARTED,
-                dg.DagsterRunStatus.CANCELING,
-            ),
+            statuses=OVERLAP_BLOCKING_RUN_STATUSES,
         ),
         limit=1,
     )

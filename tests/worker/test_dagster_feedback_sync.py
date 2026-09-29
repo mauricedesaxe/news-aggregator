@@ -6,6 +6,7 @@ from dagster._core.definitions.metadata.metadata_value import IntMetadataValue
 from dagster._core.events import StepOutputData
 
 from romanian_news.worker import feedback_sync
+from romanian_news.worker.run_overlap import OVERLAP_BLOCKING_RUN_STATUSES
 
 
 def test_feedback_sync_applies_schema_and_exposes_result_counts(monkeypatch) -> None:
@@ -72,7 +73,6 @@ def test_feedback_sync_schedule_runs_every_fifteen_minutes() -> None:
     assert feedback_sync.quarter_hourly_news_feedback_sync.cron_schedule == "*/15 * * * *"
     assert feedback_sync.quarter_hourly_news_feedback_sync.default_status.name == "RUNNING"
     assert feedback_sync.quarter_hourly_news_feedback_sync.job_name == "news_feedback_sync"
-    assert dg.DagsterRunStatus.QUEUED in feedback_sync.NONTERMINAL_RUN_STATUSES
 
 
 def test_feedback_sync_schedule_requests_run_without_existing_run() -> None:
@@ -85,7 +85,7 @@ def test_feedback_sync_schedule_requests_run_without_existing_run() -> None:
     assert evaluation.skip_message is None
 
 
-@pytest.mark.parametrize("status", feedback_sync.NONTERMINAL_RUN_STATUSES[1:])
+@pytest.mark.parametrize("status", OVERLAP_BLOCKING_RUN_STATUSES[1:])
 def test_feedback_sync_schedule_skips_while_run_is_nonterminal(
     status: dg.DagsterRunStatus,
 ) -> None:
