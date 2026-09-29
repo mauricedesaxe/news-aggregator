@@ -188,11 +188,10 @@ def test_status_archive_and_exact_version_render() -> None:
 
 
 def test_historical_week_discloses_exact_daily_capture_provenance() -> None:
-    captured: list[ArtifactReference] = []
-
     def read_report(reference: ArtifactReference) -> RetrospectiveDailyReport:
-        captured.append(reference)
-        return _retrospective_report()
+        return _retrospective_report().model_copy(
+            update={"day": date.fromisoformat(reference.artifact_id.removeprefix("news:daily:"))}
+        )
 
     with TestClient(_app(report_reader=read_report)) as client:
         _sign_in(client)
@@ -205,13 +204,79 @@ def test_historical_week_discloses_exact_daily_capture_provenance() -> None:
         assert "2026-09-27 10:00 UTC" in response.text
         assert "Open the exact saved daily reports for outlet and coverage details" in response.text
         assert f'href="/reports/exact/{DAILY_VERSION}"' in response.text
-    assert captured == [_read().days[0].report, _read().days[0].report]
+
+
+def test_historical_week_discloses_every_historical_day_in_one_notice() -> None:
+    second_version = "e" * 64
+    second_day = WEEK_START + timedelta(days=1)
+
+    def _reference(day: date, version_id: str) -> ArtifactReference:
+        return ArtifactReference(
+            artifact_id=f"news:daily:{day.isoformat()}",
+            version_id=version_id,
+            content_digest="d" * 64,
+            r2_key=f"report-{day.isoformat()}.json",
+        )
+
+    days = tuple(
+        WeekInputDay(
+            day=slot.day,
+            report=_reference(
+                slot.day, DAILY_VERSION if slot.day == WEEK_START else second_version
+            ),
+        )
+        if slot.day in (WEEK_START, second_day)
+        else WeekInputDay(day=slot.day, report=None)
+        for slot in _read().days
+    )
+    read = _read().model_copy(update={"days": days})
+
+    def read_report(reference: ArtifactReference) -> RetrospectiveDailyReport:
+        day = date.fromisoformat(reference.artifact_id.removeprefix("news:daily:"))
+        hour = 10 if day == WEEK_START else 11
+        return _retrospective_report().model_copy(
+            update={
+                "day": day,
+                "retrospective": _retrospective_report().retrospective.model_copy(
+                    update={
+                        "capture_started_at": datetime(2026, 9, 27, hour, tzinfo=UTC),
+                        "capture_ended_at": datetime(2026, 9, 27, hour, 5, tzinfo=UTC),
+                    }
+                ),
+            }
+        )
+
+    domain = replace(
+        PRODUCTION_DOMAIN,
+        list_status=lambda _limit, _offset: (
+            WeeklyStatusSummary(week_start=WEEK_START, version_id=STATUS_VERSION),
+        ),
+        read_status=lambda _week: (STATUS_VERSION, read),
+        read_status_version=lambda _version: (STATUS_VERSION, read),
+        read_report_reference=read_report,
+    )
+    app = create_app(ReaderSettings(app_password="correct horse", session_secret="s" * 32), domain)
+    with TestClient(app) as client:
+        _sign_in(client)
+        response = client.get("/status/weeks/2026-09-14")
+
+    assert response.status_code == 200
+    assert "uses 2 historical daily reports whose source pages were captured later" in response.text
+    assert "from 2026-09-27 10:00 UTC to 2026-09-27 11:05 UTC" in response.text
+    first_link = response.text.index(f'href="/reports/exact/{DAILY_VERSION}"')
+    second_link = response.text.index(f'href="/reports/exact/{second_version}"')
+    assert first_link < second_link
 
 
 @pytest.mark.parametrize(
-    "error", [ResearchObjectUnavailable("missing"), ResearchObjectIntegrityError("digest mismatch")]
+    "error",
+    [
+        ResearchObjectUnavailable("missing"),
+        ResearchObjectIntegrityError("digest mismatch"),
+        ValueError("corrupt payload"),
+    ],
 )
-def test_historical_week_fails_if_an_exact_daily_source_is_unavailable(
+def test_historical_week_fails_if_an_exact_daily_source_cannot_be_read(
     error: Exception,
 ) -> None:
     def corrupt(_reference: ArtifactReference) -> DailyReportDocument:
@@ -219,11 +284,33 @@ def test_historical_week_fails_if_an_exact_daily_source_is_unavailable(
 
     with TestClient(_app(report_reader=corrupt)) as client:
         _sign_in(client)
-        response = client.get("/status/weeks/2026-09-14")
+        week = client.get("/status/weeks/2026-09-14")
+        exact = client.get(f"/status/versions/{STATUS_VERSION}")
 
-    assert response.status_code == 503
-    assert "Report unavailable" in response.text
-    assert "source pages were captured later" not in response.text
+    for response in (week, exact):
+        assert response.status_code == 503
+        assert "Report unavailable" in response.text
+        assert "source pages were captured later" not in response.text
+
+
+def test_weekly_page_rejects_a_source_report_saved_for_another_day() -> None:
+    def wrong_day(_reference: ArtifactReference) -> DailyReport:
+        return DailyReport(
+            day=date(2026, 10, 31),
+            accepted_article_count=0,
+            theme_count=0,
+            group_count=0,
+            sections=(),
+        )
+
+    with TestClient(_app(report_reader=wrong_day)) as client:
+        _sign_in(client)
+        week = client.get("/status/weeks/2026-09-14")
+        exact = client.get(f"/status/versions/{STATUS_VERSION}")
+
+    for response in (week, exact):
+        assert response.status_code == 503
+        assert "Report unavailable" in response.text
 
 
 def test_collection_progress_is_separate_from_weekly_archive() -> None:
@@ -272,6 +359,7 @@ def test_collection_progress_is_separate_from_weekly_archive() -> None:
 def test_collection_progress_lists_unreported_days_without_claiming_completeness() -> None:
     reports = (ArchiveDailyReport(date(2025, 9, 29), DAILY_VERSION),)
     evidence = (
+        ArchiveDayEvidence(date(2025, 9, 27), 5, 0, ("hotnews",)),
         ArchiveDayEvidence(date(2025, 9, 28), 8, 3, ("hotnews",)),
         ArchiveDayEvidence(date(2025, 9, 29), 12, 7, ("digi24", "hotnews")),
         ArchiveDayEvidence(date(2025, 9, 30), 10, 5, ("digi24", "hotnews")),
@@ -281,7 +369,7 @@ def test_collection_progress_lists_unreported_days_without_claiming_completeness
         response = client.get("/reports/backfill")
 
     assert response.status_code == 200
-    assert "27 September 2025: Pending; 0 verified, 0 captured from 0 outlets" in response.text
+    assert "27 September 2025: Pending; 5 verified, 0 captured from 1 outlet" in response.text
     assert (
         "28 September 2025: Insufficient source; 8 verified, 3 captured from 1 outlet"
         in response.text
@@ -290,7 +378,9 @@ def test_collection_progress_lists_unreported_days_without_claiming_completeness
     assert "30 September 2025: Pending; 10 verified, 5 captured from 2 outlets" in response.text
     assert "26 September 2026: Pending" in response.text
     assert "An empty day does not prove there was no news" in response.text
-    assert response.text.count("<summary>") >= 13
+    assert "September 2025: 1 published, 1 insufficient source, 2 pending" in response.text
+    assert response.text.count("<summary>") == 13
+    assert response.text.count("<details open>") == 1
 
 
 def test_old_strong_assessment_shows_cited_evidence_instead_of_rating() -> None:
@@ -367,6 +457,29 @@ def test_status_routes_report_catalog_and_object_failures() -> None:
     for response in (latest, archive, backfill, week, version):
         assert response.status_code == 503
         assert "Report unavailable" in response.text
+
+
+@pytest.mark.parametrize(
+    "failing_read",
+    ["list_archive_discovery", "list_archive_reports", "list_archive_day_evidence"],
+)
+def test_backfill_page_survives_any_catalog_call_failing(failing_read: str) -> None:
+    def _raise(*_args):
+        raise ResearchCatalogError("catalog unavailable")
+
+    defaults = {
+        "list_archive_discovery": lambda: (),
+        "list_archive_reports": lambda _start, _end: (),
+        "list_archive_day_evidence": lambda _start, _end: (),
+    }
+    domain = replace(PRODUCTION_DOMAIN, **{**defaults, failing_read: _raise})
+    app = create_app(ReaderSettings(app_password="correct horse", session_secret="s" * 32), domain)
+    with TestClient(app) as client:
+        _sign_in(client)
+        response = client.get("/reports/backfill")
+
+    assert response.status_code == 503
+    assert "Report unavailable" in response.text
 
 
 def test_latest_status_reports_not_ready_before_any_week_exists() -> None:

@@ -69,8 +69,12 @@ def test_report_archive_shows_year_break_for_historical_report() -> None:
         response = client.get("/reports")
 
     assert response.status_code == 200
-    assert response.text.index("2026</li>") < response.text.index("27 September 2026")
-    assert response.text.index("2025</li>") < response.text.index("29 September 2025")
+    assert response.text.index('<li class="archive-year">2026</li>') < response.text.index(
+        "27 September 2026"
+    )
+    assert response.text.index('<li class="archive-year">2025</li>') < response.text.index(
+        "29 September 2025"
+    )
     assert response.text.index("27 September 2026") < response.text.index("29 September 2025")
     assert 'href="/reports/backfill"' in response.text
 

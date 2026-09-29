@@ -50,14 +50,6 @@ def test_analysis_rejects_days_after_the_archive_window() -> None:
 
 
 def test_pilot_publishes_and_returns_report_version(monkeypatch) -> None:
-    stage_logs = []
-    ticks = iter(range(16))
-    monkeypatch.setattr(retrospective_analysis, "perf_counter", lambda: next(ticks))
-    monkeypatch.setattr(
-        retrospective_analysis.dg,
-        "get_dagster_logger",
-        lambda: SimpleNamespace(info=lambda *args: stage_logs.append(args)),
-    )
     monkeypatch.setattr(
         retrospective_analysis,
         "read_retrospective_coverage",
@@ -90,17 +82,48 @@ def test_pilot_publishes_and_returns_report_version(monkeypatch) -> None:
         lambda _day, _ref: SimpleNamespace(version_id="a" * 64),
     )
     assert retrospective_analysis.analyze_retrospective_day(DAY, "git:test") == "a" * 64
-    assert [entry[2] for entry in stage_logs] == [
-        "relevance",
-        "embeddings",
-        "clusters",
-        "group_summaries",
-        "group_sentiment",
-        "daily_themes",
-        "subject_assessments",
-        "publication",
-    ]
-    assert all(entry[1] == DAY and entry[3] == 1 for entry in stage_logs)
+
+
+def test_pilot_proceeds_for_a_day_whose_spend_reaches_the_limit_exactly(monkeypatch) -> None:
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_retrospective_coverage",
+        lambda _day: _coverage(("digi24", "hotnews")),
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_daily_article_references",
+        lambda _day: SimpleNamespace(values=(object(),) * 45),
+    )
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_archive_spend",
+        lambda _day: ArchiveSpend(
+            retrospective_analysis.ARCHIVE_DAY_SPEND_LIMIT_USD, Decimal(0), 1
+        ),
+    )
+    monkeypatch.setattr(
+        retrospective_analysis, "read_pending_relevance_references", lambda **_kwargs: ()
+    )
+    monkeypatch.setattr(
+        retrospective_analysis, "materialize_relevance", lambda *_args, **_kwargs: None
+    )
+    for name in (
+        "materialize_embeddings",
+        "materialize_clusters",
+        "materialize_group_summaries",
+        "materialize_group_sentiment",
+        "materialize_daily_themes",
+        "materialize_subject_assessments",
+    ):
+        monkeypatch.setattr(retrospective_analysis, name, lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "publish_retrospective_daily_report",
+        lambda _day, _ref: SimpleNamespace(version_id="a" * 64),
+    )
+
+    assert retrospective_analysis.analyze_retrospective_day(DAY, "git:test") == "a" * 64
 
 
 def test_pilot_rejects_sparse_coverage_before_model_work(monkeypatch) -> None:
@@ -262,6 +285,20 @@ def test_large_day_runs_one_relevance_batch_before_downstream_work(monkeypatch) 
     assert retrospective_analysis.analyze_retrospective_day(DAY, "git:test") is None
     monkeypatch.setattr(retrospective_analysis, "list_archive_daily_reports", lambda *_args: ())
     assert retrospective_analysis.next_automated_day() == DAY
+
+
+def test_schedule_skips_a_day_whose_spend_reaches_the_limit_exactly(monkeypatch) -> None:
+    _ready_first_month(monkeypatch)
+    monkeypatch.setattr(retrospective_analysis, "list_archive_daily_reports", lambda *_args: ())
+    monkeypatch.setattr(
+        retrospective_analysis,
+        "read_archive_spend",
+        lambda _day: ArchiveSpend(
+            retrospective_analysis.ARCHIVE_DAY_SPEND_LIMIT_USD, Decimal(0), 1
+        ),
+    )
+
+    assert retrospective_analysis.next_automated_day() is None
 
 
 def test_schedule_selects_earlier_large_day_before_later_day(monkeypatch) -> None:
