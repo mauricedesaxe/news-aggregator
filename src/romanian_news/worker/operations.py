@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -17,6 +18,11 @@ from romanian_news.analysis.embeddings import (
     embed_article,
     load_embedding_input,
     read_pending_embedding_references,
+)
+from romanian_news.analysis.groups.models import (
+    GroupAnalysisReferenceInput,
+    GroupSentimentOutput,
+    GroupSummaryOutput,
 )
 from romanian_news.analysis.groups.pending import (
     load_group_analysis_input,
@@ -413,15 +419,12 @@ def materialize_clusters(day: date, implementation_ref: str) -> DailyArtifactRef
 
 def materialize_group_summaries(day: date, implementation_ref: str) -> DailyArtifactReferences:
     try:
-        for pending in read_pending_group_analysis_references({day}):
-            if not pending.summary_needed:
-                continue
-            value = load_group_analysis_input(pending)
-            try:
-                output = summarize_group(value)
-            except (OpenAIError, RuntimeError, ValueError) as error:
-                raise RuntimeError(f"summary: {error}") from None
-            publish_group_analysis_outputs((output,), implementation_ref)
+        pending = tuple(
+            reference
+            for reference in read_pending_group_analysis_references({day})
+            if reference.summary_needed
+        )
+        _materialize_group_outputs(pending, _summarize_pending_group, implementation_ref)
         return read_daily_group_summary_references(day)
     finally:
         flush_langfuse_traces()
@@ -429,18 +432,56 @@ def materialize_group_summaries(day: date, implementation_ref: str) -> DailyArti
 
 def materialize_group_sentiment(day: date, implementation_ref: str) -> DailyArtifactReferences:
     try:
-        for pending in read_pending_group_analysis_references({day}):
-            if not pending.sentiment_needed:
-                continue
-            value = load_group_analysis_input(pending)
-            try:
-                output = score_group_sentiment(value)
-            except (OpenAIError, RuntimeError, ValueError) as error:
-                raise RuntimeError(f"sentiment: {error}") from None
-            publish_group_analysis_outputs((output,), implementation_ref)
+        pending = tuple(
+            reference
+            for reference in read_pending_group_analysis_references({day})
+            if reference.sentiment_needed
+        )
+        _materialize_group_outputs(pending, _score_pending_group_sentiment, implementation_ref)
         return read_daily_group_sentiment_references(day)
     finally:
         flush_langfuse_traces()
+
+
+def _summarize_pending_group(reference: GroupAnalysisReferenceInput) -> GroupSummaryOutput:
+    value = load_group_analysis_input(reference)
+    try:
+        return summarize_group(value)
+    except (OpenAIError, RuntimeError, ValueError) as error:
+        raise RuntimeError(f"summary: {error}") from None
+
+
+def _score_pending_group_sentiment(reference: GroupAnalysisReferenceInput) -> GroupSentimentOutput:
+    value = load_group_analysis_input(reference)
+    try:
+        return score_group_sentiment(value)
+    except (OpenAIError, RuntimeError, ValueError) as error:
+        raise RuntimeError(f"sentiment: {error}") from None
+
+
+def _materialize_group_outputs(
+    references: tuple[GroupAnalysisReferenceInput, ...],
+    analyze: Callable[[GroupAnalysisReferenceInput], GroupSummaryOutput | GroupSentimentOutput],
+    implementation_ref: str,
+) -> None:
+    if archive_model_day_active():
+        for reference in references:
+            publish_group_analysis_outputs((analyze(reference),), implementation_ref)
+        return
+    if not references:
+        return
+    with ThreadPoolExecutor(max_workers=min(4, len(references))) as executor:
+        for batch in batched(references, 4):
+            futures = tuple(executor.submit(analyze, reference) for reference in batch)
+            failure: Exception | None = None
+            for future in as_completed(futures):
+                try:
+                    publish_group_analysis_outputs((future.result(),), implementation_ref)
+                except Exception as error:
+                    if failure is None:
+                        failure = error
+            if failure is not None:
+                raise failure
 
 
 def materialize_daily_themes(day: date, implementation_ref: str) -> DailyArtifactReferences:
