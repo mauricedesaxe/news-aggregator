@@ -67,7 +67,7 @@ class SubjectAssessmentPolicy(NewsModel):
     prompt_digest: Sha256
     input_policy: Literal["ordered-schema-v3-themes-summaries-relevance-v1"]
     tier_policy: Literal["ordered-three-tier-complete-partition-v1"]
-    correction_policy: Literal["complete-json-once-v1"]
+    correction_policy: Literal["complete-json-once-then-scope-evidence-v1"]
     reasoning_effort: Literal["low"]
     temperature: Literal[0]
     max_tokens: Annotated[int, Field(gt=0)]
@@ -79,7 +79,7 @@ PRODUCTION_SUBJECT_ASSESSMENT_POLICY = SubjectAssessmentPolicy(
     prompt_digest=hashlib.sha256(ASSESSMENT_PROMPT.encode()).hexdigest(),
     input_policy="ordered-schema-v3-themes-summaries-relevance-v1",
     tier_policy="ordered-three-tier-complete-partition-v1",
-    correction_policy="complete-json-once-v1",
+    correction_policy="complete-json-once-then-scope-evidence-v1",
     reasoning_effort="low",
     temperature=0,
     max_tokens=ASSESSMENT_MAX_TOKENS,
@@ -180,6 +180,7 @@ class ModelSubjectAssessmentConstruction(NewsModel):
     input_digest: Sha256
     response_schema_digest: Sha256
     call: ModelCall
+    evidence_recovery: Literal["none", "scoped"] = "none"
     attempts: Annotated[
         tuple[SubjectAssessmentAttemptEvidence, ...], Field(min_length=1, max_length=2)
     ]
@@ -460,6 +461,7 @@ def construct_daily_subject_assessments(
         ),
         unreachable_error="Subject assessment correction loop did not return",
         started_at=started,
+        recover=lambda content, error: _recover_subject_evidence(content, value, error),
     )
     construction_messages = tuple(
         SubjectAssessmentMessage(role=message.role, content=message.content)
@@ -471,6 +473,7 @@ def construct_daily_subject_assessments(
         input_digest=_messages_digest(construction_messages),
         response_schema_digest=_sha256(_canonical_json(response_schema)),
         call=run.call,
+        evidence_recovery="scoped" if run.recovered else "none",
         attempts=tuple(
             SubjectAssessmentAttemptEvidence(
                 attempt_id=attempt.attempt_id,
@@ -528,6 +531,45 @@ def parse_subject_assessment_response(
             if article_subject.get(article_alias) != item.subject:
                 raise ValueError("Assessment evidence must belong to the assessed subject")
     return response
+
+
+def _recover_subject_evidence(
+    content: str,
+    value: DailySubjectAssessmentInput,
+    error: ValueError,
+) -> _SubjectAssessmentResponse:
+    if str(error) != "Assessment evidence must belong to the assessed subject":
+        raise error
+    response = _SubjectAssessmentResponse.model_validate_json(content, strict=True)
+    aliases = _aliases(value)
+    subject_for_article = {
+        aliases.article_for_version[item.article.version_id]: aliases.subject_for_theme[
+            item.theme_id
+        ]
+        for item in value.evidence
+    }
+    articles_for_subject: dict[str, list[str]] = {subject: [] for subject in aliases.subjects}
+    for article, subject in subject_for_article.items():
+        articles_for_subject[subject].append(article)
+    repaired: dict[str, tuple[_ProposedSubjectAssessment, ...]] = {}
+    for tier in _TIER_ORDER:
+        items = getattr(response, tier)
+        repaired[tier] = tuple(
+            item.model_copy(
+                update={
+                    "evidence_articles": tuple(
+                        article
+                        for article in item.evidence_articles
+                        if subject_for_article.get(article) == item.subject
+                    )
+                    or tuple(articles_for_subject[item.subject][:1])
+                }
+            )
+            for item in items
+        )
+    return parse_subject_assessment_response(
+        response.model_copy(update=repaired).model_dump_json(), value
+    )
 
 
 def parse_daily_subject_assessment_set(content: bytes) -> DailySubjectAssessmentSet:

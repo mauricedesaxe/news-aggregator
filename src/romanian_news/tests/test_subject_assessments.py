@@ -277,6 +277,47 @@ def test_subject_assessment_exhaustion_preserves_domain_error(monkeypatch) -> No
     assert isinstance(raised.value.__cause__, ValidationError)
 
 
+def test_subject_assessment_recovers_cross_subject_citations(monkeypatch) -> None:
+    value = _input()
+    wrong = _assessment_response(
+        {
+            "main": [
+                {
+                    "subject": "subject_01",
+                    "rationale": "National consequence.",
+                    "evidence_articles": ["article_02"],
+                }
+            ],
+            "worth_knowing": [
+                {
+                    "subject": "subject_02",
+                    "rationale": "Useful context.",
+                    "evidence_articles": ["article_01"],
+                }
+            ],
+            "excluded": [],
+        }
+    )
+    _assessment_provider(monkeypatch, (wrong, wrong))
+
+    output = construct_daily_subject_assessments(value)
+
+    construction = output.assessment_set.construction
+    assert isinstance(construction, ModelSubjectAssessmentConstruction)
+    assert tuple(attempt.status for attempt in construction.attempts) == (
+        "rejected",
+        "rejected",
+    )
+    assert construction.evidence_recovery == "scoped"
+    assert tuple(
+        assessment.evidence[0].article.version_id
+        for assessment in output.assessment_set.assessments
+    ) == tuple(item.article.version_id for item in value.evidence)
+    assert DailySubjectAssessmentSet.model_validate_json(output.content, strict=True) == (
+        output.assessment_set
+    )
+
+
 def test_assessment_set_rejects_missing_subject_and_nonsemantic_tie() -> None:
     value = _input()
     first, second = value.theme_set.themes

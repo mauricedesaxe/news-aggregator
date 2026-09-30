@@ -42,6 +42,7 @@ class CorrectedStructuredResult(Generic[_Parsed]):
     messages: tuple[StructuredMessage, ...]
     call: ModelCall
     attempts: tuple[StructuredAttempt, ...]
+    recovered: bool = False
 
 
 def run_corrected_structured_openrouter(
@@ -60,11 +61,13 @@ def run_corrected_structured_openrouter(
     exhausted_error: Callable[[str], ValueError],
     unreachable_error: str,
     started_at: float,
+    recover: Callable[[str, ValidationError | ValueError], _Parsed] | None = None,
 ) -> CorrectedStructuredResult[_Parsed]:
     messages = list(initial_messages)
     attempts: list[StructuredAttempt] = []
     responses: list[ChatCompletion] = []
     accepted: _Parsed | object = _MISSING
+    recovered = False
     for attempt_index in range(2):
         provider_inputs: ProviderChatRequest = {
             "model": model,
@@ -131,7 +134,14 @@ def run_corrected_structured_openrouter(
         assert error_text is not None
         if attempt_index == 1:
             assert rejection is not None
-            raise exhausted_error(error_text) from rejection
+            if recover is None:
+                raise exhausted_error(error_text) from rejection
+            try:
+                accepted = recover(content, rejection)
+            except (ValidationError, ValueError):
+                raise exhausted_error(error_text) from rejection
+            recovered = True
+            break
         messages.extend(
             (
                 StructuredMessage(role="assistant", content=content),
@@ -153,6 +163,7 @@ def run_corrected_structured_openrouter(
             latency_ms=round((time.monotonic() - started_at) * 1000),
         ),
         attempts=tuple(attempts),
+        recovered=recovered,
     )
 
 
