@@ -16,10 +16,10 @@ from romanian_news import themes as construction_module
 from romanian_news.analysis import corrected_structured
 from romanian_news.analysis.groups.models import GroupSummary
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog import themes
+from romanian_news.catalog import clusters, themes
 from romanian_news.catalog.artifacts import current_artifact_file
 from romanian_news.catalog.reports import publish_daily_report
-from romanian_news.groups import NewsGroup
+from romanian_news.groups import DailyClusterOutput, DailyClusterSet, NewsGroup
 from romanian_news.identity import canonical_json, sha256
 from romanian_news.reports import (
     DailyReport,
@@ -112,6 +112,7 @@ def test_daily_theme_publication_persists_model_evidence_and_ordered_run_inputs(
             "response_count": 1,
         }
     )
+
     assert _head_row(postgres_catalog, f"news:themes:{theme_set.day.isoformat()}") == (
         publication.reference.version_id,
         publication.run_id,
@@ -182,6 +183,50 @@ def test_daily_theme_publication_persists_model_evidence_and_ordered_run_inputs(
             "response_count": 1,
         }
     )
+
+
+def test_cluster_publication_persists_ordered_inputs_in_one_batch(
+    postgres_catalog: PostgresCatalog,
+    fake_r2: FakeR2Client,
+) -> None:
+    articles = tuple(
+        SimpleNamespace(
+            article=_reference(f"article-{index}", str(index + 1)),
+            relevance=_reference(f"relevance-{index}", str(index + 3)),
+            embedding=_reference(f"embedding-{index}", str(index + 5)),
+        )
+        for index in range(2)
+    )
+    for article in articles:
+        for reference in (article.article, article.relevance, article.embedding):
+            _seed_input(postgres_catalog, reference)
+    content = b'{"clusters":[]}'
+    output = DailyClusterOutput.model_construct(
+        request_id="a" * 64,
+        content_digest=sha256(content),
+        cluster_set=DailyClusterSet.model_construct(
+            day=date(2026, 9, 6),
+            algorithm="average-link-cosine-v1",
+            embedding_model="model",
+            threshold=0.72,
+        ),
+        articles=articles,
+        content=content,
+    )
+
+    publication = clusters.publish_daily_clusters(output, "git:contract")
+
+    assert publication.uploaded_objects == 1
+    assert output.content_digest == sha256(fake_r2.objects[next(iter(fake_r2.objects))])
+    assert _run_input_rows(postgres_catalog, output.request_id) == [
+        (role, reference.version_id)
+        for article in articles
+        for role, reference in (
+            ("article", article.article),
+            ("relevance", article.relevance),
+            ("embedding", article.embedding),
+        )
+    ]
 
 
 def test_daily_report_publication_records_assessment_lineage_rows(

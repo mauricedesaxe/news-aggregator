@@ -42,6 +42,60 @@ def test_existing_cluster_run_rechecks_guarded_head_advance(monkeypatch) -> None
     ]
 
 
+def test_new_cluster_run_inserts_all_inputs_in_one_statement(monkeypatch) -> None:
+    articles = tuple(
+        SimpleNamespace(
+            article=_reference(f"article-{index}", str(index + 1)),
+            relevance=_reference(f"relevance-{index}", str(index + 3)),
+            embedding=_reference(f"embedding-{index}", str(index + 5)),
+        )
+        for index in range(2)
+    )
+    output = DailyClusterOutput.model_construct(
+        request_id="1" * 64,
+        content_digest="2" * 64,
+        cluster_set=DailyClusterSet.model_construct(
+            day=DAY, algorithm="average-link-cosine-v1", embedding_model="model", threshold=0.72
+        ),
+        articles=articles,
+        content=b"clusters",
+    )
+    batches = []
+    monkeypatch.setattr(clusters, "run_exists", lambda _run_id: False)
+    monkeypatch.setattr(
+        clusters,
+        "publish_immutable_r2_objects",
+        lambda _objects: SimpleNamespace(uploaded_objects=1, reused_objects=0),
+    )
+    monkeypatch.setattr(clusters, "catalog_batch", batches.append)
+
+    clusters.publish_daily_clusters(output, IMPLEMENTATION_REF)
+
+    input_statements = [
+        (statement, parameters)
+        for statement, parameters in batches[0]
+        if statement.startswith("INSERT INTO run_inputs")
+    ]
+    assert len(input_statements) == 1
+    statement, parameters = input_statements[0]
+    assert "FROM unnest" in statement
+    assert parameters == [
+        output.request_id,
+        [0, 1, 2, 3, 4, 5],
+        [
+            reference.version_id
+            for article in articles
+            for reference in (article.article, article.relevance, article.embedding)
+        ],
+        ["article", "relevance", "embedding"] * 2,
+        [
+            reference.content_digest
+            for article in articles
+            for reference in (article.article, article.relevance, article.embedding)
+        ],
+    ]
+
+
 def test_existing_daily_report_run_rechecks_guarded_head_advance(monkeypatch) -> None:
     output = DailyReportOutput.model_construct(
         request_id="3" * 64,
