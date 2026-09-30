@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Annotated
 
@@ -96,7 +97,11 @@ def read_cluster_articles(cluster_set: DailyClusterSet) -> tuple[EmbeddedArticle
 
 def read_embedded_articles(day: date | None = None) -> tuple[EmbeddedArticle, ...]:
     """Read accepted current articles with verified relevance and embeddings."""
-    return tuple(_load_embedded_article(value) for value in read_embedded_article_references(day))
+    references = read_embedded_article_references(day)
+    if not references:
+        return ()
+    with ThreadPoolExecutor(max_workers=min(16, len(references))) as executor:
+        return tuple(executor.map(_load_embedded_article, references))
 
 
 def read_embedded_article_references(
