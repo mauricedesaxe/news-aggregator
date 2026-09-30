@@ -170,6 +170,7 @@ jobs:
 
           for sensor_name in (
               "article_batch_controller",
+              "historical_daily_recovery",
               "romanian_news_automation",
               "youtube_relevance_controller",
               "weekly_report_freshness",
