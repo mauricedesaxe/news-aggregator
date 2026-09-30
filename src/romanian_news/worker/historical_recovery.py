@@ -154,6 +154,7 @@ def _repair_request(instance: dg.DagsterInstance, day: str, now: datetime) -> dg
             partition_key=day,
             asset_selection=[key],
             tags={
+                "dagster/priority": "-10",
                 "news/recovery_day": day,
                 "news/recovery_stage": key.to_user_string(),
                 "news/recovery_generation": generation,
