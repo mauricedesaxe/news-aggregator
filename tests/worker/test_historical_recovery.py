@@ -54,6 +54,7 @@ def test_historical_recovery_scans_one_old_day_and_excludes_recent_days(monkeypa
         assert len(first.run_requests) == 1
         assert first.run_requests[0].partition_key == "2026-09-10"
         assert first.run_requests[0].asset_selection == [dg.AssetKey("relevance")]
+        assert first.run_requests[0].tags["dagster/priority"] == "-10"
         assert first.cursor == "2026-09-10"
 
         next_tick = _evaluate(instance, first.cursor)
