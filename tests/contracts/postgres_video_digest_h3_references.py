@@ -7,13 +7,14 @@ import pytest
 
 import romanian_news.catalog.schema as news_schema
 from romanian_news import storage
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, sha256
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file
 from romanian_news.catalog.schema import ensure_news_catalog_schema
 from romanian_news.catalog.video_digest import (
     H3ReferenceMediaArtifact,
     read_h3_reference_pack_projection,
     record_h3_reference_pack,
 )
+from romanian_news.identity import sha256
 from romanian_news.storage import ResearchObjectIntegrityError
 from romanian_news.video_digest import references
 from tests.worker.conftest import FakeR2Client

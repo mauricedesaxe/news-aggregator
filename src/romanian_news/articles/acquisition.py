@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import signal
 import threading
@@ -47,6 +46,7 @@ from romanian_news.catalog_transport import ResearchCatalogError
 from romanian_news.feeds.materialization import materialize_cataloged_feed_entries
 from romanian_news.feeds.models import CatalogedFeedEntryReference, FeedRegistry, FeedSpec
 from romanian_news.http import UnsafeNewsRedirect, create_news_session, get_with_validated_redirects
+from romanian_news.identity import sha256
 from romanian_news.storage import (
     ResearchObjectIntegrityError,
     ResearchObjectUnavailable,
@@ -304,7 +304,7 @@ def _recovery_request_ids(
     requested_at: datetime,
 ) -> tuple[Sha256, ...]:
     return tuple(
-        hashlib.sha256(
+        sha256(
             json.dumps(
                 {
                     "event_id": event_id,
@@ -316,7 +316,7 @@ def _recovery_request_ids(
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode()
-        ).hexdigest()
+        )
         for event_id in event_ids
     )
 
@@ -525,7 +525,7 @@ def _article_failure(
     return ArticleAcquisitionFailure(
         event_id=event_id,
         kind=kind,
-        fingerprint=_sha256(f"{kind.value}:{message}".encode()),
+        fingerprint=sha256(f"{kind.value}:{message}".encode()),
         message=message,
     )
 
@@ -927,7 +927,7 @@ def _extract_article_capture(
         captured_at=datetime.now(UTC),
         page_url=page.url,
         page_content=page.content,
-        page_content_digest=_sha256(page.content) if page.content else None,
+        page_content_digest=sha256(page.content) if page.content else None,
         latency_ms=page.latency_ms,
         retrieval_error=page.retrieval_error,
     )
@@ -965,7 +965,3 @@ def _work_day(work: ArticleWorkItem | MaterializedArticleWorkItem) -> date:
 
 def _effective_time(source: CatalogedFeedEntryReference) -> datetime:
     return source.source_updated_at or source.published_at
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()

@@ -11,7 +11,7 @@ from botocore.client import BaseClient
 from pydantic import Field, StringConstraints, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file
 from romanian_news.catalog.video_digest import (
     begin_publication_attempt,
     checkpoint_publication_progress,
@@ -25,6 +25,7 @@ from romanian_news.config import (
     NEWS_PUBLIC_MEDIA_R2_BUCKET,
     NEWS_R2_BUCKET,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import (
     PublicObjectConflict,
     PublicObjectUnavailable,

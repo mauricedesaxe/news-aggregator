@@ -15,7 +15,7 @@ from typing import Annotated, Literal, cast
 from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file
 from romanian_news.catalog.video_digest import (
     GenerationAttemptReference,
     checkpoint_assembled_video,
@@ -26,6 +26,7 @@ from romanian_news.catalog.video_digest import (
     read_generation_attempts,
     record_assembly_attempt,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import (
     ResearchObjectIntegrityError,
     publish_immutable_r2_objects,

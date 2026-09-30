@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.catalog.artifacts import canonical_json, sha256
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.reports import DailyReport
 from romanian_news.video_digest.models import EditionIdField, edition_id
 

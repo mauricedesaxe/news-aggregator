@@ -23,6 +23,7 @@ from romanian_news.config import (
     CLOUDFLARE_API_TOKEN,
     NEWS_R2_BUCKET,
 )
+from romanian_news.identity import sha256
 
 _NonEmpty = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -116,7 +117,7 @@ def read_verified_r2_object(
         )
     except (_BotoCoreError, _ClientError, requests.RequestException, RuntimeError) as error:
         raise ResearchObjectUnavailable(f"R2 object unavailable: {key}") from error
-    if _sha256(content) != digest:
+    if sha256(content) != digest:
         raise ResearchObjectIntegrityError(f"R2 verification failed for {key}")
     return content
 
@@ -252,7 +253,7 @@ def publish_private_reference_media_object(
 ) -> None:
     if not source_lineage.strip():
         raise ValueError("Private media source lineage is required")
-    digest = _sha256(content)
+    digest = sha256(content)
     metadata = {
         "sha256": digest,
         "visibility": "private",
@@ -349,7 +350,7 @@ def verify_public_object_url(
 
 
 def _validate_local_public_object(value: PublicR2Object) -> None:
-    if len(value.content) != value.byte_size or _sha256(value.content) != value.content_digest:
+    if len(value.content) != value.byte_size or sha256(value.content) != value.content_digest:
         raise PublicObjectConflict(f"Local public object differs from intent: {value.key}")
 
 
@@ -406,14 +407,14 @@ def _require_matching_private_video_object(
         head.ContentType,
         head.CacheControl,
         head.Metadata,
-        _sha256(remote),
+        sha256(remote),
     )
     expected = (
         len(content),
         content_type,
         "private,no-store",
         metadata,
-        _sha256(content),
+        sha256(content),
     )
     if actual != expected:
         raise ResearchObjectIntegrityError(
@@ -429,7 +430,7 @@ def _require_matching_public_object(
 ) -> None:
     remote = _read_r2_body(client, bucket, value.key)
     actual = (
-        _sha256(remote),
+        sha256(remote),
         head.ContentLength,
         head.ContentType,
         head.CacheControl,
@@ -524,7 +525,7 @@ def _publish_immutable_r2_object(
 ) -> str:
     from botocore.exceptions import ClientError
 
-    digest = _sha256(content)
+    digest = sha256(content)
     try:
         client.head_object(Bucket=bucket, Key=key)
     except ClientError as error:
@@ -532,7 +533,7 @@ def _publish_immutable_r2_object(
             raise
     else:
         remote = client.get_object(Bucket=bucket, Key=key)["Body"].read()
-        if _sha256(remote) != digest:
+        if sha256(remote) != digest:
             raise ResearchObjectIntegrityError(
                 f"R2 object already exists with different content: {key}"
             )
@@ -544,7 +545,7 @@ def _publish_immutable_r2_object(
         Metadata={"sha256": digest},
     )
     remote = client.get_object(Bucket=bucket, Key=key)["Body"].read()
-    if _sha256(remote) != digest:
+    if sha256(remote) != digest:
         raise ResearchObjectIntegrityError(f"R2 verification failed for {key}")
     return "uploaded"
 
@@ -558,7 +559,7 @@ def r2_s3_config() -> R2S3Config:
     return R2S3Config(
         endpoint_url=f"https://{CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com",
         access_key_id=_cloudflare_token_id(),
-        secret_access_key=_sha256(CLOUDFLARE_API_TOKEN.encode()),
+        secret_access_key=sha256(CLOUDFLARE_API_TOKEN.encode()),
     )
 
 
@@ -597,7 +598,3 @@ def _cloudflare_headers() -> dict[str, str]:
     if not CLOUDFLARE_API_TOKEN:
         raise RuntimeError("CLOUDFLARE_API_TOKEN is required")
     return {"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"}
-
-
-def _sha256(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()

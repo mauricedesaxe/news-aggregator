@@ -4,8 +4,9 @@ import pytest
 from pydantic import ValidationError
 
 from romanian_news import BUCHAREST
-from romanian_news.catalog.artifacts import artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import artifact_file
 from romanian_news.catalog.report_inputs import CurrentDailyReportRecord
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.reports import (
     DailyReport,
     DailyReportSection,
