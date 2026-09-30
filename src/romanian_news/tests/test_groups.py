@@ -87,6 +87,24 @@ def test_average_link_records_stable_tie_history() -> None:
     ]
 
 
+def test_average_link_handles_a_full_day_of_similar_articles() -> None:
+    articles = tuple(
+        _article(
+            f"{index:064x}",
+            (
+                math.cos(2 * math.pi * (index % 8) / 8),
+                math.sin(2 * math.pi * (index % 8) / 8),
+            ),
+        )
+        for index in range(256)
+    )
+
+    result = cluster_articles(date(2026, 8, 31), articles, threshold=0.9)
+
+    assert len(result.cluster_set.merges) == 248
+    assert sorted(len(group.article_version_ids) for group in result.cluster_set.groups) == [32] * 8
+
+
 def test_default_threshold_groups_articles_with_point_seven_five_similarity() -> None:
     articles = (
         _article("a" * 64, (1.0, 0.0)),

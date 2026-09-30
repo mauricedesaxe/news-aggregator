@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import date
+from heapq import heappop, heappush
 from typing import Annotated
 
 import numpy as np
@@ -70,6 +72,17 @@ class DailyClusterOutput(NewsModel):
     cluster_set: DailyClusterSet
     articles: tuple[EmbeddedArticle, ...]
     content: bytes
+
+
+@dataclass(frozen=True)
+class _ClusterCandidate:
+    similarity: float
+    tie_break: tuple[Sha256, ...]
+    left_id: int
+    right_id: int
+
+    def __lt__(self, other: _ClusterCandidate) -> bool:
+        return (self.similarity, self.tie_break) > (other.similarity, other.tie_break)
 
 
 def parse_daily_cluster_set(content: bytes) -> DailyClusterSet:
@@ -210,42 +223,56 @@ def _average_link_clusters(
     *,
     threshold: float,
 ) -> tuple[tuple[tuple[int, ...], ...], tuple[ClusterMerge, ...]]:
-    clusters = [(index,) for index in range(len(article_version_ids))]
+    clusters: dict[int, tuple[int, ...]] = {
+        index: (index,) for index in range(len(article_version_ids))
+    }
+    candidates: list[_ClusterCandidate] = []
     merges = []
-    while True:
-        candidates = []
-        for left_index, left in enumerate(clusters):
-            for right_index in range(left_index + 1, len(clusters)):
-                right = clusters[right_index]
-                similarity = float(np.mean([similarities[a, b] for a in left for b in right]))
-                if similarity >= threshold:
-                    member_ids = tuple(
-                        sorted(article_version_ids[index] for index in (*left, *right))
-                    )
-                    candidates.append((float(similarity), member_ids, left_index, right_index))
-        if not candidates:
-            break
-        similarity, _, left_index, right_index = max(
-            candidates, key=lambda value: (value[0], tuple(reversed(value[1])))
-        )
-        left = clusters[left_index]
-        right = clusters[right_index]
+
+    def add_candidate(left_id: int, right_id: int) -> None:
+        left = clusters[left_id]
+        right = clusters[right_id]
+        if left > right:
+            left_id, right_id = right_id, left_id
+            left, right = right, left
+        similarity = float(np.mean([similarities[a, b] for a in left for b in right]))
+        if similarity >= threshold:
+            member_ids = tuple(sorted(article_version_ids[index] for index in (*left, *right)))
+            heappush(
+                candidates,
+                _ClusterCandidate(similarity, tuple(reversed(member_ids)), left_id, right_id),
+            )
+
+    for left_id in range(len(article_version_ids)):
+        for right_id in range(left_id + 1, len(article_version_ids)):
+            add_candidate(left_id, right_id)
+
+    next_id = len(article_version_ids)
+    while candidates:
+        candidate = heappop(candidates)
+        if candidate.left_id not in clusters or candidate.right_id not in clusters:
+            continue
+        left = clusters.pop(candidate.left_id)
+        right = clusters.pop(candidate.right_id)
         merges.append(
             ClusterMerge(
                 left_article_version_ids=tuple(article_version_ids[index] for index in left),
                 right_article_version_ids=tuple(article_version_ids[index] for index in right),
-                similarity=similarity,
+                similarity=candidate.similarity,
             )
         )
         merged = tuple(sorted((*left, *right)))
-        clusters = [
-            cluster
-            for index, cluster in enumerate(clusters)
-            if index not in (left_index, right_index)
-        ]
-        clusters.append(merged)
-        clusters.sort(key=lambda value: tuple(article_version_ids[index] for index in value))
-    return tuple(clusters), tuple(merges)
+        clusters[next_id] = merged
+        for other_id in tuple(clusters):
+            if other_id != next_id:
+                add_candidate(other_id, next_id)
+        next_id += 1
+
+    ordered = sorted(
+        clusters.values(),
+        key=lambda value: tuple(article_version_ids[index] for index in value),
+    )
+    return tuple(ordered), tuple(merges)
 
 
 def pairwise_similarities(
