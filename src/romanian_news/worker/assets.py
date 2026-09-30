@@ -59,7 +59,8 @@ WEEKLY_PARTITIONS = dg.WeeklyPartitionsDefinition(
 )
 EAGER = dg.AutomationCondition.eager()
 DAILY_FRESHNESS = (
-    (
+    dg.AutomationCondition.in_latest_time_window(timedelta(days=3))
+    & (
         dg.AutomationCondition.any_deps_updated()
         | (dg.AutomationCondition.initial_evaluation() & dg.AutomationCondition.missing())
         | (

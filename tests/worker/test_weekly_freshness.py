@@ -79,7 +79,7 @@ def legacy_report() -> None:
 LEGACY_DAILY_DEFS = dg.Definitions(assets=[article_snapshot, legacy_report])
 
 
-def test_daily_freshness_recovers_old_partitions_and_tracks_later_captures() -> None:
+def test_daily_freshness_limits_automatic_recovery_to_recent_partitions() -> None:
     old_day = "2026-09-10"
     latest_day = "2026-09-24"
     with dg.instance_for_test() as instance:
@@ -87,10 +87,7 @@ def test_daily_freshness_recovers_old_partitions_and_tracks_later_captures() -> 
         _materialize(instance, "article_snapshot", latest_day)
 
         first = _evaluate_daily(instance)
-        assert first.get_requested_partitions(dg.AssetKey("recovered_report")) == {
-            old_day,
-            latest_day,
-        }
+        assert first.get_requested_partitions(dg.AssetKey("recovered_report")) == {latest_day}
 
         _materialize(instance, "recovered_report", old_day)
         _materialize(instance, "recovered_report", latest_day)
@@ -99,11 +96,27 @@ def test_daily_freshness_recovers_old_partitions_and_tracks_later_captures() -> 
 
         _materialize(instance, "article_snapshot", old_day)
         changed = _evaluate_daily(instance, cursor=settled.cursor)
-        assert changed.get_requested_partitions(dg.AssetKey("recovered_report")) == {old_day}
+        assert changed.get_requested_partitions(dg.AssetKey("recovered_report")) == set()
 
 
-def test_daily_freshness_retries_missing_output_hourly() -> None:
-    old_day = "2026-09-10"
+def test_daily_freshness_covers_exactly_three_calendar_days() -> None:
+    with dg.instance_for_test() as instance:
+        for day in ("2026-09-27", "2026-09-28", "2026-09-29", "2026-09-30"):
+            _materialize(instance, "article_snapshot", day)
+
+        evaluation = _evaluate_daily(
+            instance,
+            evaluation_time=datetime.fromisoformat("2026-09-30T12:00:00+03:00"),
+        )
+        assert evaluation.get_requested_partitions(dg.AssetKey("recovered_report")) == {
+            "2026-09-28",
+            "2026-09-29",
+            "2026-09-30",
+        }
+
+
+def test_daily_freshness_retries_recent_missing_output_hourly() -> None:
+    old_day = "2026-09-24"
     with dg.instance_for_test() as instance:
         _materialize(instance, "article_snapshot", old_day)
 
@@ -126,7 +139,7 @@ def test_daily_freshness_retries_missing_output_hourly() -> None:
 
 
 def test_recovery_condition_picks_up_days_missed_by_eager_cursor() -> None:
-    old_day = "2026-09-10"
+    old_day = "2026-09-24"
     with dg.instance_for_test() as instance:
         _materialize(instance, "article_snapshot", old_day)
         legacy = dg.evaluate_automation_conditions(

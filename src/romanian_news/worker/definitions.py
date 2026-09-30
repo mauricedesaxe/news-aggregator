@@ -51,6 +51,10 @@ from romanian_news.worker.feedback_sync import (
     news_feedback_sync,
     quarter_hourly_news_feedback_sync,
 )
+from romanian_news.worker.historical_recovery import (
+    historical_daily_recovery,
+    historical_daily_recovery_job,
+)
 from romanian_news.worker.jev_relevance_evaluation import jev_relevance_evaluation
 from romanian_news.worker.morning_report import (
     daily_morning_report_check,
@@ -473,6 +477,7 @@ defs = dg.Definitions(
         youtube_relevance_job,
         weekly_report_job,
         daily_report_repair,
+        historical_daily_recovery_job,
         article_batch_job,
         weekly_backfill_job,
         morning_report_check,
@@ -507,6 +512,7 @@ defs = dg.Definitions(
     ],
     sensors=[
         article_batch_controller,
+        historical_daily_recovery,
         youtube_relevance_controller,
         news_automation,
         weekly_freshness,
