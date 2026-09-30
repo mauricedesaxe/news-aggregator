@@ -143,6 +143,7 @@ jobs:
           }
 
           for schedule_name in (
+              "previous_day_report_closure",
               "hourly_registered_feed_poll",
               "youtube_source_poll",
               "youtube_approved_publication",
