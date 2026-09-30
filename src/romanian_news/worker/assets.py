@@ -58,6 +58,19 @@ WEEKLY_PARTITIONS = dg.WeeklyPartitionsDefinition(
     timezone=BUCHAREST_TIMEZONE,
 )
 EAGER = dg.AutomationCondition.eager()
+DAILY_FRESHNESS = (
+    (
+        dg.AutomationCondition.any_deps_updated()
+        | (dg.AutomationCondition.initial_evaluation() & dg.AutomationCondition.missing())
+        | (
+            (dg.AutomationCondition.missing() | dg.AutomationCondition.execution_failed())
+            & dg.AutomationCondition.cron_tick_passed("0 * * * *", BUCHAREST_TIMEZONE)
+        )
+    )
+    & ~dg.AutomationCondition.any_deps_missing()
+    & ~dg.AutomationCondition.any_deps_in_progress()
+    & ~dg.AutomationCondition.in_progress()
+)
 SHADOW_FRESHNESS = (
     dg.AutomationCondition.in_latest_time_window(timedelta(days=7))
     & (
@@ -128,6 +141,17 @@ def articles(
             partition=context.partition_key,
             metadata=metadata,
         )
+    first_snapshot = bool(result.references.values) and not _article_snapshot_exists(context)
+    if (
+        result.acquired_event_ids
+        or first_snapshot
+        or (
+            result.complete
+            and not result.has_infrastructure_failures
+            and not result.quarantined_event_ids
+        )
+    ):
+        yield _result(result.references.values, metadata)
     if result.has_infrastructure_failures:
         failures = [
             failure.message for failure in result.failures if failure.kind.value == "infrastructure"
@@ -138,8 +162,17 @@ def articles(
             f"Article batch has {len(result.quarantined_event_ids)} quarantined input(s)",
             allow_retries=False,
         )
-    if result.complete:
-        yield _result(result.references.values, metadata)
+
+
+def _article_snapshot_exists(context: dg.AssetExecutionContext) -> bool:
+    records = context.instance.fetch_materializations(
+        dg.AssetRecordsFilter(
+            asset_key=dg.AssetKey("articles"),
+            asset_partitions=[context.partition_key],
+        ),
+        limit=1,
+    ).records
+    return bool(records)
 
 
 @dg.asset(group_name="romanian_news_youtube", pool="news_youtube_network", output_required=False)
@@ -195,7 +228,7 @@ def _youtube_result(metadata: dict[str, str | int | bool]) -> dg.MaterializeResu
     partitions_def=DAILY_PARTITIONS,
     group_name="romanian_news_daily",
     pool="news_model",
-    automation_condition=EAGER,
+    automation_condition=DAILY_FRESHNESS,
 )
 def relevance(context: dg.AssetExecutionContext) -> dg.MaterializeResult[object]:
     return _result(materialize_relevance(_partition_day(context), IMPLEMENTATION_REF).values)
@@ -228,7 +261,7 @@ def jev_relevance_shadow(
     partitions_def=DAILY_PARTITIONS,
     group_name="romanian_news_daily",
     pool="news_model",
-    automation_condition=EAGER,
+    automation_condition=DAILY_FRESHNESS,
 )
 def embeddings(context: dg.AssetExecutionContext) -> dg.MaterializeResult[object]:
     return _result(materialize_embeddings(_partition_day(context), IMPLEMENTATION_REF).values)
@@ -239,7 +272,7 @@ def embeddings(context: dg.AssetExecutionContext) -> dg.MaterializeResult[object
     partitions_def=DAILY_PARTITIONS,
     group_name="romanian_news_daily",
     pool="news_catalog",
-    automation_condition=EAGER,
+    automation_condition=DAILY_FRESHNESS,
 )
 def daily_clusters(context: dg.AssetExecutionContext) -> dg.MaterializeResult[object]:
     return _result(materialize_clusters(_partition_day(context), IMPLEMENTATION_REF).values)
@@ -250,7 +283,7 @@ def daily_clusters(context: dg.AssetExecutionContext) -> dg.MaterializeResult[ob
     partitions_def=DAILY_PARTITIONS,
     group_name="romanian_news_daily",
     pool="news_model",
-    automation_condition=EAGER,
+    automation_condition=DAILY_FRESHNESS,
 )
 def group_summaries(context: dg.AssetExecutionContext) -> dg.MaterializeResult[object]:
     return _result(materialize_group_summaries(_partition_day(context), IMPLEMENTATION_REF).values)
@@ -261,7 +294,7 @@ def group_summaries(context: dg.AssetExecutionContext) -> dg.MaterializeResult[o
     partitions_def=DAILY_PARTITIONS,
     group_name="romanian_news_daily",
     pool="news_model",
-    automation_condition=EAGER,
+    automation_condition=DAILY_FRESHNESS,
 )
 def group_sentiment(context: dg.AssetExecutionContext) -> dg.MaterializeResult[object]:
     return _result(materialize_group_sentiment(_partition_day(context), IMPLEMENTATION_REF).values)
@@ -272,7 +305,7 @@ def group_sentiment(context: dg.AssetExecutionContext) -> dg.MaterializeResult[o
     partitions_def=DAILY_PARTITIONS,
     group_name="romanian_news_daily",
     pool="news_model",
-    automation_condition=EAGER,
+    automation_condition=DAILY_FRESHNESS,
 )
 def daily_themes(context: dg.AssetExecutionContext) -> dg.MaterializeResult[object]:
     return _result(materialize_daily_themes(_partition_day(context), IMPLEMENTATION_REF).values)
@@ -283,7 +316,7 @@ def daily_themes(context: dg.AssetExecutionContext) -> dg.MaterializeResult[obje
     partitions_def=DAILY_PARTITIONS,
     group_name="romanian_news_daily",
     pool="news_model",
-    automation_condition=EAGER,
+    automation_condition=DAILY_FRESHNESS,
 )
 def daily_subject_assessments(
     context: dg.AssetExecutionContext,
@@ -298,7 +331,7 @@ def daily_subject_assessments(
     partitions_def=DAILY_PARTITIONS,
     group_name="romanian_news_daily",
     pool="news_catalog",
-    automation_condition=EAGER,
+    automation_condition=DAILY_FRESHNESS,
 )
 def daily_reports(context: dg.AssetExecutionContext) -> dg.MaterializeResult[object]:
     return _result(materialize_daily_report(_partition_day(context), IMPLEMENTATION_REF).values)
