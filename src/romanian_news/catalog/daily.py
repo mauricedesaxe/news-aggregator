@@ -51,12 +51,18 @@ def read_current_artifact_input_version_ids(artifact_id: str) -> tuple[Sha256, .
     return tuple(str(row["artifact_version_id"]) for row in rows)
 
 
-def relevance_is_accepted(version_id: Sha256) -> bool:
-    rows = catalog_query(
-        "SELECT accepted FROM news_relevance_versions WHERE artifact_version_id = %s",
-        [version_id],
-    )
-    return len(rows) == 1 and bool(rows[0]["accepted"])
+def accepted_relevance_version_ids(version_ids: tuple[Sha256, ...]) -> frozenset[Sha256]:
+    accepted: set[Sha256] = set()
+    for offset in range(0, len(version_ids), 50):
+        values = version_ids[offset : offset + 50]
+        placeholders = ", ".join("%s" for _ in values)
+        rows = catalog_query(
+            "SELECT artifact_version_id FROM news_relevance_versions "
+            f"WHERE accepted = 1 AND artifact_version_id IN ({placeholders})",
+            list(values),
+        )
+        accepted.update(str(row["artifact_version_id"]) for row in rows)
+    return frozenset(accepted)
 
 
 def _references(sql: str, parameters: list[object]) -> tuple[ArtifactReference, ...]:

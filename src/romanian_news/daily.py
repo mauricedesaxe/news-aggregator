@@ -67,15 +67,18 @@ def read_daily_relevance_references(day: date) -> DailyArtifactReferences:
 
 
 def read_daily_embedding_references(day: date) -> DailyArtifactReferences:
-    from romanian_news.catalog.daily import relevance_is_accepted
+    from romanian_news.catalog.daily import accepted_relevance_version_ids
 
     relevance = {value.artifact_id: value for value in read_daily_relevance_references(day).values}
+    accepted = accepted_relevance_version_ids(
+        tuple(reference.version_id for reference in relevance.values())
+    )
     articles = read_daily_article_references(day).values
     artifact_ids = []
     for article in articles:
         relevance_id = f"news:relevance:{production_relevance_v3_request_id(article)}"
         reference = relevance.get(relevance_id)
-        if reference is not None and relevance_is_accepted(reference.version_id):
+        if reference is not None and reference.version_id in accepted:
             artifact_ids.append(f"news:embedding:{embedding_request_id(article, reference)}")
     return DailyArtifactReferences(day=day, values=_current_references(tuple(artifact_ids)))
 
