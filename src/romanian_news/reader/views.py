@@ -65,6 +65,7 @@ from romanian_news.reader.components import (
 from romanian_news.reader.report_status import _initial_status_strip
 from romanian_news.reports import (
     DailyReport,
+    DailyReportDocument,
     DailyReportSection,
     RetrospectiveDailyReport,
 )
@@ -159,6 +160,7 @@ def _report_page(
         _initial_status_strip(report.day, report_version_id, csrf_token)
         if live is not None
         else None,
+        _report_coverage_notice(report),
         _video_digest(video_digest, request.url.path, csrf_token)
         if video_digest is not None
         else None,
@@ -192,6 +194,25 @@ def _retrospective_notice(report: RetrospectiveDailyReport) -> Any:
         ),
         P(coverage.coverage_note),
         cls="retrospective-notice",
+    )
+
+
+def _report_coverage_notice(report: DailyReportDocument) -> Any | None:
+    if type(report) is not DailyReport or report.coverage_status == "complete":
+        return None
+    if report.coverage_status == "provisional":
+        return Section(
+            H2("Provisional report"),
+            P(
+                "Article collection was still open or some sources were outstanding "
+                "when this version was published. The latest report may change."
+            ),
+            cls="report-coverage-notice",
+        )
+    return Section(
+        H2("Coverage unknown"),
+        P("Coverage status was not recorded when this report was published."),
+        cls="report-coverage-notice",
     )
 
 
@@ -687,6 +708,7 @@ def _load_exact_report(
                 P(A("← All reports", href="/reports"), cls="eyebrow"),
                 P("Saved version. This page will keep showing the same daily report."),
                 H1(_format_date(report.day)),
+                _report_coverage_notice(report),
                 *(
                     _report_section(
                         section,

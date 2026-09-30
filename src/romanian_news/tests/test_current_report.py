@@ -8,6 +8,7 @@ import pytest
 
 from romanian_news import current_report as current_report_module
 from romanian_news import reports as reports_module
+from romanian_news.articles.models import ArticleWorkStatus
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.current_report import (
     CurrentDailyReport,
@@ -18,6 +19,7 @@ from romanian_news.current_report import (
     ReportStale,
     build_and_publish_current_daily_report,
     read_current_daily_report,
+    read_daily_report_coverage_status,
     read_daily_report_freshness,
 )
 from romanian_news.reports import DailyReport, DailyReportInput
@@ -75,7 +77,8 @@ def pipeline(monkeypatch):
         state.reads += 1
         return state.current
 
-    def build(value: DailyReportInput) -> SimpleNamespace:
+    def build(value: DailyReportInput, *, coverage_status: str) -> SimpleNamespace:
+        assert coverage_status == "provisional"
         return SimpleNamespace(
             request_id=REQUEST_ID,
             report=_empty_report(),
@@ -109,6 +112,9 @@ def pipeline(monkeypatch):
 
     monkeypatch.setattr(reports_module, "read_daily_report_input", read_input)
     monkeypatch.setattr(current_report_module, "build_daily_report_from_input", build)
+    monkeypatch.setattr(
+        current_report_module, "read_daily_report_coverage_status", lambda *_args: "provisional"
+    )
     monkeypatch.setattr(current_report_module, "publish_daily_report", publish)
     monkeypatch.setattr(
         "romanian_news.catalog.artifacts.current_artifact_references", current_references
@@ -155,6 +161,39 @@ def test_current_report_rereads_after_an_input_version_advances(pipeline) -> Non
     assert pipeline.reads == 2
 
 
+def test_coverage_stays_provisional_until_the_day_closes_and_work_finishes(monkeypatch) -> None:
+    status = ArticleWorkStatus(
+        retryable_entries=0,
+        deferred_event_ids=(),
+        quarantined_event_ids=(),
+        source_covered_days=(DAY,),
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.read_article_work_status",
+        lambda *_args, **_kwargs: status,
+    )
+    assert (
+        read_daily_report_coverage_status(
+            DAY, "git:test", now=datetime(2026, 9, 14, 12, tzinfo=UTC)
+        )
+        == "provisional"
+    )
+    after = datetime(2026, 9, 15, 12, tzinfo=UTC)
+    assert read_daily_report_coverage_status(DAY, "git:test", now=after) == "complete"
+
+    for incomplete in (
+        status.model_copy(update={"retryable_entries": 1}),
+        status.model_copy(update={"deferred_event_ids": ("1" * 64,)}),
+        status.model_copy(update={"quarantined_event_ids": ("2" * 64,)}),
+        status.model_copy(update={"source_covered_days": ()}),
+    ):
+        monkeypatch.setattr(
+            "romanian_news.articles.acquisition.read_article_work_status",
+            lambda *_args, _value=incomplete, **_kwargs: _value,
+        )
+        assert read_daily_report_coverage_status(DAY, "git:test", now=after) == "provisional"
+
+
 def test_current_report_read_path_never_builds_or_publishes(monkeypatch) -> None:
     from romanian_news.catalog.report_inputs import CurrentDailyReportRecord
 
@@ -173,9 +212,9 @@ def test_current_report_read_path_never_builds_or_publishes(monkeypatch) -> None
     )
     monkeypatch.setattr(
         "romanian_news.storage.read_verified_r2_object",
-        lambda key, digest: content
-        if (key, digest) == (record.r2_key, record.content_digest)
-        else b"",
+        lambda key, digest: (
+            content if (key, digest) == (record.r2_key, record.content_digest) else b""
+        ),
     )
     monkeypatch.setattr(
         current_report_module,

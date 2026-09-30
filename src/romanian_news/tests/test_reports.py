@@ -30,6 +30,7 @@ from romanian_news.reports import (
     build_daily_report_from_construction,
     build_retrospective_daily_report,
     build_weekly_report,
+    daily_report_request_id,
     parse_daily_report,
 )
 from romanian_news.subject_assessments import (
@@ -97,6 +98,68 @@ def test_weekly_report_uses_seven_exact_daily_versions(monkeypatch) -> None:
     assert tuple(day.daily_report_version_id for day in output.report.days) == tuple(
         reference.version_id for reference, _report in daily.values()
     )
+
+
+def test_provisional_daily_report_changes_identity_and_survives_weekly_round_trip(
+    monkeypatch,
+) -> None:
+    specs = (("a", "Romania loses PNRR funds", 1, "major", "strong", "strong"),)
+    output = _build_ranked_report(
+        monkeypatch,
+        specs,
+        coverage_status="provisional",
+    )
+    complete = _build_ranked_report(monkeypatch, specs, coverage_status="complete")
+    assert output.report.coverage_status == "provisional"
+    assert parse_daily_report(output.content).coverage_status == "provisional"
+    assert output.request_id != complete.request_id
+    assert output.content_digest != complete.content_digest
+    assert output.request_id != daily_report_request_id(
+        DailyReportInput(
+            day=output.report.day,
+            themes=output.themes,
+            assessments=output.assessments,
+            cluster_set=output.cluster_set,
+            summaries=output.summaries,
+            sentiments=output.sentiments,
+        ),
+        "complete",
+    )
+
+    week_start = output.report.day - timedelta(days=output.report.day.weekday())
+    daily = {
+        week_start + timedelta(days=offset): (
+            _reference(str(offset) * 64),
+            output.report
+            if week_start + timedelta(days=offset) == output.report.day
+            else DailyReport(
+                day=week_start + timedelta(days=offset),
+                accepted_article_count=0,
+                theme_count=0,
+                group_count=0,
+                coverage_status="complete",
+                sections=(),
+            ),
+        )
+        for offset in range(7)
+    }
+    monkeypatch.setattr("romanian_news.reports._read_daily_report", daily.__getitem__)
+    weekly = build_weekly_report(week_start)
+    assert weekly.report.coverage_status == "provisional"
+    assert WeeklyReport.model_validate_json(weekly.content, strict=True).coverage_status == (
+        "provisional"
+    )
+
+
+def test_old_daily_report_parses_with_unknown_coverage() -> None:
+    legacy = DailyReport(
+        day=date(2026, 8, 24),
+        accepted_article_count=0,
+        theme_count=0,
+        group_count=0,
+        sections=(),
+    ).model_dump(mode="json", exclude={"coverage_status"})
+    assert parse_daily_report(json.dumps(legacy).encode()).coverage_status == "unknown"
 
 
 def test_retrospective_report_requires_capture_evidence_and_survives_weekly_round_trip(
@@ -613,7 +676,9 @@ def _ranked_assessment_set(
     return assessment_reference, assessment_set
 
 
-def _build_ranked_report(monkeypatch, specs, *, combine_themes: bool = False):
+def _build_ranked_report(
+    monkeypatch, specs, *, combine_themes: bool = False, coverage_status: str = "unknown"
+):
     day = date(2026, 8, 31)
     (
         groups,
@@ -713,7 +778,8 @@ def _build_ranked_report(monkeypatch, specs, *, combine_themes: bool = False):
             articles=article_metadata,
             summaries=summary_values,
             sentiments=sentiment_values,
-        )
+        ),
+        coverage_status=coverage_status,
     )
 
 
