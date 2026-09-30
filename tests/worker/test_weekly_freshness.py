@@ -5,7 +5,9 @@ from datetime import date, datetime, timedelta
 import dagster as dg
 
 from romanian_news.worker.assets import (
+    DAILY_FRESHNESS,
     DAILY_PARTITIONS,
+    EAGER,
     SHADOW_FRESHNESS,
     WEEKLY_FRESHNESS,
     WEEKLY_PARTITIONS,
@@ -45,6 +47,108 @@ def shadow_report() -> None:
 DEFS = dg.Definitions(assets=[daily_reports, weekly_reports])
 SHADOW_DEFS = dg.Definitions(assets=[shadow_source, shadow_report])
 EVALUATION_TIME = datetime.fromisoformat("2026-09-24T10:00:00+03:00")
+
+
+@dg.asset(partitions_def=DAILY_PARTITIONS)
+def article_snapshot() -> None:
+    pass
+
+
+@dg.asset(
+    deps=[article_snapshot],
+    partitions_def=DAILY_PARTITIONS,
+    automation_condition=DAILY_FRESHNESS,
+)
+def recovered_report() -> None:
+    pass
+
+
+DAILY_DEFS = dg.Definitions(assets=[article_snapshot, recovered_report])
+
+
+@dg.asset(
+    name="recovered_report",
+    deps=[article_snapshot],
+    partitions_def=DAILY_PARTITIONS,
+    automation_condition=EAGER,
+)
+def legacy_report() -> None:
+    pass
+
+
+LEGACY_DAILY_DEFS = dg.Definitions(assets=[article_snapshot, legacy_report])
+
+
+def test_daily_freshness_recovers_old_partitions_and_tracks_later_captures() -> None:
+    old_day = "2026-09-10"
+    latest_day = "2026-09-24"
+    with dg.instance_for_test() as instance:
+        _materialize(instance, "article_snapshot", old_day)
+        _materialize(instance, "article_snapshot", latest_day)
+
+        first = _evaluate_daily(instance)
+        assert first.get_requested_partitions(dg.AssetKey("recovered_report")) == {
+            old_day,
+            latest_day,
+        }
+
+        _materialize(instance, "recovered_report", old_day)
+        _materialize(instance, "recovered_report", latest_day)
+        settled = _evaluate_daily(instance, cursor=first.cursor)
+        assert settled.get_requested_partitions(dg.AssetKey("recovered_report")) == set()
+
+        _materialize(instance, "article_snapshot", old_day)
+        changed = _evaluate_daily(instance, cursor=settled.cursor)
+        assert changed.get_requested_partitions(dg.AssetKey("recovered_report")) == {old_day}
+
+
+def test_daily_freshness_retries_missing_output_hourly() -> None:
+    old_day = "2026-09-10"
+    with dg.instance_for_test() as instance:
+        _materialize(instance, "article_snapshot", old_day)
+
+        first = _evaluate_daily(instance, evaluation_time=EVALUATION_TIME + timedelta(minutes=1))
+        assert first.get_requested_partitions(dg.AssetKey("recovered_report")) == {old_day}
+
+        too_soon = _evaluate_daily(
+            instance,
+            cursor=first.cursor,
+            evaluation_time=EVALUATION_TIME + timedelta(minutes=6),
+        )
+        assert too_soon.get_requested_partitions(dg.AssetKey("recovered_report")) == set()
+
+        retry = _evaluate_daily(
+            instance,
+            cursor=too_soon.cursor,
+            evaluation_time=EVALUATION_TIME + timedelta(hours=1, minutes=6),
+        )
+        assert retry.get_requested_partitions(dg.AssetKey("recovered_report")) == {old_day}
+
+
+def test_recovery_condition_picks_up_days_missed_by_eager_cursor() -> None:
+    old_day = "2026-09-10"
+    with dg.instance_for_test() as instance:
+        _materialize(instance, "article_snapshot", old_day)
+        legacy = dg.evaluate_automation_conditions(
+            LEGACY_DAILY_DEFS,
+            instance,
+            asset_selection=dg.AssetSelection.assets(legacy_report),
+            evaluation_time=EVALUATION_TIME,
+        )
+        assert legacy.get_requested_partitions(dg.AssetKey("recovered_report")) == set()
+
+        recovery = _evaluate_daily(instance, cursor=legacy.cursor)
+        assert recovery.get_requested_partitions(dg.AssetKey("recovered_report")) == {old_day}
+
+
+def _evaluate_daily(instance: dg.DagsterInstance, *, cursor=None, evaluation_time=EVALUATION_TIME):
+    return dg.evaluate_automation_conditions(
+        DAILY_DEFS,
+        instance,
+        asset_selection=dg.AssetSelection.assets(recovered_report),
+        evaluation_time=evaluation_time,
+        cursor=cursor,
+    )
 
 
 def test_weekly_freshness_recovers_old_weeks_and_tracks_daily_changes() -> None:

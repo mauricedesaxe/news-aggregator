@@ -996,6 +996,52 @@ def test_partial_article_batch_observes_without_materializing(monkeypatch) -> No
     assert len(observations) == 1
 
 
+def test_partial_article_batch_materializes_new_captures(monkeypatch) -> None:
+    day = datetime.fromisoformat(DAY).date()
+    reference = ArtifactReference(
+        artifact_id="news:article:test",
+        version_id="1" * 64,
+        content_digest="2" * 64,
+        r2_key="news/articles/test.json",
+    )
+    references = DailyArtifactReferences(day=day, values=(reference,))
+    monkeypatch.setattr(assets, "materialize_feed_intake", lambda *_args: references)
+    monkeypatch.setattr(
+        assets,
+        "materialize_articles",
+        lambda *_args, **_kwargs: ArticleBatchResult(
+            references=references,
+            requested_event_ids=("a" * 64, "b" * 64),
+            acquired_event_ids=("a" * 64,),
+            skipped_event_ids=(),
+            failures=(
+                ArticleAcquisitionFailure(
+                    event_id="b" * 64,
+                    kind=ArticleFailureKind.DETERMINISTIC,
+                    fingerprint="c" * 64,
+                    message="invalid article",
+                ),
+            ),
+            remaining_entries=1,
+            deferred_event_ids=("b" * 64,),
+            quarantined_event_ids=(),
+            source_covered=False,
+        ),
+    )
+
+    result = dg.materialize(
+        [assets.feed_intake, assets.articles],
+        partition_key=DAY,
+        tags={
+            "news/scheduled_at": "2026-09-02T12:00:00+03:00",
+            "news/article_event_ids": '["' + "a" * 64 + '","' + "b" * 64 + '"]',
+        },
+    )
+
+    assert result.success
+    assert len(result.asset_materializations_for_node("articles")) == 1
+
+
 def test_past_uncovered_empty_batch_materializes_articles(monkeypatch) -> None:
     day = datetime.fromisoformat(DAY).date()
     references = DailyArtifactReferences(day=day, values=())
@@ -1068,6 +1114,53 @@ def test_quarantined_inputs_fail_without_materializing_articles(monkeypatch) -> 
     quarantined_metadata = metadata["quarantined_event_ids"]
     assert isinstance(quarantined_metadata, JsonMetadataValue)
     assert quarantined_metadata.data == [quarantined]
+
+
+def test_existing_captures_get_one_snapshot_despite_quarantine(monkeypatch) -> None:
+    day = datetime.fromisoformat(DAY).date()
+    reference = ArtifactReference(
+        artifact_id="news:article:test",
+        version_id="1" * 64,
+        content_digest="2" * 64,
+        r2_key="news/articles/test.json",
+    )
+    references = DailyArtifactReferences(day=day, values=(reference,))
+    monkeypatch.setattr(assets, "materialize_feed_intake", lambda *_args: references)
+    monkeypatch.setattr(
+        assets,
+        "materialize_articles",
+        lambda *_args, **_kwargs: ArticleBatchResult(
+            references=references,
+            requested_event_ids=(),
+            acquired_event_ids=(),
+            skipped_event_ids=(),
+            failures=(),
+            remaining_entries=0,
+            deferred_event_ids=(),
+            quarantined_event_ids=("a" * 64,),
+            source_covered=True,
+        ),
+    )
+
+    with dg.instance_for_test() as instance:
+        first = dg.materialize(
+            [assets.feed_intake, assets.articles],
+            instance=instance,
+            partition_key=DAY,
+            raise_on_error=False,
+            tags={"news/scheduled_at": "2026-09-02T12:00:00+03:00", "news/article_event_ids": "[]"},
+        )
+        second = dg.materialize(
+            [assets.feed_intake, assets.articles],
+            instance=instance,
+            partition_key=DAY,
+            raise_on_error=False,
+            tags={"news/scheduled_at": "2026-09-02T12:00:00+03:00", "news/article_event_ids": "[]"},
+        )
+
+    assert not first.success and not second.success
+    assert len(first.asset_materializations_for_node("articles")) == 1
+    assert second.asset_materializations_for_node("articles") == []
 
 
 def test_feed_asset_materializes_recorded_references(monkeypatch) -> None:
