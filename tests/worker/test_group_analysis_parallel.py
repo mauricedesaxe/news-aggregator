@@ -1,5 +1,5 @@
 from datetime import date
-from threading import Barrier
+from threading import Barrier, Event
 from types import SimpleNamespace
 
 import pytest
@@ -35,7 +35,36 @@ def test_group_summaries_run_four_model_calls_concurrently(monkeypatch) -> None:
     assert sorted(published) == [0, 1, 2, 3]
 
 
-def test_group_sentiment_preserves_batch_successes_when_one_model_call_fails(
+def test_group_summaries_keep_workers_busy_when_one_group_is_slow(monkeypatch) -> None:
+    pending = tuple(SimpleNamespace(index=index, summary_needed=True) for index in range(5))
+    fifth_started = Event()
+    published = []
+    monkeypatch.setattr(operations, "read_pending_group_analysis_references", lambda _days: pending)
+    monkeypatch.setattr(operations, "load_group_analysis_input", lambda reference: reference)
+    monkeypatch.setattr(operations, "archive_model_day_active", lambda: False)
+    monkeypatch.setattr(operations, "flush_langfuse_traces", lambda: None)
+    monkeypatch.setattr(operations, "read_daily_group_summary_references", lambda _day: ())
+    monkeypatch.setattr(
+        operations,
+        "publish_group_analysis_outputs",
+        lambda outputs, _implementation_ref: published.append(outputs[0].index),
+    )
+
+    def summarize(value):
+        if value.index == 0:
+            assert fifth_started.wait(timeout=5)
+        if value.index == 4:
+            fifth_started.set()
+        return value
+
+    monkeypatch.setattr(operations, "summarize_group", summarize)
+
+    operations.materialize_group_summaries(DAY, "git:test")
+
+    assert sorted(published) == [0, 1, 2, 3, 4]
+
+
+def test_group_sentiment_preserves_concurrent_successes_when_one_model_call_fails(
     monkeypatch,
 ) -> None:
     pending = tuple(SimpleNamespace(index=index, sentiment_needed=True) for index in range(4))
