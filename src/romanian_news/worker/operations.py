@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from itertools import batched
 from pathlib import Path
 
 from openai import OpenAIError
@@ -11,6 +12,8 @@ from openai import OpenAIError
 from romanian_news import BUCHAREST, Sha256
 from romanian_news.alerts import ping_heartbeat
 from romanian_news.analysis.embeddings import (
+    EmbeddingOutput,
+    EmbeddingReference,
     embed_article,
     load_embedding_input,
     read_pending_embedding_references,
@@ -29,7 +32,10 @@ from romanian_news.analysis.relevance_v3 import (
     analyze_relevance_v3,
     production_relevance_v3_request_id,
 )
-from romanian_news.analysis.tracing import flush_langfuse_traces
+from romanian_news.analysis.tracing import (
+    archive_model_day_active,
+    flush_langfuse_traces,
+)
 from romanian_news.articles.acquisition import (
     acquire_article_batch_item,
     load_exact_article_work,
@@ -355,11 +361,40 @@ def materialize_relevance(
         flush_langfuse_traces()
 
 
+def _embed_pending_reference(reference: EmbeddingReference) -> EmbeddingOutput:
+    return embed_article(load_embedding_input(reference))
+
+
+def _publish_embedding_batch(
+    references: tuple[EmbeddingReference, ...],
+    executor: ThreadPoolExecutor,
+    implementation_ref: str,
+) -> None:
+    futures = tuple(
+        executor.submit(_embed_pending_reference, reference) for reference in references
+    )
+    failure: Exception | None = None
+    for future in as_completed(futures):
+        try:
+            publish_embedding_outputs((future.result(),), implementation_ref)
+        except Exception as error:
+            if failure is None:
+                failure = error
+    if failure is not None:
+        raise failure
+
+
 def materialize_embeddings(day: date, implementation_ref: str) -> DailyArtifactReferences:
     try:
-        for reference in read_pending_embedding_references(day=day):
-            output = embed_article(load_embedding_input(reference))
-            publish_embedding_outputs((output,), implementation_ref)
+        pending = read_pending_embedding_references(day=day)
+        if archive_model_day_active():
+            for reference in pending:
+                output = _embed_pending_reference(reference)
+                publish_embedding_outputs((output,), implementation_ref)
+        elif pending:
+            with ThreadPoolExecutor(max_workers=min(4, len(pending))) as executor:
+                for references in batched(pending, 4):
+                    _publish_embedding_batch(references, executor, implementation_ref)
         return read_daily_embedding_references(day)
     finally:
         flush_langfuse_traces()
