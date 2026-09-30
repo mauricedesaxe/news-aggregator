@@ -499,6 +499,35 @@ def test_current_report_metadata_uses_typed_counts_in_display_order() -> None:
     )
 
 
+def test_provisional_notice_is_visible_on_report_and_exact_version() -> None:
+    report = _daily_report().model_copy(update={"coverage_status": "provisional"})
+
+    current = _read_report_response(report)
+    exact = _read_report_response(report, path=f"/reports/exact/{REPORT_VERSION}")
+
+    assert current.status_code == exact.status_code == 200
+    assert "Provisional report" in current.text
+    assert "Provisional report" in exact.text
+    assert "The latest report may change" in current.text
+    assert "Saved version" in exact.text
+
+
+def test_legacy_report_discloses_unknown_coverage() -> None:
+    response = _read_report_response(_daily_report())
+
+    assert "Coverage unknown" in response.text
+    assert "Coverage status was not recorded" in response.text
+
+
+def test_complete_report_has_no_coverage_warning() -> None:
+    report = _daily_report().model_copy(update={"coverage_status": "complete"})
+
+    response = _read_report_response(report)
+
+    assert "Provisional report" not in response.text
+    assert "Coverage unknown" not in response.text
+
+
 def test_archived_report_metadata_uses_group_count_for_subjects_and_events() -> None:
     report = _archived_report().model_copy(update={"group_count": 5, "accepted_article_count": 6})
 

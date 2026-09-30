@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
 from pydantic import Field, ValidationError
 
-from romanian_news import NewsModel, Sha256
+from romanian_news import BUCHAREST, NewsModel, Sha256
 from romanian_news.catalog.reports import publish_daily_report
 from romanian_news.reports import (
     DailyReportDocument,
     DailyReportInput,
+    ReportCoverageStatus,
     build_daily_report_from_input,
     read_daily_report_input_cached,
 )
@@ -118,7 +119,9 @@ def build_and_publish_current_daily_report(
 ) -> CurrentDailyReport:
     """Assemble the day's current inputs into a report and publish it if changed."""
     input_value = read_daily_report_input_cached(day)
-    output = build_daily_report_from_input(input_value)
+    output = build_daily_report_from_input(
+        input_value, coverage_status=read_daily_report_coverage_status(day, implementation_ref)
+    )
     publication = publish_daily_report(output, implementation_ref)
     return CurrentDailyReport(
         head=CurrentDailyReportHead(
@@ -131,6 +134,35 @@ def build_and_publish_current_daily_report(
         ),
         report=output.report,
     )
+
+
+def read_daily_report_coverage_status(
+    day: date, implementation_ref: str, *, now: datetime | None = None
+) -> ReportCoverageStatus:
+    """Classify the captured article coverage before publishing immutable report content."""
+    from romanian_news.articles.acquisition import read_article_work_status
+    from romanian_news.daily import bucharest_day_window
+    from romanian_news.feeds.registry import feed_registry
+
+    checked_at = now or datetime.now(UTC)
+    if day >= checked_at.astimezone(BUCHAREST).date():
+        return "provisional"
+    start, end = bucharest_day_window(day)
+    status = read_article_work_status(
+        feed_registry(),
+        implementation_ref=implementation_ref,
+        now=checked_at,
+        start_at=start,
+        end_at=end,
+    )
+    if (
+        status.retryable_entries
+        or status.deferred_event_ids
+        or status.quarantined_event_ids
+        or day not in status.source_covered_days
+    ):
+        return "provisional"
+    return "complete"
 
 
 def read_daily_report_input_time(value: DailyReportInput) -> datetime:

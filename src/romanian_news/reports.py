@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from romanian_news.groups import NewsGroup
 
 WEEKLY_REPORT_POLICY = "seven-current-daily-reports-v1"
+ReportCoverageStatus = Literal["provisional", "complete", "unknown"]
 
 
 class ReportArticle(NewsModel):
@@ -93,6 +94,7 @@ class DailyReport(NewsModel):
     accepted_article_count: Annotated[int, Field(ge=0)]
     theme_count: Annotated[int, Field(ge=0)]
     group_count: Annotated[int, Field(ge=0)]
+    coverage_status: ReportCoverageStatus = "unknown"
     sections: tuple[DailyReportSection, ...]
 
     @model_validator(mode="after")
@@ -219,6 +221,7 @@ class WeeklyReport(NewsModel):
     week_end: date
     accepted_article_count: Annotated[int, Field(ge=0)]
     group_count: Annotated[int, Field(ge=0)]
+    coverage_status: ReportCoverageStatus = "unknown"
     days: tuple[WeeklyReportDay, ...]
 
 
@@ -377,7 +380,9 @@ def read_recorded_daily_report_input(day: date) -> DailyReportInput:
     )
 
 
-def daily_report_request_id(value: DailyReportInput) -> Sha256:
+def daily_report_request_id(
+    value: DailyReportInput, coverage_status: ReportCoverageStatus = "unknown"
+) -> Sha256:
     """Compute the daily report identity from exact immutable references."""
     return _sha256(
         _canonical_json(
@@ -385,6 +390,7 @@ def daily_report_request_id(value: DailyReportInput) -> Sha256:
                 "theme_version_id": value.themes.version_id,
                 "assessment_version_id": value.assessments.version_id,
                 "cluster_set_version_id": value.cluster_set.version_id,
+                "coverage_status": coverage_status,
                 "operation": "news.publish_daily",
                 "report_schema": DailyReport.model_json_schema(),
                 "sentiment_version_ids": [item.version_id for item in value.sentiments],
@@ -401,7 +407,9 @@ def report_run_id(request_id: Sha256, implementation_ref: str) -> Sha256:
     return _sha256(f"{request_id}\0{implementation_ref}".encode())
 
 
-def build_daily_report_from_input(value: DailyReportInput) -> DailyReportOutput:
+def build_daily_report_from_input(
+    value: DailyReportInput, coverage_status: ReportCoverageStatus = "unknown"
+) -> DailyReportOutput:
     """Build one report from exact inputs selected before the job was claimed."""
     theme_set = _load_daily_theme_set(value.themes)
     cluster_set = _load_cluster_set(value.cluster_set)
@@ -420,12 +428,14 @@ def build_daily_report_from_input(value: DailyReportInput) -> DailyReportOutput:
                 reference.artifact_id: _load_group_sentiment(reference, group.id)
                 for group, reference in zip(cluster_set.groups, value.sentiments, strict=True)
             },
-        )
+        ),
+        coverage_status=coverage_status,
     )
 
 
 def build_daily_report_from_construction(
     value: DailyReportConstruction,
+    coverage_status: ReportCoverageStatus = "unknown",
 ) -> DailyReportOutput:
     """Build one nested daily report from fully loaded immutable inputs."""
     _validate_report_construction(value)
@@ -455,11 +465,12 @@ def build_daily_report_from_construction(
         accepted_article_count=len(value.cluster_set.article_version_ids),
         theme_count=len(value.theme_set.themes),
         group_count=len(value.cluster_set.groups),
+        coverage_status=coverage_status,
         sections=sections,
     )
     content = _canonical_json(report.model_dump(mode="json"))
     return DailyReportOutput(
-        request_id=daily_report_request_id(value.inputs),
+        request_id=daily_report_request_id(value.inputs, coverage_status),
         report=report,
         themes=value.inputs.themes,
         assessments=value.inputs.assessments,
@@ -644,6 +655,16 @@ def weekly_report_request_id(value: WeeklyReportInput) -> Sha256:
     )
 
 
+def _weekly_coverage_status(days: tuple[WeeklyReportDay, ...]) -> ReportCoverageStatus:
+    statuses = tuple(
+        day.report.coverage_status if isinstance(day.report, DailyReport) else "unknown"
+        for day in days
+    )
+    if "provisional" in statuses:
+        return "provisional"
+    return "complete" if all(status == "complete" for status in statuses) else "unknown"
+
+
 def build_weekly_report(week_start: date) -> WeeklyReportOutput:
     """Build one weekly report for the legacy monolithic runner."""
     if week_start.weekday() != 0:
@@ -662,6 +683,7 @@ def build_weekly_report(week_start: date) -> WeeklyReportOutput:
         week_end=week_start + timedelta(days=6),
         accepted_article_count=sum(day.report.accepted_article_count for day in days),
         group_count=sum(day.report.group_count for day in days),
+        coverage_status=_weekly_coverage_status(days),
         days=days,
     )
     content = _canonical_json(report.model_dump(mode="json"))
@@ -703,6 +725,7 @@ def build_weekly_report_from_construction(
         week_end=value.inputs.week_start + timedelta(days=6),
         accepted_article_count=sum(day.report.accepted_article_count for day in days),
         group_count=sum(day.report.group_count for day in days),
+        coverage_status=_weekly_coverage_status(days),
         days=days,
     )
     content = _canonical_json(report.model_dump(mode="json"))
