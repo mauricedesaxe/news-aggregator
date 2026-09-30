@@ -24,6 +24,7 @@ from romanian_news.worker.definitions import (
     hourly_registered_feed_poll,
     morning_report_check,
     news_automation,
+    previous_day_report_closure,
     scheduled_video_digest,
     weekly_freshness,
     weekly_report_job,
@@ -87,6 +88,9 @@ def test_current_automation_runs_while_historical_backfill_is_stopped() -> None:
     assert scheduled_video_digest.default_status == dg.DefaultScheduleStatus.STOPPED
     assert news_automation.default_status == dg.DefaultSensorStatus.RUNNING
     assert article_batch_controller.default_status == dg.DefaultSensorStatus.RUNNING
+    assert previous_day_report_closure.default_status == dg.DefaultScheduleStatus.RUNNING
+    assert previous_day_report_closure.cron_schedule == "10 0 * * *"
+    assert previous_day_report_closure.execution_timezone == assets.BUCHAREST_TIMEZONE
     assert hourly_registered_feed_poll.cron_schedule == "0 * * * *"
     assert daily_morning_report_check.cron_schedule == "35 9 * * *"
     assert hourly_registered_feed_poll.execution_timezone == assets.BUCHAREST_TIMEZONE
@@ -94,6 +98,7 @@ def test_current_automation_runs_while_historical_backfill_is_stopped() -> None:
     schedules = defs.schedules
     assert schedules is not None
     assert {schedule.name for schedule in schedules} == {
+        "previous_day_report_closure",
         "hourly_registered_feed_poll",
         "daily_morning_report_check",
         "youtube_source_poll",
@@ -110,6 +115,19 @@ def test_current_automation_runs_while_historical_backfill_is_stopped() -> None:
     assert defs.resolve_job_def("morning_report_check").name == morning_report_check.name
     assert defs.resolve_job_def("weekly_report").name == weekly_report_job.name
     assert assets.weekly_reports.automation_conditions_by_key
+
+
+def test_report_closure_refreshes_the_previous_bucharest_day() -> None:
+    scheduled_at = datetime.fromisoformat("2026-10-26T00:10:00+02:00")
+    with dg.build_schedule_context(
+        scheduled_execution_time=scheduled_at,
+        repository_def=defs.get_repository_def(),
+    ) as context:
+        evaluation = previous_day_report_closure.evaluate_tick(context)
+
+    assert evaluation.run_requests is not None
+    assert len(evaluation.run_requests) == 1
+    assert evaluation.run_requests[0].partition_key == "2026-10-25"
 
 
 def test_youtube_automation_starts_running_and_uses_bucharest_time() -> None:

@@ -120,6 +120,20 @@ NONTERMINAL_RUN_STATUSES = (
 
 
 @dg.schedule(
+    job=daily_report_repair,
+    cron_schedule="10 0 * * *",
+    execution_timezone=BUCHAREST_TIMEZONE,
+    default_status=dg.DefaultScheduleStatus.RUNNING,
+)
+def previous_day_report_closure(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
+    day = _scheduled_time(context).date() - timedelta(days=1)
+    return dg.RunRequest(
+        run_key=f"report-closure:{day.isoformat()}",
+        partition_key=day.isoformat(),
+    )
+
+
+@dg.schedule(
     job=feed_poll_job,
     cron_schedule="0 * * * *",
     execution_timezone=BUCHAREST_TIMEZONE,
@@ -477,6 +491,7 @@ defs = dg.Definitions(
         retrospective_analysis_pilot,
     ],
     schedules=[
+        previous_day_report_closure,
         hourly_registered_feed_poll,
         youtube_source_poll,
         youtube_approved_publication,

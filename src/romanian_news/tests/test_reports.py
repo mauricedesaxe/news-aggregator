@@ -23,6 +23,7 @@ from romanian_news.reports import (
     DailyReportInput,
     DailyReportOutput,
     ReportArticleSource,
+    ReportCoverageStatus,
     ReportEvent,
     RetrospectiveCoverage,
     RetrospectiveDailyReport,
@@ -110,8 +111,11 @@ def test_provisional_daily_report_changes_identity_and_survives_weekly_round_tri
         coverage_status="provisional",
     )
     complete = _build_ranked_report(monkeypatch, specs, coverage_status="complete")
+    assert isinstance(output.report, DailyReport)
     assert output.report.coverage_status == "provisional"
-    assert parse_daily_report(output.content).coverage_status == "provisional"
+    parsed = parse_daily_report(output.content)
+    assert isinstance(parsed, DailyReport)
+    assert parsed.coverage_status == "provisional"
     assert output.request_id != complete.request_id
     assert output.content_digest != complete.content_digest
     assert output.request_id != daily_report_request_id(
@@ -159,7 +163,9 @@ def test_old_daily_report_parses_with_unknown_coverage() -> None:
         group_count=0,
         sections=(),
     ).model_dump(mode="json", exclude={"coverage_status"})
-    assert parse_daily_report(json.dumps(legacy).encode()).coverage_status == "unknown"
+    parsed = parse_daily_report(json.dumps(legacy).encode())
+    assert isinstance(parsed, DailyReport)
+    assert parsed.coverage_status == "unknown"
 
 
 def test_retrospective_report_requires_capture_evidence_and_survives_weekly_round_trip(
@@ -677,7 +683,11 @@ def _ranked_assessment_set(
 
 
 def _build_ranked_report(
-    monkeypatch, specs, *, combine_themes: bool = False, coverage_status: str = "unknown"
+    monkeypatch,
+    specs,
+    *,
+    combine_themes: bool = False,
+    coverage_status: ReportCoverageStatus = "unknown",
 ):
     day = date(2026, 8, 31)
     (
