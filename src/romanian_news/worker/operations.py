@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from itertools import batched
+from itertools import batched, islice
 from pathlib import Path
 
 from openai import OpenAIError
@@ -470,18 +470,25 @@ def _materialize_group_outputs(
         return
     if not references:
         return
+    reference_iter = iter(references)
     with ThreadPoolExecutor(max_workers=min(4, len(references))) as executor:
-        for batch in batched(references, 4):
-            futures = tuple(executor.submit(analyze, reference) for reference in batch)
-            failure: Exception | None = None
-            for future in as_completed(futures):
+        active = {executor.submit(analyze, reference) for reference in islice(reference_iter, 4)}
+        failure: Exception | None = None
+        while active:
+            completed, active = wait(active, return_when=FIRST_COMPLETED)
+            for future in completed:
                 try:
                     publish_group_analysis_outputs((future.result(),), implementation_ref)
                 except Exception as error:
                     if failure is None:
                         failure = error
-            if failure is not None:
-                raise failure
+            if failure is None:
+                active.update(
+                    executor.submit(analyze, reference)
+                    for reference in islice(reference_iter, len(completed))
+                )
+        if failure is not None:
+            raise failure
 
 
 def materialize_daily_themes(day: date, implementation_ref: str) -> DailyArtifactReferences:
