@@ -84,29 +84,31 @@ def publish_daily_clusters(
             ],
         )
     ]
-    for article_index, article in enumerate(output.articles):
+    inputs = [
+        (article_index * 3 + offset, reference.version_id, role, reference.content_digest)
+        for article_index, article in enumerate(output.articles)
         for offset, (reference, role) in enumerate(
             (
                 (article.article, "article"),
                 (article.relevance, "relevance"),
                 (article.embedding, "embedding"),
             )
-        ):
-            statements.append(
-                (
-                    "INSERT INTO run_inputs VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                    [
-                        output.request_id,
-                        article_index * 3 + offset,
-                        reference.version_id,
-                        role,
-                        None,
-                        reference.content_digest,
-                        "whole_file",
-                        None,
-                    ],
-                )
+        )
+    ]
+    if inputs:
+        statements.append(
+            (
+                "INSERT INTO run_inputs "
+                "(run_id, position, artifact_version_id, role, locator_json, "
+                "selected_content_digest, selection_method, retrieval_metadata_json) "
+                "SELECT %s, input.position, input.artifact_version_id, input.role, "
+                "NULL, input.content_digest, 'whole_file', NULL "
+                "FROM unnest(%s::bigint[], %s::text[], %s::text[], %s::text[]) "
+                "AS input(position, artifact_version_id, role, content_digest) "
+                "ON CONFLICT DO NOTHING",
+                [output.request_id, *([list(column) for column in zip(*inputs, strict=True)])],
             )
+        )
     statements.extend(artifact_statements(file, timestamp, produced_by_run_id=output.request_id))
     statements.append(run_output_statement(output.request_id, file))
     statements.append(
