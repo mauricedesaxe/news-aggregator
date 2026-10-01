@@ -85,7 +85,7 @@ def read_current_daily_report_record(day: date) -> CurrentDailyReportRecord | No
 
 
 def read_current_daily_report_input_versions(day: date) -> DailyReportInputVersions | None:
-    """Read the ready report input versions without loading artifact files."""
+    """Read current input versions, including sentiments reused from older clusters."""
     rows = catalog_query(
         """SELECT candidate.role, candidate.version_id
            FROM (
@@ -93,6 +93,10 @@ def read_current_daily_report_input_versions(day: date) -> DailyReportInputVersi
              SELECT current_version_id AS version_id, current_run_id AS run_id
              FROM artifacts WHERE id = %s AND kind = 'news_daily_themes'
                AND current_version_id IS NOT NULL
+           ), report AS (
+             SELECT current_run_id AS run_id
+             FROM artifacts WHERE id = %s AND kind = 'news_daily_report'
+               AND current_run_id IS NOT NULL
            ), assessment AS (
              SELECT artifact.current_version_id AS version_id
              FROM artifacts artifact
@@ -110,6 +114,14 @@ def read_current_daily_report_input_versions(day: date) -> DailyReportInputVersi
              WHERE input.role IN ('cluster_set', 'summary')
            ), sentiments AS (
              SELECT sentiment.current_version_id AS version_id
+             FROM report JOIN run_inputs input ON input.run_id = report.run_id
+               AND input.role = 'sentiment'
+             JOIN artifact_versions version ON version.id = input.artifact_version_id
+             JOIN artifacts sentiment ON sentiment.id = version.artifact_id
+             WHERE sentiment.kind = 'news_sentiment'
+               AND sentiment.current_version_id IS NOT NULL
+             UNION
+             SELECT sentiment.current_version_id AS version_id
              FROM artifacts sentiment
              JOIN artifact_versions version ON version.id = sentiment.current_version_id
              JOIN run_inputs input ON input.run_id = version.produced_by_run_id
@@ -117,6 +129,7 @@ def read_current_daily_report_input_versions(day: date) -> DailyReportInputVersi
              JOIN theme_inputs cluster ON cluster.role = 'cluster_set'
                AND cluster.version_id = input.artifact_version_id
              WHERE sentiment.kind = 'news_sentiment'
+               AND NOT EXISTS (SELECT 1 FROM report)
            )
            SELECT 'themes' AS role, version_id FROM theme
            UNION ALL SELECT 'assessments', version_id FROM assessment
@@ -126,6 +139,7 @@ def read_current_daily_report_input_versions(day: date) -> DailyReportInputVersi
            ORDER BY candidate.role, candidate.version_id""",
         [
             f"news:themes:{day.isoformat()}",
+            f"news:daily:{day.isoformat()}",
             f"news:subject-assessments:{day.isoformat()}",
         ],
     )
