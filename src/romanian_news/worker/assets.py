@@ -61,10 +61,16 @@ EAGER = dg.AutomationCondition.eager()
 DAILY_FRESHNESS = (
     dg.AutomationCondition.in_latest_time_window(timedelta(days=3))
     & (
-        dg.AutomationCondition.any_deps_updated()
+        dg.AutomationCondition.any_deps_updated().since_last_handled()
         | (dg.AutomationCondition.initial_evaluation() & dg.AutomationCondition.missing())
         | (
-            (dg.AutomationCondition.missing() | dg.AutomationCondition.execution_failed())
+            (
+                dg.AutomationCondition.missing()
+                | dg.AutomationCondition.execution_failed()
+                | dg.AutomationCondition.any_checks_match(
+                    dg.AutomationCondition.check_failed(), blocking_only=True
+                )
+            )
             & dg.AutomationCondition.cron_tick_passed(
                 "0 * * * *", BUCHAREST_TIMEZONE
             ).since_last_handled()
