@@ -16,7 +16,7 @@ from romanian_news import themes as construction_module
 from romanian_news.analysis import corrected_structured
 from romanian_news.analysis.groups.models import GroupSummary
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog import clusters, themes
+from romanian_news.catalog import clusters, daily, themes
 from romanian_news.catalog.artifacts import current_artifact_file
 from romanian_news.catalog.reports import publish_daily_report
 from romanian_news.groups import DailyClusterOutput, DailyClusterSet, NewsGroup
@@ -227,6 +227,35 @@ def test_cluster_publication_persists_ordered_inputs_in_one_batch(
             ("embedding", article.embedding),
         )
     ]
+
+
+def test_relevance_acceptance_returns_exactly_the_accepted_versions(
+    postgres_catalog: PostgresCatalog,
+) -> None:
+    total, accepted_every = 120, 3
+    version_ids = tuple(f"{value:064x}" for value in range(total))
+    for index, version_id in enumerate(version_ids):
+        artifact_id = f"news:relevance-acceptance:{index}"
+        postgres_catalog.execute(
+            "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, "
+            "visibility, created_at) VALUES (%s, 'news_input', 'Relevance acceptance', "
+            "'derived', 'current', 'private', %s)",
+            (artifact_id, CAPTURED_AT),
+        )
+        postgres_catalog.execute(
+            "INSERT INTO artifact_versions (id, artifact_id, schema_version, content_digest, "
+            "created_at) VALUES (%s, %s, 1, %s, %s)",
+            (version_id, artifact_id, "0" * 64, CAPTURED_AT),
+        )
+        postgres_catalog.execute(
+            "INSERT INTO news_relevance_versions VALUES (%s, %s)",
+            (version_id, int(index % accepted_every == 0)),
+        )
+
+    assert daily.accepted_relevance_version_ids(version_ids) == frozenset(
+        version_id for index, version_id in enumerate(version_ids) if index % accepted_every == 0
+    )
+    assert daily.accepted_relevance_version_ids(()) == frozenset()
 
 
 def test_daily_report_publication_records_assessment_lineage_rows(
