@@ -172,6 +172,7 @@ jobs:
               "article_batch_controller",
               "historical_daily_recovery",
               "romanian_news_automation",
+              "romanian_news_report_completion",
               "youtube_relevance_controller",
               "weekly_report_freshness",
           ):
