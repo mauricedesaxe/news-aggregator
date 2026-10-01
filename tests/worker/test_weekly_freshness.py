@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 
 import dagster as dg
 
+from romanian_news import BUCHAREST
 from romanian_news.worker.assets import (
     DAILY_FRESHNESS,
     DAILY_PARTITIONS,
@@ -136,6 +137,45 @@ def test_daily_freshness_retries_recent_missing_output_hourly() -> None:
             evaluation_time=EVALUATION_TIME + timedelta(hours=1, minutes=6),
         )
         assert retry.get_requested_partitions(dg.AssetKey("recovered_report")) == {old_day}
+
+
+def test_daily_freshness_keeps_hourly_retry_after_upstream_run_finishes() -> None:
+    hour = datetime.now(BUCHAREST).replace(minute=0, second=0, microsecond=0)
+    hour += timedelta(hours=1)
+    day = (hour - timedelta(seconds=10)).date().isoformat()
+    source_job = dg.Definitions(
+        assets=[article_snapshot],
+        jobs=[
+            dg.define_asset_job("source_job", selection=dg.AssetSelection.assets(article_snapshot))
+        ],
+    ).resolve_job_def("source_job")
+
+    with dg.instance_for_test() as instance:
+        _materialize(instance, "article_snapshot", day)
+        source_run = instance.create_run_for_job(
+            source_job,
+            status=dg.DagsterRunStatus.STARTED,
+            tags={"dagster/partition": day},
+            asset_selection={dg.AssetKey("article_snapshot")},
+        )
+
+        before_hour = _evaluate_daily(instance, evaluation_time=hour - timedelta(seconds=10))
+        assert before_hour.get_requested_partitions(dg.AssetKey("recovered_report")) == set()
+
+        at_hour = _evaluate_daily(
+            instance,
+            cursor=before_hour.cursor,
+            evaluation_time=hour + timedelta(seconds=10),
+        )
+        assert at_hour.get_requested_partitions(dg.AssetKey("recovered_report")) == set()
+
+        _ = instance.report_run_failed(source_run)
+        after_run = _evaluate_daily(
+            instance,
+            cursor=at_hour.cursor,
+            evaluation_time=hour + timedelta(minutes=1),
+        )
+        assert after_run.get_requested_partitions(dg.AssetKey("recovered_report")) == {day}
 
 
 def test_recovery_condition_picks_up_days_missed_by_eager_cursor() -> None:
