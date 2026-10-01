@@ -133,6 +133,11 @@ NEWS_CATALOG_MIGRATIONS = (
         "archive_spend_reconciliation",
         MIGRATIONS_PATH / "0023_archive_spend_reconciliation.sql",
     ),
+    NewsCatalogMigration(
+        24,
+        "run_input_identity_lookup",
+        MIGRATIONS_PATH / "0024_run_input_identity_lookup.sql",
+    ),
 )
 
 
