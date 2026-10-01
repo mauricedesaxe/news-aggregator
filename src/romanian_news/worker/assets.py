@@ -65,7 +65,9 @@ DAILY_FRESHNESS = (
         | (dg.AutomationCondition.initial_evaluation() & dg.AutomationCondition.missing())
         | (
             (dg.AutomationCondition.missing() | dg.AutomationCondition.execution_failed())
-            & dg.AutomationCondition.cron_tick_passed("0 * * * *", BUCHAREST_TIMEZONE)
+            & dg.AutomationCondition.cron_tick_passed(
+                "0 * * * *", BUCHAREST_TIMEZONE
+            ).since_last_handled()
         )
     )
     & ~dg.AutomationCondition.any_deps_missing()
