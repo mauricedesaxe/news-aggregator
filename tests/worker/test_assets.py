@@ -25,6 +25,7 @@ from romanian_news.worker.definitions import (
     morning_report_check,
     news_automation,
     previous_day_report_closure,
+    report_completion,
     scheduled_video_digest,
     weekly_freshness,
     weekly_report_job,
@@ -87,6 +88,8 @@ def test_current_automation_runs_while_historical_backfill_is_stopped() -> None:
     assert weekly_freshness.minimum_interval_seconds == 3600
     assert scheduled_video_digest.default_status == dg.DefaultScheduleStatus.STOPPED
     assert news_automation.default_status == dg.DefaultSensorStatus.RUNNING
+    assert report_completion.default_status == dg.DefaultSensorStatus.RUNNING
+    assert report_completion.run_tags == {"dagster/priority": "10"}
     assert article_batch_controller.default_status == dg.DefaultSensorStatus.RUNNING
     assert previous_day_report_closure.default_status == dg.DefaultScheduleStatus.RUNNING
     assert previous_day_report_closure.cron_schedule == "10 0 * * *"
@@ -336,6 +339,7 @@ def test_youtube_relevance_sensor_keeps_one_materialization_idempotent(monkeypat
 def test_each_automated_asset_has_one_owner() -> None:
     asset_graph = defs.get_repository_def().asset_graph
     eager_keys = {key.path[-1] for key in news_automation.asset_selection.resolve(asset_graph)}
+    report_keys = {key.path[-1] for key in report_completion.asset_selection.resolve(asset_graph)}
     assert assets.youtube_source.automation_conditions_by_key == {}
     assert youtube_relevance_controller.default_status == dg.DefaultSensorStatus.RUNNING
     scheduled_keys = {
@@ -357,10 +361,13 @@ def test_each_automated_asset_has_one_owner() -> None:
         "daily_clusters",
         "group_summaries",
         "group_sentiment",
+    }
+    assert report_keys == {
         "daily_themes",
         "daily_subject_assessments",
         "daily_reports",
     }
+    assert eager_keys.isdisjoint(report_keys)
     assert scheduled_keys == {
         "hourly_registered_feed_poll": {"feed_intake"},
         "youtube_source_poll": {"youtube_source"},
@@ -381,7 +388,9 @@ def test_each_automated_asset_has_one_owner() -> None:
         dg.AssetCheckKey(dg.AssetKey("articles"), "no_quarantined_inputs")
         in asset_graph.asset_check_keys
     )
-    assert eager_keys.isdisjoint(set().union(*scheduled_keys.values(), controller_keys))
+    assert (eager_keys | report_keys).isdisjoint(
+        set().union(*scheduled_keys.values(), controller_keys)
+    )
 
 
 def test_daily_report_repair_job_selects_only_the_daily_report_asset() -> None:

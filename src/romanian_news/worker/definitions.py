@@ -424,10 +424,18 @@ news_automation = dg.AutomationConditionSensorDefinition(
         daily_clusters,
         group_summaries,
         group_sentiment,
+    ),
+    default_status=dg.DefaultSensorStatus.RUNNING,
+)
+
+report_completion = dg.AutomationConditionSensorDefinition(
+    "romanian_news_report_completion",
+    target=dg.AssetSelection.assets(
         daily_themes,
         daily_subject_assessments,
         daily_reports,
     ),
+    run_tags={"dagster/priority": "10"},
     default_status=dg.DefaultSensorStatus.RUNNING,
 )
 
@@ -515,6 +523,7 @@ defs = dg.Definitions(
         historical_daily_recovery,
         youtube_relevance_controller,
         news_automation,
+        report_completion,
         weekly_freshness,
     ],
 )
