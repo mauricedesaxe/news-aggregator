@@ -13,8 +13,6 @@ from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import (
     ArtifactFile,
     artifact_file,
-    canonical_json,
-    sha256,
 )
 from romanian_news.catalog.video_digest import (
     GenerationAttemptReference,
@@ -29,6 +27,7 @@ from romanian_news.catalog.video_digest import (
     record_generation_policy,
 )
 from romanian_news.config import FAL_KEY
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import (
     presigned_r2_url,
     publish_immutable_r2_objects,

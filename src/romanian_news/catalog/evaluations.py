@@ -19,11 +19,9 @@ from romanian_news.catalog.artifacts import (
     ArtifactFile,
     artifact_file,
     artifact_statements,
-    canonical_json,
     current_artifact_file,
     run_output_statement,
     run_status,
-    sha256,
 )
 from romanian_news.catalog_transport import (
     advance_artifact_current_version_from_run_statement,
@@ -74,6 +72,7 @@ from romanian_news.groups import (
     EmbeddedArticleReference,
     NewsGroup,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.reports import (
     ArchivedDailyReport,
     DailyReport,

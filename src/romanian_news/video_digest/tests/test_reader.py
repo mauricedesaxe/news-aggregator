@@ -4,8 +4,9 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from romanian_news.catalog.artifacts import ArtifactFile, sha256
+from romanian_news.catalog.artifacts import ArtifactFile
 from romanian_news.catalog.video_digest import PublishedPlanArtifact
+from romanian_news.identity import sha256
 from romanian_news.storage import ResearchObjectIntegrityError
 from romanian_news.video_digest.models import (
     EditionIdentity,

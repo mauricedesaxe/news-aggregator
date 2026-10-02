@@ -7,7 +7,8 @@ from pydantic import Field, model_validator
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.analysis.attempts import ModelAttempt, model_attempt_from_payload
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.video_digest.models import DigestPlan, PlannedStory, planned_story_id
 from romanian_news.video_digest.planning import (
     PlanningAttempt,

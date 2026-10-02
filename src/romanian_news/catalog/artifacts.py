@@ -5,8 +5,7 @@ from datetime import datetime
 from romanian_news import NewsModel, Sha256
 from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog_transport import catalog_query
-from romanian_news.identity import canonical_json as canonical_json
-from romanian_news.identity import sha256 as sha256
+from romanian_news.identity import sha256
 
 
 class ArtifactFile(NewsModel):

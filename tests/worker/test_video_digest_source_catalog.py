@@ -5,10 +5,11 @@ import pytest
 
 import romanian_news.catalog.schema as news_schema
 from romanian_news import BUCHAREST
-from romanian_news.catalog.artifacts import artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import artifact_file
 from romanian_news.catalog.schema import ensure_news_catalog_schema
 from romanian_news.catalog.video_digest import claim_slot, schedule_slot
 from romanian_news.catalog.video_digest_selection import capture_slot_report_source
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.video_digest.models import (
     ClaimedSlot,
     EditionIdentity,

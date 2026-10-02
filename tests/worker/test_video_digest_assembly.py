@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from romanian_news.catalog.artifacts import canonical_json
 from romanian_news.catalog.schema import ensure_news_catalog_schema
 from romanian_news.catalog.video_digest import (
     checkpoint_assembly_ready,
@@ -16,6 +15,7 @@ from romanian_news.catalog.video_digest import (
     record_assembly_attempt,
     renew_slot,
 )
+from romanian_news.identity import canonical_json
 from romanian_news.storage import read_verified_r2_object
 from romanian_news.video_digest import media
 from romanian_news.video_digest.models import SlotLease
