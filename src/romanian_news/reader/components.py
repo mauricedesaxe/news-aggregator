@@ -87,16 +87,23 @@ def _report_section(
             csrf_token,
             latest_feedback.get(_target_key(target)),
         ),
-        *(
-            _report_event(
-                event,
-                event_position,
-                report_version_id,
-                csrf_token,
-                latest_feedback,
-                citations=citations,
-            )
-            for event_position, event in enumerate(section.events, start=1)
+        Details(
+            Summary(
+                f"{len(section.events)} article "
+                f"{'group' if len(section.events) == 1 else 'groups'}"
+            ),
+            *(
+                _report_event(
+                    event,
+                    event_position,
+                    report_version_id,
+                    csrf_token,
+                    latest_feedback,
+                    citations=citations,
+                )
+                for event_position, event in enumerate(section.events, start=1)
+            ),
+            cls="subject-events",
         ),
         id=f"source-{section.theme_id}",
         cls="story-section",
