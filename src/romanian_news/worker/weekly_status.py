@@ -18,6 +18,7 @@ from romanian_news.weekly_status_generation import (
     load_week_reports,
     read_week_input,
 )
+from romanian_news.worker.run_overlap import OVERLAP_BLOCKING_RUN_STATUSES
 
 
 def refresh_weekly_status(week_start: date, implementation_ref: str) -> str:
@@ -89,14 +90,7 @@ def scheduled_historical_weekly_status(
     if context.instance.get_runs(
         filters=dg.RunsFilter(
             job_name=weekly_status_refresh.name,
-            statuses=(
-                dg.DagsterRunStatus.QUEUED,
-                dg.DagsterRunStatus.NOT_STARTED,
-                dg.DagsterRunStatus.MANAGED,
-                dg.DagsterRunStatus.STARTING,
-                dg.DagsterRunStatus.STARTED,
-                dg.DagsterRunStatus.CANCELING,
-            ),
+            statuses=OVERLAP_BLOCKING_RUN_STATUSES,
         ),
         limit=1,
     ):

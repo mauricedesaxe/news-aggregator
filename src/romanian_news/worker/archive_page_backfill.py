@@ -8,15 +8,7 @@ from romanian_news.archive.campaign import (
     ARCHIVE_OUTLETS,
     ARCHIVE_START,
 )
-
-_ACTIVE_STATUSES = (
-    dg.DagsterRunStatus.QUEUED,
-    dg.DagsterRunStatus.NOT_STARTED,
-    dg.DagsterRunStatus.MANAGED,
-    dg.DagsterRunStatus.STARTING,
-    dg.DagsterRunStatus.STARTED,
-    dg.DagsterRunStatus.CANCELING,
-)
+from romanian_news.worker.run_overlap import OVERLAP_BLOCKING_RUN_STATUSES
 
 
 class ArchivePageBackfillConfig(dg.Config):
@@ -55,7 +47,7 @@ def scheduled_archive_page_backfill(
         active = context.instance.get_runs(
             filters=dg.RunsFilter(
                 job_name=archive_page_backfill_job.name,
-                statuses=_ACTIVE_STATUSES,
+                statuses=OVERLAP_BLOCKING_RUN_STATUSES,
                 tags={"news/archive_outlet": outlet},
             ),
             limit=1,

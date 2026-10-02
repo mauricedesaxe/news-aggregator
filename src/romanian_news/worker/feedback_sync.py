@@ -5,6 +5,7 @@ from romanian_news.analysis.feedback_sync import NewsFeedbackSyncResult, sync_ne
 from romanian_news.catalog.evaluations import load_news_evaluation_release
 from romanian_news.catalog.schema import ensure_news_catalog_schema
 from romanian_news.evaluation import PIN_PATH
+from romanian_news.worker.run_overlap import OVERLAP_BLOCKING_RUN_STATUSES
 
 
 @dg.op(pool="news_feedback_network")
@@ -27,16 +28,6 @@ def news_feedback_sync() -> None:
     news_feedback_sync_op()
 
 
-NONTERMINAL_RUN_STATUSES: tuple[dg.DagsterRunStatus, ...] = (
-    dg.DagsterRunStatus.QUEUED,
-    dg.DagsterRunStatus.NOT_STARTED,
-    dg.DagsterRunStatus.MANAGED,
-    dg.DagsterRunStatus.STARTING,
-    dg.DagsterRunStatus.STARTED,
-    dg.DagsterRunStatus.CANCELING,
-)
-
-
 @dg.schedule(
     name="quarter_hourly_news_feedback_sync",
     job=news_feedback_sync,
@@ -49,7 +40,7 @@ def quarter_hourly_news_feedback_sync(
     existing_runs = context.instance.get_runs(
         filters=dg.RunsFilter(
             job_name=news_feedback_sync.name,
-            statuses=NONTERMINAL_RUN_STATUSES,
+            statuses=OVERLAP_BLOCKING_RUN_STATUSES,
         ),
         limit=1,
     )

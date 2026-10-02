@@ -35,16 +35,9 @@ from romanian_news.worker.operations import (
     materialize_relevance,
     materialize_subject_assessments,
 )
+from romanian_news.worker.run_overlap import OVERLAP_BLOCKING_RUN_STATUSES
 
 _ARTICLE_LIMIT = 200
-_ACTIVE_STATUSES = (
-    dg.DagsterRunStatus.QUEUED,
-    dg.DagsterRunStatus.NOT_STARTED,
-    dg.DagsterRunStatus.MANAGED,
-    dg.DagsterRunStatus.STARTING,
-    dg.DagsterRunStatus.STARTED,
-    dg.DagsterRunStatus.CANCELING,
-)
 
 
 class RetrospectiveAnalysisConfig(dg.Config):
@@ -174,7 +167,7 @@ def scheduled_retrospective_analysis(
     if context.instance.get_runs(
         filters=dg.RunsFilter(
             job_name=retrospective_analysis_pilot.name,
-            statuses=_ACTIVE_STATUSES,
+            statuses=OVERLAP_BLOCKING_RUN_STATUSES,
         ),
         limit=1,
     ):
