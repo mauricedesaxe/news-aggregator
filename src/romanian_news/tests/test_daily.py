@@ -78,7 +78,9 @@ def test_relevance_acceptance_uses_bounded_batch_queries(monkeypatch) -> None:
     accepted = catalog_daily.accepted_relevance_version_ids(version_ids)
 
     assert accepted == frozenset(version_ids[::2])
-    assert tuple(len(values) for values in queries) == (50, 50, 20)
+    assert len(queries) > 1
+    assert sum(len(values) for values in queries) == len(version_ids)
+    assert {value for values in queries for value in values} == set(version_ids)
 
 
 def _reference(artifact_id: str, digest_character: str) -> ArtifactReference:

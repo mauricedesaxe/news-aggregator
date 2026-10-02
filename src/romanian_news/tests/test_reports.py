@@ -96,8 +96,35 @@ def test_weekly_report_uses_seven_exact_daily_versions(monkeypatch) -> None:
     assert output.report.week_end == date(2026, 8, 30)
     assert output.report.accepted_article_count == 28
     assert output.report.group_count == 7
+    assert output.report.coverage_status == "unknown"
     assert tuple(day.daily_report_version_id for day in output.report.days) == tuple(
         reference.version_id for reference, _report in daily.values()
+    )
+
+
+def test_weekly_report_is_complete_when_every_daily_report_is_complete(monkeypatch) -> None:
+    week_start = date(2026, 8, 24)
+    daily = {
+        week_start + timedelta(days=offset): (
+            _reference(str(offset) * 64),
+            DailyReport(
+                day=week_start + timedelta(days=offset),
+                accepted_article_count=offset + 1,
+                theme_count=0,
+                group_count=1,
+                coverage_status="complete",
+                sections=(),
+            ),
+        )
+        for offset in range(7)
+    }
+    monkeypatch.setattr("romanian_news.reports._read_daily_report", daily.__getitem__)
+
+    output = build_weekly_report(week_start)
+
+    assert output.report.coverage_status == "complete"
+    assert WeeklyReport.model_validate_json(output.content, strict=True).coverage_status == (
+        "complete"
     )
 
 
