@@ -338,3 +338,44 @@ def test_pending_archive_articles_uses_bucharest_day_boundaries(
         "https://hotnews.ro/at-window-start",
         "https://hotnews.ro/before-window-end",
     )
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [
+        (date(2025, 10, 1), date(2025, 9, 1)),
+        (date(2025, 9, 1), date(2025, 10, 5)),
+    ],
+)
+def test_archive_capture_window_must_be_a_bounded_month(start: date, end: date) -> None:
+    with pytest.raises(ValueError, match="at most 31 days"):
+        pending_archive_articles("hotnews", start, end, 1)
+
+
+@pytest.mark.parametrize("limit", [0, 51])
+def test_archive_capture_limit_must_stay_within_the_politeness_bound(limit: int) -> None:
+    with pytest.raises(ValueError, match="between 1 and 50"):
+        pending_archive_articles("hotnews", date(2025, 9, 1), date(2025, 9, 30), limit)
+
+
+def test_archive_capture_requires_at_least_one_second_between_requests() -> None:
+    with pytest.raises(ValueError, match="at least one second"):
+        capture_archive_batch(
+            "hotnews",
+            date(2025, 9, 19),
+            date(2025, 9, 19),
+            limit=5,
+            implementation_ref="git:test",
+            delay_seconds=0.5,
+        )
+
+
+def test_archive_capture_rejects_outlets_outside_the_archive_campaign() -> None:
+    with pytest.raises(ValueError, match="Unknown archive outlet"):
+        capture_archive_batch(
+            "gsp",
+            date(2025, 9, 19),
+            date(2025, 9, 19),
+            limit=5,
+            implementation_ref="git:test",
+        )

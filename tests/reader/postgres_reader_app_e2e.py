@@ -335,6 +335,11 @@ def test_weekly_status_pages_render_from_the_real_catalog(monkeypatch, postgres_
         assert archive_page.status_code == 200
         assert f"/status/weeks/{WEEK_START.isoformat()}" in archive_page.text
 
+        backfill_page = client.get("/reports/backfill")
+        assert backfill_page.status_code == 200
+        assert "Historical collection" in backfill_page.text
+        assert "0 daily reports published" in backfill_page.text
+
         source_page = client.get(source_link)
         assert source_page.status_code == 200
         assert f'id="source-{THEME_ID}"' in source_page.text

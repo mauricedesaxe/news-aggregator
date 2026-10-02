@@ -113,8 +113,117 @@ def test_archive_call_reserves_before_provider_and_settles_response(monkeypatch)
 
     assert result.response.model_dump(mode="json")["id"] == "response-1"
     assert [value[0] for value in events] == ["reserve", "call", "settle"]
-    assert events[0][2] == result.call_id == events[2][1]
-    assert events[2][2] == Decimal("0.003")
+    assert events[0][1:] == (
+        date(2025, 9, 27),
+        result.call_id,
+        "news.relevance",
+        "request-1",
+        tracing.ARCHIVE_DAY_SPEND_LIMIT_USD,
+    )
+    assert events[2][1:] == (result.call_id, Decimal("0.003"))
+
+
+class _UnusableCostResponse:
+    def __init__(self, usage: dict[str, object]) -> None:
+        self._usage = usage
+
+    def model_dump(self, *, mode: str) -> dict[str, object]:
+        return {"id": "response-1", "mode": mode, "usage": self._usage}
+
+
+def _spend_events(
+    monkeypatch, spent_after_settle: archive_model_spend.ArchiveSpend | None = None
+) -> list[tuple[object, ...] | str]:
+    events: list[tuple[object, ...] | str] = []
+    monkeypatch.setattr(
+        archive_model_spend,
+        "reserve_archive_spend",
+        lambda *_args, **_kwargs: events.append("reserve"),
+    )
+    monkeypatch.setattr(
+        archive_model_spend,
+        "settle_archive_spend",
+        lambda reservation_id, cost: events.append(("settle", reservation_id, cost)),
+    )
+    monkeypatch.setattr(
+        archive_model_spend,
+        "read_archive_spend",
+        lambda _day: spent_after_settle
+        or archive_model_spend.ArchiveSpend(Decimal("0.003"), Decimal(0), 1),
+    )
+    return events
+
+
+def test_archive_day_stops_after_provider_accounting_exceeds_the_limit(monkeypatch) -> None:
+    monkeypatch.setattr(tracing, "LANGFUSE_PUBLIC_KEY", None)
+    events = _spend_events(
+        monkeypatch,
+        archive_model_spend.ArchiveSpend(
+            tracing.ARCHIVE_DAY_SPEND_LIMIT_USD + Decimal("0.01"), Decimal(0), 2
+        ),
+    )
+    with tracing.archive_model_day(date(2025, 9, 27)):
+        with pytest.raises(
+            archive_model_spend.ArchiveSpendLimitReached, match="after provider accounting"
+        ):
+            tracing.trace_provider_call("news.relevance", "request-1", {}, _Response)
+
+    assert [event if isinstance(event, str) else event[0] for event in events] == [
+        "reserve",
+        "settle",
+    ]
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        {"prompt_tokens": 12, "completion_tokens": 4},
+        {"prompt_tokens": 12, "completion_tokens": 4, "cost": "bad"},
+        {"prompt_tokens": 12, "completion_tokens": 4, "cost": -1},
+        {"prompt_tokens": 12, "completion_tokens": 4, "cost": True},
+    ],
+)
+def test_archive_day_keeps_the_reservation_held_when_provider_cost_is_unusable(
+    monkeypatch, usage: dict[str, object]
+) -> None:
+    monkeypatch.setattr(tracing, "LANGFUSE_PUBLIC_KEY", None)
+    events = _spend_events(monkeypatch)
+    with tracing.archive_model_day(date(2025, 9, 27)):
+        result = tracing.trace_provider_call(
+            "news.relevance", "request-1", {}, lambda: _UnusableCostResponse(usage)
+        )
+
+    assert result.response.model_dump(mode="json")["id"] == "response-1"
+    assert events == ["reserve"]
+
+
+def test_archive_day_keeps_the_reservation_held_when_the_provider_errors(monkeypatch) -> None:
+    monkeypatch.setattr(tracing, "LANGFUSE_PUBLIC_KEY", None)
+    events = _spend_events(monkeypatch)
+
+    def fail() -> _Response:
+        raise RuntimeError("provider failed")
+
+    with tracing.archive_model_day(date(2025, 9, 27)):
+        with pytest.raises(RuntimeError, match="provider failed"):
+            tracing.trace_provider_call("news.relevance", "request-1", {}, fail)
+
+    assert events == ["reserve"]
+
+
+def test_archive_day_reserves_and_settles_under_active_tracing(monkeypatch, _reset_tracing) -> None:
+    events = _spend_events(monkeypatch)
+    with tracing.archive_model_day(date(2025, 9, 27)):
+        result = tracing.trace_provider_call("news.relevance", "request-1", {}, _Response)
+
+    assert [event if isinstance(event, str) else event[0] for event in events] == [
+        "reserve",
+        "settle",
+    ]
+    assert result.trace is not None
+    observation = _reset_tracing.observations[0]
+    assert observation.values["cost_details"] == {"total": 0.003}
+    assert observation.ended
 
 
 def test_archive_limit_refusal_never_calls_provider(monkeypatch) -> None:

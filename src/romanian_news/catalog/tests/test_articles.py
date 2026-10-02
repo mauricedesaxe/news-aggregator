@@ -37,27 +37,6 @@ from romanian_news.catalog_transport import catalog_batch
 from romanian_news.feeds.models import CatalogedFeedEntry, FeedEntry, FeedSpec
 from romanian_news.feeds.registry import feed_registry
 
-
-def test_article_catalog_states_parse_typed_dates(monkeypatch) -> None:
-    alias = "url:https://hotnews.ro/article"
-    monkeypatch.setattr(
-        "romanian_news.catalog.articles.catalog_query",
-        lambda _sql, _parameters: [
-            {
-                "alias_key": alias,
-                "published_at": "2026-09-01T08:00:00+00:00",
-                "source_updated_at": None,
-                "captured_at": "2026-09-01T09:00:00+00:00",
-            }
-        ],
-    )
-
-    state = read_article_catalog_states((alias,))[alias]
-
-    assert state.published_at == datetime.fromisoformat("2026-09-01T08:00:00+00:00")
-    assert state.source_updated_at is None
-
-
 _TEST_POSTGRES_DSN = os.getenv("NEWS_TEST_POSTGRES_DSN")
 
 
@@ -231,6 +210,30 @@ def _capture_for_publish(
         latency_ms=0,
         retrieval_error=None,
     )
+
+
+@pytest.mark.skipif(
+    _TEST_POSTGRES_DSN is None,
+    reason="NEWS_TEST_POSTGRES_DSN is required",
+)
+def test_article_catalog_states_read_the_published_article(
+    monkeypatch, article_recovery_postgres: str
+) -> None:
+    _seed_feed_snapshot_version(article_recovery_postgres)
+    capture = _capture_for_publish("https://hotnews.ro/source-1", "a" * 64)
+    monkeypatch.setattr(
+        "romanian_news.catalog.articles.publish_immutable_r2_objects",
+        lambda _objects: SimpleNamespace(uploaded_objects=0, reused_objects=0),
+    )
+    publish_articles(ArticleAcquisitionResult(captures=(capture,), skipped_entries=0), "git:test")
+
+    states = read_article_catalog_states((f"url:{capture.article.canonical_url}",))
+
+    assert len(states) == 1
+    state = next(iter(states.values()))
+    assert state.published_at == capture.source.published_at
+    assert state.source_updated_at is None
+    assert state.captured_at == capture.captured_at
 
 
 @pytest.mark.skipif(
