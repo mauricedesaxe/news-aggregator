@@ -615,6 +615,8 @@ def test_tiered_report_orders_main_first_and_collapses_worth_knowing() -> None:
     assert response.text.index('<details class="worth-knowing">') < response.text.index(
         f"<h2>{worth_title}</h2>"
     )
+    worth_block = response.text.split('<details class="worth-knowing">', 1)[1]
+    assert '<details class="subject-events"><summary>1 article group</summary>' in worth_block
 
 
 def test_tiered_report_omits_excluded_subjects_from_numbering_and_page() -> None:
@@ -658,6 +660,7 @@ def test_schema_v2_report_keeps_the_flat_rendering_without_tiers() -> None:
     assert "in worth knowing" not in response.text
     assert "Budget policy" in response.text
     assert "Subject 01" in response.text
+    assert '<details class="subject-events"><summary>1 article group</summary>' in response.text
 
 
 def test_report_prefetches_both_adjacent_reports_immediately() -> None:
@@ -744,6 +747,23 @@ def test_report_prefetches_only_the_available_boundary_neighbor() -> None:
     assert f"/reports/{UNRELATED_REPORT_VERSION}" not in json.dumps(rules)
 
 
+def test_subject_article_groups_are_closed_below_visible_subject_content() -> None:
+    response = _read_report_response(_daily_report())
+    subject_content, marker, groups_content = response.text.partition(
+        '<details class="subject-events"><summary>1 article group</summary>'
+    )
+
+    assert marker
+    assert "Subject 01" in subject_content
+    assert "<h2>Budget policy</h2>" in subject_content
+    assert "The draft budget and reactions form the subject of the day." in subject_content
+    assert "Budget decisions with direct national effects." in subject_content
+    assert "Feedback on this subject" in subject_content
+    assert "The public budget enters debate" in groups_content
+    assert groups_content.lstrip().startswith('<details class="event-disclosure event-section">')
+    assert '<details open class="subject-events">' not in response.text
+
+
 def test_event_disclosure_is_closed_with_its_title_and_singular_count() -> None:
     response = _read_report_response(_daily_report())
     opening = '<details class="event-disclosure event-section">'
@@ -795,6 +815,7 @@ def test_two_events_render_as_separate_closed_unnamed_disclosures() -> None:
         '<details class="event-disclosure event-section">',
         '<details class="event-disclosure event-section">',
     ]
+    assert '<details class="subject-events"><summary>2 article groups</summary>' in response.text
 
 
 def test_event_disclosure_has_native_interaction_styles() -> None:
@@ -833,6 +854,7 @@ def test_archived_report_event_is_closed_without_the_event_section_class() -> No
         response.text,
     )
     assert '<details open class="event-disclosure">' not in response.text
+    assert '<details class="subject-events">' not in response.text
     assert "Subject 01" in response.text
     assert "Event 1" not in response.text
     assert "Feedback on this event" in response.text

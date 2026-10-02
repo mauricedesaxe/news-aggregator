@@ -180,7 +180,7 @@ h3 { font-size: 1.2rem; line-height: 1.25; }
 .transcript .feedback-control { max-width: 520px; }
 .event-section { border-top: 1px solid var(--line); margin-top: 1.75rem; padding-top: .5rem; }
 .event-disclosure > summary { cursor: pointer; }
-.event-disclosure > summary, .articles > summary, .worth-knowing > summary {
+.event-disclosure > summary, .subject-events > summary, .articles > summary, .worth-knowing > summary {
   align-items: center;
   display: flex;
   gap: .75rem;
@@ -189,15 +189,21 @@ h3 { font-size: 1.2rem; line-height: 1.25; }
   padding: .65rem .55rem;
   transition: background-color 120ms ease, box-shadow 120ms ease, color 120ms ease;
 }
-.event-disclosure > summary:hover, .articles > summary:hover, .worth-knowing > summary:hover {
+.event-disclosure > summary:hover, .subject-events > summary:hover, .articles > summary:hover, .worth-knowing > summary:hover {
   background: var(--acid);
   box-shadow: inset 5px 0 0 var(--accent);
   color: #13231a;
 }
 .event-disclosure > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: .25rem; }
+.subject-events > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: .25rem; }
 .event-disclosure > summary h3 { display: inline; }
 .event-article-count { color: var(--muted); font-family: var(--font-mono); font-size: .7rem; margin-left: .75rem; text-transform: uppercase; white-space: nowrap; }
 .event-disclosure[open] > summary { margin-bottom: 1.5rem; }
+.subject-events { border-top: 1px solid var(--line); margin-top: 1.75rem; }
+.subject-events > summary { cursor: pointer; font-family: var(--font-mono); font-size: .72rem; font-weight: 800; justify-content: flex-start; letter-spacing: .06em; text-transform: uppercase; }
+.subject-events > summary::before { content: "▸"; font-size: 1rem; }
+.subject-events[open] > summary::before { content: "▾"; }
+.subject-events > .event-section:first-of-type { border-top: 0; margin-top: 0; }
 .story-section {
   background: color-mix(in srgb, var(--paper) 92%, transparent);
   border-bottom: 1px solid var(--line);
@@ -347,7 +353,7 @@ h3 { font-size: 1.2rem; line-height: 1.25; }
   .rating-actions { grid-template-columns: 1fr; }
   .article-card { gap: .4rem; }
   .story-section { padding-left: .35rem; padding-right: .35rem; }
-  .event-disclosure > summary, .articles > summary, .worth-knowing > summary { align-items: flex-start; }
+  .event-disclosure > summary, .subject-events > summary, .articles > summary, .worth-knowing > summary { align-items: flex-start; }
   h1 { font-size: clamp(2.5rem, 12vw, 4.4rem); }
   h2 { font-size: clamp(2rem, 10vw, 3.25rem); }
 }
