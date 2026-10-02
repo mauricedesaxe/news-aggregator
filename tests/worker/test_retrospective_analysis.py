@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -49,15 +50,7 @@ def test_analysis_rejects_days_after_the_archive_window() -> None:
         )
 
 
-def test_pilot_publishes_and_returns_report_version(monkeypatch) -> None:
-    stage_logs = []
-    ticks = iter(range(16))
-    monkeypatch.setattr(retrospective_analysis, "perf_counter", lambda: next(ticks))
-    monkeypatch.setattr(
-        retrospective_analysis.dg,
-        "get_dagster_logger",
-        lambda: SimpleNamespace(info=lambda *args: stage_logs.append(args)),
-    )
+def _stub_pilot_boundaries(monkeypatch) -> None:
     monkeypatch.setattr(
         retrospective_analysis,
         "read_retrospective_coverage",
@@ -71,10 +64,8 @@ def test_pilot_publishes_and_returns_report_version(monkeypatch) -> None:
     monkeypatch.setattr(
         retrospective_analysis, "read_pending_relevance_references", lambda **_kwargs: ()
     )
-    monkeypatch.setattr(
-        retrospective_analysis, "materialize_relevance", lambda *_args, **_kwargs: None
-    )
     for name in (
+        "materialize_relevance",
         "materialize_embeddings",
         "materialize_clusters",
         "materialize_group_summaries",
@@ -83,14 +74,43 @@ def test_pilot_publishes_and_returns_report_version(monkeypatch) -> None:
         "materialize_subject_assessments",
     ):
         monkeypatch.setattr(retrospective_analysis, name, lambda *_args, **_kwargs: None)
-
     monkeypatch.setattr(
         retrospective_analysis,
         "publish_retrospective_daily_report",
         lambda _day, _ref: SimpleNamespace(version_id="a" * 64),
     )
+
+
+def test_pilot_publishes_and_returns_report_version(monkeypatch) -> None:
+    _stub_pilot_boundaries(monkeypatch)
     assert retrospective_analysis.analyze_retrospective_day(DAY, "git:test") == "a" * 64
-    assert [entry[2] for entry in stage_logs] == [
+
+
+def test_pilot_records_each_stage_duration_in_the_run_log(monkeypatch) -> None:
+    _stub_pilot_boundaries(monkeypatch)
+    pattern = re.compile(r"Retrospective stage day=(\S+) stage=(\S+) elapsed_seconds=([0-9.]+)")
+
+    with dg.instance_for_test() as instance:
+        result = retrospective_analysis.retrospective_analysis_pilot.execute_in_process(
+            instance=instance,
+            run_config={"ops": {"retrospective_analysis": {"config": {"day": DAY.isoformat()}}}},
+        )
+        assert result.success
+        log_entries = [
+            entry.user_message
+            for entry in instance.all_logs(result.run_id)
+            if entry.dagster_event is None and "Retrospective stage" in entry.user_message
+        ]
+
+    stages: dict[str, float] = {}
+    for message in log_entries:
+        match = pattern.fullmatch(message)
+        assert match is not None, message
+        day, stage, elapsed = match.groups()
+        assert day == DAY.isoformat()
+        stages[stage] = float(elapsed)
+
+    assert set(stages) == {
         "relevance",
         "embeddings",
         "clusters",
@@ -99,8 +119,8 @@ def test_pilot_publishes_and_returns_report_version(monkeypatch) -> None:
         "daily_themes",
         "subject_assessments",
         "publication",
-    ]
-    assert all(entry[1] == DAY and entry[3] == 1 for entry in stage_logs)
+    }
+    assert all(elapsed >= 0 for elapsed in stages.values())
 
 
 def test_pilot_rejects_sparse_coverage_before_model_work(monkeypatch) -> None:
