@@ -8,6 +8,7 @@ from pathlib import Path
 from statistics import median
 from typing import Any, cast
 
+from romanian_news.analysis.percentiles import float_linear_percentile
 from romanian_news.binary_benchmark import (
     BinaryBenchmarkDefinition,
     BinaryBenchmarkEvaluationResult,
@@ -192,8 +193,8 @@ def _trial_analysis(
         "input_tokens": sum(attempt.input_tokens or 0 for attempt in attempts),
         "output_tokens": sum(attempt.output_tokens or 0 for attempt in attempts),
         "cost_usd": float(cost),
-        "p50_latency_ms": _percentile(latencies, 0.50),
-        "p95_latency_ms": _percentile(latencies, 0.95),
+        "p50_latency_ms": float_linear_percentile(latencies, 0.50),
+        "p95_latency_ms": float_linear_percentile(latencies, 0.95),
     }
 
 
@@ -349,18 +350,6 @@ def _inverse_binomial_survival(probability: float, successes: int, total: int) -
         else:
             high = midpoint
     return (low + high) / 2
-
-
-def _percentile(values: tuple[int, ...], quantile: float) -> float:
-    if not values:
-        return 0.0
-    ordered = sorted(values)
-    position = (len(ordered) - 1) * quantile
-    lower = math.floor(position)
-    upper = math.ceil(position)
-    if lower == upper:
-        return float(ordered[lower])
-    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
 
 
 def _mapping(value: object) -> Mapping[str, Any]:
