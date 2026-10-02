@@ -155,6 +155,35 @@ def test_provisional_daily_report_changes_identity_and_survives_weekly_round_tri
     )
 
 
+def test_weekly_coverage_follows_the_weakest_daily_status(monkeypatch) -> None:
+    week_start = date(2026, 8, 31)
+
+    def weekly_with_statuses(statuses: tuple[ReportCoverageStatus, ...]):
+        days = {
+            week_start + timedelta(days=offset): (
+                _reference(str(offset) * 64),
+                DailyReport(
+                    day=week_start + timedelta(days=offset),
+                    accepted_article_count=0,
+                    theme_count=0,
+                    group_count=0,
+                    coverage_status=statuses[offset],
+                    sections=(),
+                ),
+            )
+            for offset in range(7)
+        }
+        monkeypatch.setattr("romanian_news.reports._read_daily_report", days.__getitem__)
+        return build_weekly_report(week_start)
+
+    all_complete = ("complete",) * 7
+    assert weekly_with_statuses(all_complete).report.coverage_status == "complete"
+    one_unknown = ("unknown", *all_complete[:6])
+    assert weekly_with_statuses(one_unknown).report.coverage_status == "unknown"
+    one_provisional = (*all_complete[:6], "provisional")
+    assert weekly_with_statuses(one_provisional).report.coverage_status == "provisional"
+
+
 def test_old_daily_report_parses_with_unknown_coverage() -> None:
     legacy = DailyReport(
         day=date(2026, 8, 24),

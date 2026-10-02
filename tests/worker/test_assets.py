@@ -21,6 +21,7 @@ from romanian_news.worker.definitions import (
     daily_morning_report_check,
     daily_report_repair,
     defs,
+    historical_daily_recovery,
     hourly_registered_feed_poll,
     morning_report_check,
     news_automation,
@@ -86,6 +87,8 @@ def test_current_automation_runs_while_historical_backfill_is_stopped() -> None:
     )
     assert weekly_freshness.default_status == dg.DefaultSensorStatus.RUNNING
     assert weekly_freshness.minimum_interval_seconds == 3600
+    assert historical_daily_recovery.default_status == dg.DefaultSensorStatus.RUNNING
+    assert historical_daily_recovery.minimum_interval_seconds == 60
     assert scheduled_video_digest.default_status == dg.DefaultScheduleStatus.STOPPED
     assert news_automation.default_status == dg.DefaultSensorStatus.RUNNING
     assert report_completion.default_status == dg.DefaultSensorStatus.RUNNING
@@ -118,6 +121,17 @@ def test_current_automation_runs_while_historical_backfill_is_stopped() -> None:
     assert defs.resolve_job_def("morning_report_check").name == morning_report_check.name
     assert defs.resolve_job_def("weekly_report").name == weekly_report_job.name
     assert assets.weekly_reports.automation_conditions_by_key
+    for daily_asset in (
+        assets.relevance,
+        assets.embeddings,
+        assets.daily_clusters,
+        assets.group_summaries,
+        assets.group_sentiment,
+        assets.daily_themes,
+        assets.daily_subject_assessments,
+        assets.daily_reports,
+    ):
+        assert next(iter(daily_asset.specs)).automation_condition == assets.DAILY_FRESHNESS
 
 
 def test_report_closure_refreshes_the_previous_bucharest_day() -> None:

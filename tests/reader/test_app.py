@@ -562,6 +562,8 @@ def test_historical_report_discloses_later_capture_and_limited_sources() -> None
     assert "2026-09-27 10:00 UTC" in response.text
     assert "Archive sources: hotnews, digi24" in response.text
     assert "Other configured outlets were not included." in response.text
+    assert "Provisional report" not in response.text
+    assert "Coverage unknown" not in response.text
 
 
 def _tiered_report() -> DailyReport:
