@@ -533,6 +533,8 @@ def test_archived_report_metadata_uses_group_count_for_subjects_and_events() -> 
 
     response = _read_report_response(report)
 
+    assert "Coverage unknown" not in response.text
+    assert "Provisional report" not in response.text
     assert re.search(
         r'<div class="report-meta">\s*<span>'
         r"5 subjects · 5 events · 6 articles in this report</span>\s*</div>",
@@ -562,6 +564,8 @@ def test_historical_report_discloses_later_capture_and_limited_sources() -> None
     assert "2026-09-27 10:00 UTC" in response.text
     assert "Archive sources: hotnews, digi24" in response.text
     assert "Other configured outlets were not included." in response.text
+    assert "Provisional report" not in response.text
+    assert "Coverage unknown" not in response.text
 
 
 def _tiered_report() -> DailyReport:

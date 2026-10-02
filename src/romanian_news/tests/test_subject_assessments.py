@@ -318,6 +318,49 @@ def test_subject_assessment_recovers_cross_subject_citations(monkeypatch) -> Non
     )
 
 
+def test_subject_assessment_recovery_keeps_valid_citations(monkeypatch) -> None:
+    value = _input()
+    mixed = _assessment_response(
+        {
+            "main": [
+                {
+                    "subject": "subject_01",
+                    "rationale": "National consequence.",
+                    "evidence_articles": ["article_01", "article_02"],
+                }
+            ],
+            "worth_knowing": [
+                {
+                    "subject": "subject_02",
+                    "rationale": "Useful context.",
+                    "evidence_articles": ["article_01"],
+                }
+            ],
+            "excluded": [],
+        }
+    )
+    _assessment_provider(monkeypatch, (mixed, mixed))
+
+    output = construct_daily_subject_assessments(value)
+
+    construction = output.assessment_set.construction
+    assert isinstance(construction, ModelSubjectAssessmentConstruction)
+    assert tuple(attempt.status for attempt in construction.attempts) == (
+        "rejected",
+        "rejected",
+    )
+    assert construction.evidence_recovery == "scoped"
+    evidence_by_theme = {
+        assessment.theme_id: assessment for assessment in output.assessment_set.assessments
+    }
+    assert tuple(
+        item.article.version_id for item in evidence_by_theme[value.theme_set.themes[0].id].evidence
+    ) == (value.evidence[0].article.version_id,)
+    assert tuple(
+        item.article.version_id for item in evidence_by_theme[value.theme_set.themes[1].id].evidence
+    ) == (value.evidence[1].article.version_id,)
+
+
 def test_assessment_set_rejects_missing_subject_and_nonsemantic_tie() -> None:
     value = _input()
     first, second = value.theme_set.themes

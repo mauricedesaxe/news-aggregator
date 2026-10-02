@@ -74,6 +74,34 @@ def test_corrected_structured_call_accepts_none_as_a_parsed_value(monkeypatch) -
     assert result.value is None
 
 
+def test_corrected_structured_recover_repairs_a_rejected_response(monkeypatch) -> None:
+    _provider(monkeypatch, ("{", "{"))
+    recoveries = []
+
+    def recover(content: str, _error: ValueError):
+        recoveries.append(content)
+        return {"answer": 42}
+
+    result = _run(lambda content: json.loads(content), recover=recover)
+
+    assert result.value == {"answer": 42}
+    assert result.recovered is True
+    assert recoveries == ["{"]
+    assert [attempt.status for attempt in result.attempts] == ["rejected", "rejected"]
+
+
+def test_corrected_structured_recover_failure_raises_the_supplied_error(monkeypatch) -> None:
+    _provider(monkeypatch, ("{", "{"))
+
+    def recover(_content: str, _error: ValueError):
+        raise ValueError("recovery is impossible")
+
+    with pytest.raises(ValueError, match="still invalid") as raised:
+        _run(lambda content: json.loads(content), recover=recover)
+
+    assert isinstance(raised.value.__cause__, ValueError)
+
+
 def test_corrected_structured_call_treats_missing_content_as_a_rejection(monkeypatch) -> None:
     calls, records = _provider(monkeypatch, (None, '{"answer": 42}'))
 
@@ -145,7 +173,7 @@ def _evidence_response(content: str | None, response_id: str):
     )
 
 
-def _run(parse):
+def _run(parse, recover=None):
     return run_corrected_structured_openrouter(
         operation="news.test",
         request_id="a" * 64,
@@ -164,6 +192,7 @@ def _run(parse):
         exhausted_error=lambda error: ValueError(f"still invalid: {error}"),
         unreachable_error="unreachable",
         started_at=0.0,
+        recover=recover,
     )
 
 
