@@ -3,6 +3,7 @@ from typing import Literal
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.catalog_transport import (
+    Statement,
     catalog_batch,
     catalog_query,
 )
@@ -29,12 +30,6 @@ class ModelTraceRecord(NewsModel):
     observation_id: str
     project_ref: str
     recorded_at: datetime
-
-
-class ModelUsage(NewsModel):
-    input_tokens: int
-    output_tokens: int
-    cost_usd: float
 
 
 class HistoricalModelOutput(NewsModel):
@@ -80,19 +75,6 @@ def record_model_attempt(
     catalog_batch(statements, retry_transient_errors=True)
 
 
-def read_model_usage() -> ModelUsage:
-    row = catalog_query(
-        "SELECT COALESCE(sum(input_tokens), 0) AS input_tokens, "
-        "COALESCE(sum(output_tokens), 0) AS output_tokens, "
-        "COALESCE(sum(cost_usd), 0) AS cost_usd FROM news_model_attempts"
-    )[0]
-    return ModelUsage(
-        input_tokens=int(row["input_tokens"]),
-        output_tokens=int(row["output_tokens"]),
-        cost_usd=round(float(row["cost_usd"]), 8),
-    )
-
-
 def read_historical_model_outputs() -> tuple[HistoricalModelOutput, ...]:
     rows = catalog_query(
         """
@@ -130,24 +112,28 @@ def register_historical_model_calls(
     attempts: tuple[ModelAttemptRecord, ...], calls: tuple[ModelCallRegistration, ...]
 ) -> int:
     statements = [_attempt_statement(attempt) for attempt in attempts]
-    statements.extend(
-        (
-            "INSERT INTO news_model_calls VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-            [
-                call.artifact_version_id,
-                call.operation_key,
-                call.model,
-                call.input_tokens,
-                call.output_tokens,
-                call.cost_usd,
-                call.latency_ms,
-                call.response_count,
-            ],
-        )
-        for call in calls
-    )
+    statements.extend(model_call_statement(call) for call in calls)
     catalog_batch(statements)
     return len(statements)
+
+
+def model_call_statement(call: ModelCallRegistration) -> Statement:
+    return (
+        "INSERT INTO news_model_calls "
+        "(artifact_version_id, operation_key, model, input_tokens, output_tokens, "
+        "cost_usd, latency_ms, response_count) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+        [
+            call.artifact_version_id,
+            call.operation_key,
+            call.model,
+            call.input_tokens,
+            call.output_tokens,
+            call.cost_usd,
+            call.latency_ms,
+            call.response_count,
+        ],
+    )
 
 
 def _attempt_statement(attempt: ModelAttemptRecord) -> tuple[str, list[object]]:

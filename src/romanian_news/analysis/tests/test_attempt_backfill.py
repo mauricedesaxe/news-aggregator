@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import TypedDict
 
 from romanian_news.analysis.attempt_backfill import register_existing_model_calls
-from romanian_news.analysis.attempts import read_model_usage
 
 _A = "a" * 64
 _B = "b" * 64
@@ -73,7 +72,10 @@ def test_historical_registration_registers_every_version_once(monkeypatch) -> No
     assert rejected[0]["latency_ms"] == 0
     accepted = [row for row in attempts if row["status"] == "accepted"]
     assert [row["latency_ms"] for row in accepted] == [120, 120]
-    assert read_model_usage() == (60, 25, 0.6)
+    assert _model_calls(connection) == [
+        (_C, "news.relevance", "test/model", 10, 5, 0.1, 120, 1),
+        (_D, "news.score_group_sentiment", "test/model", 50, 20, 0.5, 120, 2),
+    ]
 
     assert register_existing_model_calls() == 0
     assert _attempts_count(connection) == 3
@@ -122,7 +124,10 @@ def test_historical_registration_backfills_only_missing_rows(monkeypatch) -> Non
 
     assert _attempts_count(partial) == 3
     assert _calls_count(partial) == 2
-    assert read_model_usage() == (60, 25, 0.6)
+    assert _model_calls(partial) == [
+        (_C, "news.relevance", "test/model", 10, 5, 0.1, 120, 1),
+        (_D, "news.score_group_sentiment", "test/model", 50, 20, 0.5, 120, 2),
+    ]
 
 
 def _patched_connection(
@@ -208,6 +213,15 @@ def _attempts_count(connection: sqlite3.Connection) -> int:
 
 def _calls_count(connection: sqlite3.Connection) -> int:
     return connection.execute("SELECT count() FROM news_model_calls").fetchone()[0]
+
+
+def _model_calls(connection: sqlite3.Connection) -> list[tuple[object, ...]]:
+    rows = connection.execute(
+        "SELECT artifact_version_id, operation_key, model, input_tokens, output_tokens, "
+        "cost_usd, latency_ms, response_count FROM news_model_calls "
+        "ORDER BY artifact_version_id"
+    ).fetchall()
+    return [tuple(row) for row in rows]
 
 
 def _provider_payload(
