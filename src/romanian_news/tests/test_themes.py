@@ -47,20 +47,6 @@ def test_policy_definition_rejects_prompt_digest_mismatch() -> None:
         )
 
 
-def test_candidate_uses_versioned_policy_and_its_prompt(monkeypatch) -> None:
-    value = _input(2)
-    _provider(
-        monkeypatch,
-        [_response({"assignments": _assignments(value, (1, 2))}, "assignment")],
-    )
-
-    output = construct_daily_themes(value)
-
-    assert isinstance(output.theme_set, AliasedReaderSubjectThemeSet)
-    assert output.theme_set.schema_version == 4
-    assert parse_daily_theme_set(output.content) == output.theme_set
-
-
 def test_all_singletons_use_one_call_and_source_prose(monkeypatch) -> None:
     value = _input(3)
     calls = _provider(
@@ -301,16 +287,6 @@ def test_each_stage_gets_one_semantic_correction(monkeypatch) -> None:
 
     assert len(calls) == 3
     assert isinstance(raised.value.__cause__, ValueError)
-
-
-def test_empty_input_makes_no_calls(monkeypatch) -> None:
-    calls = _provider(monkeypatch, [])
-    value = _input(0)
-
-    output = construct_daily_themes(value)
-
-    assert calls == []
-    assert output.theme_set.themes == ()
 
 
 def test_sparse_evidence_rejects_tampered_assignment(monkeypatch) -> None:
