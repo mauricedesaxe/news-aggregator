@@ -49,6 +49,8 @@ def test_feedback_round_trip_through_the_real_domain(monkeypatch, postgres_catal
         assert page.status_code == 200
         assert "Subject 01" in page.text
         assert "Feedback saved" not in page.text
+        assert '<details class="subject-events"><summary>1 article group</summary>' in page.text
+        assert '<details open class="subject-events">' not in page.text
 
         submitted = client.post(
             "/feedback",
@@ -338,4 +340,8 @@ def test_weekly_status_pages_render_from_the_real_catalog(monkeypatch, postgres_
         source_page = client.get(source_link)
         assert source_page.status_code == 200
         assert f'id="source-{THEME_ID}"' in source_page.text
+        assert (
+            '<details class="subject-events"><summary>1 article group</summary>' in source_page.text
+        )
+        assert '<details open class="subject-events">' not in source_page.text
         assert version_id == publication.version_id

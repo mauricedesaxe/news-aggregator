@@ -828,6 +828,14 @@ def test_event_disclosure_has_native_interaction_styles() -> None:
     assert ".event-disclosure[open] > summary { margin-bottom: 1.5rem; }" in response.text
 
 
+def test_subject_events_disclosure_has_native_interaction_styles() -> None:
+    response = _read_report_response(_daily_report())
+
+    assert ".subject-events > summary:focus-visible" in response.text
+    assert '.subject-events > summary::before { content: "▸";' in response.text
+    assert '.subject-events[open] > summary::before { content: "▾"; }' in response.text
+
+
 def test_single_report_ships_no_speculation_rules() -> None:
     reports = (
         DailyReportSummary(
