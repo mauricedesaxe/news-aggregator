@@ -15,6 +15,7 @@ from romanian_news.catalog.artifacts import (
     run_output_statement,
     run_status,
 )
+from romanian_news.catalog.model_calls import ModelCallRegistration, model_call_statement
 from romanian_news.catalog_transport import (
     advance_artifact_current_version_from_run_statement,
     catalog_batch,
@@ -147,18 +148,17 @@ def publish_daily_themes(
     if calls:
         attempts = _model_attempts(construction)
         statements.append(
-            (
-                "INSERT INTO news_model_calls VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                [
-                    file.version_id,
-                    "news.construct_daily_themes",
-                    calls[0].model,
-                    sum(call.input_tokens for call in calls),
-                    sum(call.output_tokens for call in calls),
-                    sum(response_cost(attempt.provider_response) for attempt in attempts),
-                    sum(call.latency_ms for call in calls),
-                    len(attempts),
-                ],
+            model_call_statement(
+                ModelCallRegistration(
+                    artifact_version_id=file.version_id,
+                    operation_key="news.construct_daily_themes",
+                    model=calls[0].model,
+                    input_tokens=sum(call.input_tokens for call in calls),
+                    output_tokens=sum(call.output_tokens for call in calls),
+                    cost_usd=sum(response_cost(attempt.provider_response) for attempt in attempts),
+                    latency_ms=sum(call.latency_ms for call in calls),
+                    response_count=len(attempts),
+                )
             )
         )
     statements.append(
