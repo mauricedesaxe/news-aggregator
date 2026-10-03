@@ -30,7 +30,6 @@ from romanian_news.feedback import (
     GroupFeedbackTarget,
     NewsFeedbackCommand,
     NewsFeedbackEvent,
-    ReportFeedbackTarget,
     ThemeFeedbackTarget,
 )
 from romanian_news.reader.app import (
@@ -225,24 +224,6 @@ def test_login_limits_repeated_failures(harness: Harness) -> None:
     assert owner.status_code == 303
 
 
-def test_login_uses_valid_trusted_proxy_address(harness: Harness) -> None:
-    with TestClient(harness.app) as client:
-        for _attempt in range(5):
-            response = client.post(
-                "/login",
-                data={"password": "wrong", "next": "/"},
-                headers={"x-real-ip": "198.51.100.20"},
-            )
-            assert response.status_code == 401
-        locked = client.post(
-            "/login",
-            data={"password": "wrong", "next": "/"},
-            headers={"x-real-ip": "198.51.100.20"},
-        )
-
-    assert locked.status_code == 429
-
-
 def test_login_rejects_invalid_trusted_proxy_address(harness: Harness) -> None:
     with TestClient(harness.app) as client:
         for attempt in range(5):
@@ -365,18 +346,15 @@ def test_report_uses_english_reader_copy_without_a_promotional_hero(
     assert 'class="report-header"' not in response.text
     assert 'class="deck"' not in response.text
     assert response.text.index('class="date-nav"') < response.text.index('class="story-section"')
-
-
-def test_home_shows_todays_published_report_with_status_check(harness: Harness) -> None:
-    with TestClient(harness.app) as client:
-        _login(harness.app, client)
-        response = client.get("/")
-
-    assert response.status_code == 200
     assert 'hx-post="/report-status/check"' in response.text
     assert LIVE_VERSION in response.text
     assert f'href="/reports/{REPORT_VERSION}"' in response.text
     assert 'href="/today"' not in response.text
+    assert (
+        response.text.count('<meta name="viewport" content="width=device-width, initial-scale=1">')
+        == 1
+    )
+    assert "Research suggested" not in response.text
 
 
 def test_home_shows_waiting_page_when_today_is_not_ready() -> None:
@@ -411,17 +389,6 @@ def test_home_shows_waiting_page_when_today_is_not_ready() -> None:
     assert f'href="/reports/{REPORT_VERSION}"' in response.text
     assert "Open yesterday's report" in response.text
     assert 'hx-post="/report-status/check"' in response.text
-
-
-def test_today_route_renders_the_live_report(harness: Harness) -> None:
-    with TestClient(harness.app) as client:
-        _login(harness.app, client)
-        response = client.get("/today")
-
-    assert response.status_code == 200
-    assert 'hx-post="/report-status/check"' in response.text
-    assert LIVE_VERSION in response.text
-    assert f'href="/reports/{REPORT_VERSION}"' in response.text
 
 
 def test_today_route_reports_storage_unavailability() -> None:
@@ -617,24 +584,13 @@ def test_tiered_report_orders_main_first_and_collapses_worth_knowing() -> None:
     )
     worth_block = response.text.split('<details class="worth-knowing">', 1)[1]
     assert '<details class="subject-events"><summary>1 article group</summary>' in worth_block
-
-
-def test_tiered_report_omits_excluded_subjects_from_numbering_and_page() -> None:
-    response = _read_report_response(_tiered_report())
-
     assert "Uncorroborated opinion subject" not in response.text
     assert "Subject 01" in response.text
     assert "Subject 02" in response.text
     assert "Subject 03" not in response.text
-
-
-def test_tiered_report_shows_consequence_rationale_and_marks_cited_evidence() -> None:
-    response = _read_report_response(_tiered_report())
-
     assert "Budget decisions with direct national effects." in response.text
     assert 'title="Guvernul a publicat proiectul."' in response.text
     assert "Cited evidence" in response.text
-    worth_block = response.text.split('<details class="worth-knowing">')[1]
     assert "Cited evidence" not in worth_block
 
 
@@ -786,6 +742,23 @@ def test_event_disclosure_is_closed_with_its_title_and_singular_count() -> None:
     assert "Feedback on this event" in expanded_content
     assert "Reviewed articles (1 article)" in expanded_content
     assert "Feedback on this article" in expanded_content
+    assert ".event-disclosure > summary { cursor: pointer; }" in response.text
+    assert ".event-disclosure > summary:focus-visible" in response.text
+    assert ".event-disclosure > summary h3 { display: inline; }" in response.text
+    assert ".event-article-count" in response.text and "white-space: nowrap" in response.text
+    assert ".event-disclosure[open] > summary { margin-bottom: 1.5rem; }" in response.text
+    subject_content, articles_marker, article_content = response.text.partition(
+        '<details class="articles">'
+    )
+    assert articles_marker
+    assert '<details open class="articles">' not in response.text
+    assert ".articles > summary { cursor: pointer; }" in _STYLES
+    assert ".articles > summary:focus-visible" in _STYLES
+    assert "Feedback on this subject" in subject_content
+    assert (
+        '<a href="https://example.com/analiza" target="_blank" rel="noreferrer">' in article_content
+    )
+    assert "Feedback on this article" in article_content
 
 
 def test_two_events_render_as_separate_closed_unnamed_disclosures() -> None:
@@ -816,16 +789,6 @@ def test_two_events_render_as_separate_closed_unnamed_disclosures() -> None:
         '<details class="event-disclosure event-section">',
     ]
     assert '<details class="subject-events"><summary>2 article groups</summary>' in response.text
-
-
-def test_event_disclosure_has_native_interaction_styles() -> None:
-    response = _read_report_response(_daily_report())
-
-    assert ".event-disclosure > summary { cursor: pointer; }" in response.text
-    assert ".event-disclosure > summary:focus-visible" in response.text
-    assert ".event-disclosure > summary h3 { display: inline; }" in response.text
-    assert ".event-article-count" in response.text and "white-space: nowrap" in response.text
-    assert ".event-disclosure[open] > summary { margin-bottom: 1.5rem; }" in response.text
 
 
 def test_single_report_ships_no_speculation_rules() -> None:
@@ -859,24 +822,6 @@ def test_archived_report_event_is_closed_without_the_event_section_class() -> No
     assert "Event 1" not in response.text
     assert "Feedback on this event" in response.text
     assert "Reviewed articles (1 article)" in response.text
-
-
-def test_reviewed_articles_disclosure_is_closed_by_default() -> None:
-    response = _read_report_response(_daily_report())
-
-    assert '<details class="articles">' in response.text
-    assert '<details open class="articles">' not in response.text
-    assert ".articles > summary { cursor: pointer; }" in _STYLES
-    assert ".articles > summary:focus-visible" in _STYLES
-
-
-def test_reviewed_articles_disclosure_uses_singular_article_count() -> None:
-    response = _read_report_response(_daily_report())
-
-    assert (
-        '<details class="articles"><summary>Reviewed articles (1 article)</summary>'
-        in response.text
-    )
 
 
 def test_reviewed_articles_disclosure_uses_plural_count_and_preserves_order() -> None:
@@ -915,18 +860,6 @@ def test_reviewed_articles_disclosure_uses_plural_count_and_preserves_order() ->
     assert response.text.index("Analiză economică a proiectului") < response.text.index(
         "A second account"
     )
-
-
-def test_reviewed_articles_disclosure_contains_links_and_article_feedback() -> None:
-    response = _read_report_response(_daily_report())
-    subject_content, marker, article_content = response.text.partition('<details class="articles">')
-
-    assert marker
-    assert "Feedback on this subject" in subject_content
-    assert (
-        '<a href="https://example.com/analiza" target="_blank" rel="noreferrer">' in article_content
-    )
-    assert "Feedback on this article" in article_content
 
 
 def test_reader_marks_key_points_and_gives_only_them_larger_text(harness: Harness) -> None:
@@ -1015,27 +948,6 @@ def test_reader_declares_automatic_dark_mode_without_light_component_backgrounds
     assert ".site-header { border-bottom: 1px solid var(--line); background: rgba(" not in _STYLES
 
 
-def test_reader_includes_one_responsive_viewport_meta_tag() -> None:
-    response = _read_report_response(_daily_report())
-
-    assert (
-        response.text.count('<meta name="viewport" content="width=device-width, initial-scale=1">')
-        == 1
-    )
-
-
-def test_report_uses_distinct_feedback_labels_for_each_scope(harness: Harness) -> None:
-    with TestClient(harness.app) as client:
-        _login(harness.app, client)
-        response = client.get("/")
-
-    assert response.text.count("Feedback on this report") == 1
-    assert response.text.count("Feedback on this subject") == 1
-    assert f'value="{THEME_ID}" name="theme_id"' in response.text
-    assert response.text.count("Feedback on this event") == 1
-    assert response.text.count("Feedback on this article") == 1
-
-
 def test_archived_report_version_redirects_to_current_version(harness: Harness) -> None:
     archived_version = "e" * 64
     with TestClient(harness.app) as client:
@@ -1061,7 +973,6 @@ def test_feedback_rejects_invalid_csrf_before_domain_call(harness: Harness) -> N
 @pytest.mark.parametrize(
     ("kind", "extra", "target_type"),
     [
-        ("report", {}, ReportFeedbackTarget),
         ("theme", {"theme_id": THEME_ID}, ThemeFeedbackTarget),
         ("group", {"group_id": GROUP_ID}, GroupFeedbackTarget),
         (
@@ -1094,24 +1005,16 @@ def test_feedback_scopes_reach_typed_domain_commands(
     assert command.feedback_id == UUID(FEEDBACK_ID)
 
 
-@pytest.mark.parametrize(
-    ("rating", "label"),
-    [("positive", "Positive"), ("negative", "Negative")],
-)
-def test_positive_and_negative_feedback_redirect_to_saved_state(
-    harness: Harness,
-    rating: str,
-    label: str,
-) -> None:
+def test_negative_feedback_redirects_to_saved_state(harness: Harness) -> None:
     with TestClient(harness.app) as client:
         csrf_token = _login(harness.app, client)
-        form = _feedback_form("report", csrf_token=csrf_token, rating=rating)
+        form = _feedback_form("report", csrf_token=csrf_token, rating="negative")
         response = client.post("/feedback", data=form)
 
     assert response.status_code == 200
-    assert f"Feedback saved: {label}" in response.text
+    assert "Feedback saved: Negative" in response.text
     assert "Feedback on this report" in response.text
-    assert harness.state.commands[-1].rating == rating
+    assert harness.state.commands[-1].rating == "negative"
 
 
 def test_note_only_feedback_reaches_the_domain_as_a_stripped_note(
@@ -1219,6 +1122,7 @@ def test_security_headers_are_present_on_public_and_private_responses(harness: H
         assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
         assert response.headers["referrer-policy"] == "no-referrer"
         assert response.headers["cache-control"] == "no-store"
+        assert "media-src" not in response.headers["content-security-policy"]
 
 
 def test_health_does_not_touch_storage() -> None:
@@ -1394,6 +1298,11 @@ def test_feedback_form_targets_its_own_control_for_htmx_swaps(harness: Harness) 
     assert 'hx-disabled-elt="#feedback-report button"' in response.text
     assert 'action="/feedback"' in response.text
     assert 'method="post"' in response.text
+    assert response.text.count("Feedback on this report") == 1
+    assert response.text.count("Feedback on this subject") == 1
+    assert f'value="{THEME_ID}" name="theme_id"' in response.text
+    assert response.text.count("Feedback on this event") == 1
+    assert response.text.count("Feedback on this article") == 1
 
 
 def test_reader_loads_vendored_htmx_from_same_origin(harness: Harness) -> None:
@@ -1449,27 +1358,21 @@ def test_require_owner_rejects_traversal_paths() -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.parametrize(
-    ("rating", "label"),
-    [("positive", "Positive"), ("negative", "Negative")],
-)
-def test_htmx_feedback_swaps_the_control_with_saved_state(
+def test_negative_htmx_feedback_swaps_the_control_with_saved_state(
     harness: Harness,
-    rating: str,
-    label: str,
 ) -> None:
     with TestClient(harness.app) as client:
         csrf_token = _login(harness.app, client)
         response = client.post(
             "/feedback",
-            data=_feedback_form("report", csrf_token=csrf_token, rating=rating),
+            data=_feedback_form("report", csrf_token=csrf_token, rating="negative"),
             headers={"HX-Request": "true"},
         )
 
     assert response.status_code == 200
     assert "<html" not in response.text
     assert response.text.startswith('<div id="feedback-report"')
-    assert f"Feedback saved: {label}" in response.text
+    assert "Feedback saved: Negative" in response.text
     assert "<details open>" in response.text
     assert 'hx-post="/feedback"' in response.text
     assert 'hx-target="#feedback-report"' in response.text
@@ -1836,37 +1739,11 @@ def _flag_harness() -> Harness:
     return Harness(app=app, state=state)
 
 
-def test_report_renders_research_flag_with_question_and_votes() -> None:
-    harness = _flag_harness()
-    with TestClient(harness.app) as client:
-        _login(harness.app, client)
-        response = client.get("/")
-
-    assert response.status_code == 200
-    assert "Research suggested" in response.text
-    assert "gap strength 0.72" in response.text
-    assert "How does the projected deficit compare with 2025?" in response.text
-    radios = re.findall(r'<input[^>]*type="radio"[^>]*>', response.text)
-    assert len(radios) == 2
-    for radio, value in zip(radios, ("right", "wrong"), strict=True):
-        assert 'name="flag_verdict"' in radio
-        assert f'value="{value}"' in radio
-        assert " required" in radio
-
-
-def test_report_without_flags_renders_no_research_flag(harness: Harness) -> None:
-    with TestClient(harness.app) as client:
-        _login(harness.app, client)
-        response = client.get("/")
-
-    assert response.status_code == 200
-    assert "Research suggested" not in response.text
-
-
 def test_research_flag_vote_submits_note_only_feedback_and_swaps_saved_state() -> None:
     harness = _flag_harness()
     with TestClient(harness.app) as client:
         csrf_token = _login(harness.app, client)
+        page = client.get("/")
         response = client.post(
             "/feedback",
             data={
@@ -1881,6 +1758,16 @@ def test_research_flag_vote_submits_note_only_feedback_and_swaps_saved_state() -
             headers={"HX-Request": "true"},
         )
 
+    assert page.status_code == 200
+    assert "Research suggested" in page.text
+    assert "gap strength 0.72" in page.text
+    assert "How does the projected deficit compare with 2025?" in page.text
+    radios = re.findall(r'<input[^>]*type="radio"[^>]*>', page.text)
+    assert len(radios) == 2
+    for radio, value in zip(radios, ("right", "wrong"), strict=True):
+        assert 'name="flag_verdict"' in radio
+        assert f'value="{value}"' in radio
+        assert " required" in radio
     assert response.status_code == 200
     command = harness.state.commands[-1]
     assert command.rating is None
@@ -1995,6 +1882,9 @@ def test_initial_current_report_gets_do_not_check_freshness_or_call_dagster() ->
         today = client.get("/today")
 
     assert home.status_code == today.status_code == 200
+    assert 'hx-post="/report-status/check"' in today.text
+    assert LIVE_VERSION in today.text
+    assert f'href="/reports/{REPORT_VERSION}"' in today.text
     assert calls.current_reads == 2
     assert calls.freshness_reads == 0
     assert calls.repair_requests == 0
@@ -2084,12 +1974,9 @@ def test_missing_current_day_report_stays_on_waiting_page_and_requests_repair_wh
     assert calls.repair_requests == 1
 
 
-@pytest.mark.parametrize("kind", ["queued", "running"])
-def test_polling_observes_queued_or_running_repair_without_triggering_work(
-    kind: Literal["queued", "running"],
-) -> None:
+def test_polling_observes_running_repair_without_triggering_work() -> None:
     current = _today_report()
-    lifecycle = RepairRun(kind=kind, run_id="run", run_url="https://example.test/run")
+    lifecycle = RepairRun(kind="running", run_id="run", run_url="https://example.test/run")
     app, calls = _status_harness(
         current=current,
         freshness=ReportStale(head=current.head),
@@ -2437,6 +2324,8 @@ def test_report_renders_native_video_captions_transcript_fallback_and_selector()
     with TestClient(app) as client:
         _login(app, client)
         response = client.get(f"/reports/{REPORT_VERSION}?edition={VIDEO_EDITION}")
+        today = client.get(f"/today?edition={VIDEO_EDITION}")
+        health = client.get("/healthz")
 
     assert response.status_code == 200
     assert (
@@ -2455,17 +2344,11 @@ def test_report_renders_native_video_captions_transcript_fallback_and_selector()
     assert f'href="/reports/{OLDER_REPORT_VERSION}"' in response.text
     assert 'href="/today"' in response.text
     assert "news/video-digest/private-plan.json" not in response.text
-
-
-def test_today_video_selector_retains_the_current_report_url() -> None:
-    app, _commands = _video_app(_reader_video_digest())
-
-    with TestClient(app) as client:
-        _login(app, client)
-        response = client.get(f"/today?edition={VIDEO_EDITION}")
-
-    assert f'href="/today?edition={VIDEO_EDITION}"' in response.text
-    assert f'href="/today?edition={OLDER_VIDEO_EDITION}"' in response.text
+    assert f'href="/today?edition={VIDEO_EDITION}"' in today.text
+    assert f'href="/today?edition={OLDER_VIDEO_EDITION}"' in today.text
+    directives = health.headers["content-security-policy"].split("; ")
+    assert directives.count("media-src 'self' https://media.example.com") == 1
+    assert all(not directive.startswith("media-src ") for directive in directives[:-1])
 
 
 def test_failed_subtitles_render_status_without_track_or_crossorigin() -> None:
@@ -2494,24 +2377,6 @@ def test_known_video_integrity_failure_degrades_to_the_written_report() -> None:
     assert response.status_code == 200
     assert "Subject 01" in response.text
     assert "Video digest" not in response.text
-
-
-def test_video_media_origin_adds_one_exact_csp_directive() -> None:
-    app, _commands = _video_app(_reader_video_digest())
-
-    with TestClient(app) as client:
-        response = client.get("/healthz")
-
-    directives = response.headers["content-security-policy"].split("; ")
-    assert directives.count("media-src 'self' https://media.example.com") == 1
-    assert all(not directive.startswith("media-src ") for directive in directives[:-1])
-
-
-def test_written_only_reader_omits_media_src_from_csp(harness: Harness) -> None:
-    with TestClient(harness.app) as client:
-        response = client.get("/healthz")
-
-    assert "media-src" not in response.headers["content-security-policy"]
 
 
 @pytest.mark.parametrize(

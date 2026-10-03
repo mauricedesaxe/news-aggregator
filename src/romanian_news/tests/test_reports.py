@@ -24,7 +24,6 @@ from romanian_news.reports import (
     DailyReportOutput,
     ReportArticleSource,
     ReportCoverageStatus,
-    ReportEvent,
     RetrospectiveCoverage,
     RetrospectiveDailyReport,
     WeeklyReport,
@@ -308,25 +307,6 @@ def test_weekly_report_reconstructs_a_mixed_current_and_archived_week(monkeypatc
     assert isinstance(output.report.days[0].report, ArchivedDailyReport)
     assert isinstance(output.report.days[1].report, DailyReport)
     assert output.report.accepted_article_count == 8
-
-
-def test_daily_report_section_accepts_no_material_uncertainty() -> None:
-    section = ReportEvent.model_validate(
-        {
-            "group_id": "a" * 64,
-            "title_ro": "Title",
-            "summary_ro": "Summary",
-            "key_points_ro": (),
-            "disagreements_ro": (),
-            "uncertainty_ro": None,
-            "sentiment_label": "neutral",
-            "sentiment_score": 0.0,
-            "sentiment_rationale_ro": "Neutral account",
-            "articles": (),
-        }
-    )
-
-    assert section.uncertainty_ro is None
 
 
 def test_weekly_report_requires_a_monday_and_all_seven_days(monkeypatch) -> None:

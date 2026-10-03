@@ -116,16 +116,11 @@ def test_default_threshold_groups_articles_with_point_seven_five_similarity() ->
     assert [len(group.article_version_ids) for group in result.cluster_set.groups] == [2]
 
 
-def test_empty_day_produces_a_replayable_empty_cluster_set() -> None:
-    result = cluster_articles(date(2026, 8, 30), ())
-
-    assert result.cluster_set.article_version_ids == ()
-    assert result.cluster_set.groups == ()
-
-
 def test_default_cluster_threshold_defines_empty_identity() -> None:
     output = cluster_articles(date(2026, 8, 30), ())
 
+    assert output.cluster_set.article_version_ids == ()
+    assert output.cluster_set.groups == ()
     assert output.cluster_set.threshold == 0.72
     assert output.request_id == "3cfa1fee230403844ffd602bc05a821bd16a9602d27e4dfc3079dc0d619b900a"
 

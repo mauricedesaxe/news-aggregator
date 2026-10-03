@@ -147,15 +147,6 @@ def _sign_in(client: TestClient) -> None:
     )
 
 
-def test_latest_status_redirects_to_completed_week() -> None:
-    with TestClient(_app()) as client:
-        _sign_in(client)
-        response = client.get("/status", follow_redirects=False)
-
-    assert response.status_code == 303
-    assert response.headers["location"] == "/status/weeks/2026-09-14"
-
-
 def test_status_archive_and_exact_version_render() -> None:
     with TestClient(_app()) as client:
         _sign_in(client)

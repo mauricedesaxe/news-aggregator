@@ -275,7 +275,7 @@ def test_projection_never_overwrites_conflicting_or_unrelated_items(monkeypatch)
 
 
 def test_experiment_reuses_complete_receipt_and_keeps_implementation_identity(monkeypatch) -> None:
-    release = _release()
+    release = _release_with_theme_spec()
     client, events, receipts = _patch_boundaries(monkeypatch)
 
     first = evaluation_projection.run_news_evaluation_experiment(release, "git:test")
@@ -286,6 +286,7 @@ def test_experiment_reuses_complete_receipt_and_keeps_implementation_identity(mo
     assert second.experiment_id != first.experiment_id
     assert len(client.run_calls) == 2
     assert [len(call["data"]) for call in client.run_calls] == [5, 5]
+    assert any(item.metadata["concern"] == "daily_theme" for item in client.items.values())
     assert all(
         item.metadata["concern"] != "daily_theme"
         for call in client.run_calls
@@ -298,18 +299,6 @@ def test_experiment_reuses_complete_receipt_and_keeps_implementation_identity(mo
         "experiment",
         "git:test",
     ) in receipts
-
-
-def test_deterministic_langfuse_experiment_excludes_projected_theme_cases(
-    monkeypatch,
-) -> None:
-    release = _release_with_theme_spec()
-    client, _events, _receipts = _patch_boundaries(monkeypatch)
-
-    evaluation_projection.run_news_evaluation_experiment(release, "git:deterministic")
-
-    assert any(item.metadata["concern"] == "daily_theme" for item in client.items.values())
-    assert all(item.metadata["concern"] != "daily_theme" for item in client.run_calls[0]["data"])
 
 
 def test_projection_expands_executable_theme_expectations_as_grouping_items(
