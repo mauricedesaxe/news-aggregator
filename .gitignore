@@ -15,3 +15,5 @@ dist/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+coverage-results/

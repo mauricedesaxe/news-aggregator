@@ -47,6 +47,7 @@ dev = [
     "xenon==0.9.3",
 ]
 test = [
+    "coverage==7.10.7",
     "httpx==0.28.1",
     "pytest==9.0.3",
 ]
