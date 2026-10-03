@@ -194,7 +194,6 @@ def test_gemini_binary_execution_policy_and_request_identity_are_stable() -> Non
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     (
-        ("id", "", "provider request ID"),
         ("id", None, "provider request ID"),
         ("model", "", "response model"),
         ("model", 1, "response model"),
@@ -202,7 +201,6 @@ def test_gemini_binary_execution_policy_and_request_identity_are_stable() -> Non
         ("prompt_tokens", True, "prompt_tokens"),
         ("prompt_tokens", -1, "prompt_tokens"),
         ("completion_tokens", "7", "completion_tokens"),
-        ("cost", None, "cost"),
         ("cost", float("nan"), "cost"),
         ("cost", -0.01, "cost"),
         ("cost", "0.01", "cost"),

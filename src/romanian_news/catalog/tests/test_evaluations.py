@@ -385,30 +385,6 @@ def test_publish_v7_manifest_rejects_older_superseding_feedback_before_writes(
     assert batches == []
 
 
-def test_hydrate_manifest_loads_exact_artifacts(monkeypatch) -> None:
-    manifest, payloads = _relevance_manifest()
-    manifest = manifest.model_copy(
-        update={"prior_manifest": _reference("prior", "9" * 64, "prior.json")}
-    )
-    reads = []
-
-    def read(key, digest):
-        reads.append((key, digest))
-        return payloads[key]
-
-    monkeypatch.setattr(evaluations, "read_verified_r2_object", read)
-
-    dataset = evaluations.hydrate_news_evaluation_manifest(manifest)
-
-    case = dataset.cases[0]
-    assert isinstance(case, RelevanceEvaluationCase)
-    assert isinstance(case.model_response, RelevanceDecision)
-    assert relevance_is_accepted(case.model_response, RELEVANCE_POLICY_V1) is True
-    assert dataset.feedback_reviews == ()
-    assert dataset.unreviewed_themes == ()
-    assert reads == [("article.json", "1" * 64), ("relevance.json", "2" * 64)]
-
-
 def test_hydrate_relevance_preserves_v3_context_and_impact_decisions(monkeypatch) -> None:
     manifest, payloads = _relevance_manifest()
     spec = manifest.cases[0]
@@ -1121,6 +1097,9 @@ def test_publish_baseline_binds_manifest_as_exact_input(monkeypatch) -> None:
 
 def test_load_release_resolves_pin_verifies_bytes_and_hydrates(monkeypatch) -> None:
     manifest, payloads = _relevance_manifest()
+    manifest = manifest.model_copy(
+        update={"prior_manifest": _reference("prior", "9" * 64, "prior.json")}
+    )
     manifest_content = evaluations.canonical_json(manifest.model_dump(mode="json"))
     manifest_reference = _reference(
         "news:evaluation-manifest:synthetic-v1",
@@ -1172,9 +1151,13 @@ def test_load_release_resolves_pin_verifies_bytes_and_hydrates(monkeypatch) -> N
     assert isinstance(case, RelevanceEvaluationCase)
     assert isinstance(case.model_response, RelevanceDecision)
     assert relevance_is_accepted(case.model_response, RELEVANCE_POLICY_V1) is True
-    assert reads[:2] == [
+    assert release.dataset.feedback_reviews == ()
+    assert release.dataset.unreviewed_themes == ()
+    assert reads == [
         (manifest_reference.r2_key, manifest_reference.content_digest),
         (baseline_reference.r2_key, baseline_reference.content_digest),
+        ("article.json", "1" * 64),
+        ("relevance.json", "2" * 64),
     ]
     assert set(pin.model_dump()) == {"manifest_version_id", "baseline_version_id"}
     assert "body" not in pin.model_dump_json()

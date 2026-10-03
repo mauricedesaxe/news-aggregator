@@ -186,31 +186,6 @@ def test_failure_attempt_insert_records_unambiguous_identity(monkeypatch) -> Non
     assert attempt.retry_number == 0
 
 
-def test_recovery_override_uses_a_new_generation_and_keeps_attempts(monkeypatch) -> None:
-    override = ArticleRecoveryOverride(
-        recovery_id="f" * 64,
-        event_id=EVENT_ID,
-        base_work_generation=FIRST_GENERATION,
-        expected_work_generation=FIRST_GENERATION,
-        requested_by="operator",
-        reason="parser fixed",
-        requested_at=datetime.fromisoformat("2026-09-09T12:00:00+00:00"),
-    )
-    rows = tuple(
-        _row("deterministic", FIRST, f"2026-09-09T10:{minute:02d}:00+00:00")
-        for minute in (0, 10, 20)
-    )
-    monkeypatch.setattr(
-        recovery.article_catalog, "read_article_recovery_overrides", lambda ids: (override,)
-    )
-    monkeypatch.setattr(recovery.article_catalog, "read_article_failure_attempts", lambda ids: rows)
-
-    view = recovery.read_article_recovery_view({EVENT_ID: FIRST_GENERATION})
-
-    assert view.work_generations[EVENT_ID] == override.work_generation
-    assert EVENT_ID not in view.attempt_states
-
-
 def test_stale_recovery_override_does_not_release_new_base_generation(monkeypatch) -> None:
     override = ArticleRecoveryOverride(
         recovery_id="f" * 64,

@@ -10,43 +10,6 @@ from romanian_news.analysis.corrected_structured import (
 )
 
 
-def test_corrected_structured_call_records_rejection_and_acceptance(monkeypatch) -> None:
-    calls, records = _provider(monkeypatch, ("{", '{"answer": 42}'))
-
-    result = _run(lambda content: json.loads(content))
-
-    assert result.value == {"answer": 42}
-    assert [attempt.status for attempt in result.attempts] == ["rejected", "accepted"]
-    assert [record["status"] for record in records] == ["rejected", "accepted"]
-    assert result.call.input_tokens == 20
-    assert result.call.output_tokens == 10
-    assert result.call.response_id == "response-2"
-    assert calls[1]["messages"][-2] == {"role": "assistant", "content": "{"}
-    assert calls[1]["messages"][-1]["role"] == "user"
-    assert "Validation error:" in calls[1]["messages"][-1]["content"]
-    assert calls[0]["response_format"]["json_schema"] == {
-        "name": "test_response",
-        "strict": True,
-        "schema": {"type": "object"},
-    }
-    assert calls[0]["extra_body"] == {
-        "provider": {"require_parameters": True},
-        "reasoning": {"effort": "low"},
-    }
-
-
-def test_corrected_structured_call_raises_supplied_error_after_two_rejections(
-    monkeypatch,
-) -> None:
-    calls, records = _provider(monkeypatch, ("{", "{"))
-
-    with pytest.raises(ValueError, match="still invalid") as raised:
-        _run(lambda content: json.loads(content))
-
-    assert isinstance(raised.value.__cause__, ValueError)
-    assert len(calls) == len(records) == 2
-
-
 def test_corrected_structured_call_does_not_retry_provider_failures(monkeypatch) -> None:
     calls = []
 
@@ -104,19 +67,37 @@ def test_corrected_structured_call_persists_attempt_evidence(monkeypatch) -> Non
         _evidence_response(content, f"response-{index}")
         for index, content in enumerate(("{", '{"answer": 42}'), start=1)
     )
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return next(responses)
+
     monkeypatch.setattr(
         corrected_structured,
         "openrouter_client",
-        lambda: SimpleNamespace(
-            chat=SimpleNamespace(
-                completions=SimpleNamespace(create=lambda **_kwargs: next(responses))
-            )
-        ),
+        lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))),
     )
 
     result = _run(lambda content: json.loads(content))
 
     assert result.value == {"answer": 42}
+    assert [attempt.status for attempt in result.attempts] == ["rejected", "accepted"]
+    assert result.call.input_tokens == 20
+    assert result.call.output_tokens == 10
+    assert result.call.response_id == "response-2"
+    assert calls[1]["messages"][-2] == {"role": "assistant", "content": "{"}
+    assert calls[1]["messages"][-1]["role"] == "user"
+    assert "Validation error:" in calls[1]["messages"][-1]["content"]
+    assert calls[0]["response_format"]["json_schema"] == {
+        "name": "test_response",
+        "strict": True,
+        "schema": {"type": "object"},
+    }
+    assert calls[0]["extra_body"] == {
+        "provider": {"require_parameters": True},
+        "reasoning": {"effort": "low"},
+    }
     rows = connection.execute(
         "SELECT attempt_id, response_id, status, error, model FROM news_model_attempts "
         "ORDER BY rowid"

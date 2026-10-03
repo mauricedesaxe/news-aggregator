@@ -243,10 +243,6 @@ def _asset_event_storage_id(
     return matching[0]
 
 
-def _youtube_publication_day(asset_event: dg.EventLogEntry) -> str:
-    return _youtube_publication(asset_event)[0]
-
-
 def _youtube_publication(asset_event: dg.EventLogEntry) -> tuple[str, str]:
     materialization = asset_event.asset_materialization
     if materialization is None:
