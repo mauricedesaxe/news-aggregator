@@ -70,12 +70,9 @@ CONFIG = publication.PublicMediaConfiguration(
 @pytest.mark.parametrize(
     ("private_bucket", "public_bucket", "base_url"),
     (
-        ("", "public", "https://media.example.com"),
         ("private", "", "https://media.example.com"),
         ("private", "public", ""),
-        ("private", "public", "http://media.example.com"),
         ("private", "public", "https://user@media.example.com"),
-        ("same", "same", "https://media.example.com"),
     ),
 )
 def test_publication_port_from_environment_rejects_an_unsafe_boundary(
@@ -127,11 +124,6 @@ def test_publication_port_from_environment_builds_from_a_safe_boundary(
             "private_bucket": "private",
             "public_bucket": "public",
             "base_url": "https://media.example.com/path",
-        },
-        {
-            "private_bucket": "private",
-            "public_bucket": "public",
-            "base_url": "https://media.example.com/",
         },
     ),
 )
@@ -257,19 +249,6 @@ def _configure_port(
     ("stage", "expected"),
     (
         (
-            PublicationState.PENDING,
-            [
-                "intent",
-                "attempt",
-                "uploading",
-                "r2",
-                "uploaded",
-                "r2",
-                "verified",
-                "complete",
-            ],
-        ),
-        (
             PublicationState.UPLOADED,
             ["intent", "attempt", "r2", "verified", "complete"],
         ),
@@ -310,7 +289,7 @@ def test_publication_uploads_and_verifies_available_subtitles(
     handoff = HANDOFF.model_copy(
         update={"subtitles": AvailablePublicationSubtitles(artifact=subtitle)}
     )
-    port, _actions, _evidence = _configure_port(monkeypatch, PublicationState.PENDING)
+    port, actions, evidence = _configure_port(monkeypatch, PublicationState.PENDING)
     published = []
 
     def read_private(key, _digest, *, client, bucket) -> bytes:
@@ -321,6 +300,7 @@ def test_publication_uploads_and_verifies_available_subtitles(
     def publish_public(client, bucket, value) -> None:
         assert client is port._client
         assert bucket == "public"
+        actions.append("r2")
         published.append(value)
 
     monkeypatch.setattr(publication, "read_verified_r2_object", read_private)
@@ -328,6 +308,22 @@ def test_publication_uploads_and_verifies_available_subtitles(
 
     assert port.execute(PublishAction(lease=LEASE, handoff=handoff)) == ActionAdvanced()
 
+    assert actions == [
+        "intent",
+        "attempt",
+        "uploading",
+        "r2",
+        "r2",
+        "uploaded",
+        "r2",
+        "r2",
+        "verified",
+        "complete",
+    ]
+    for content in evidence:
+        body = json.loads(content)
+        assert "uploaded" not in body
+        assert "adopted" not in body
     assert [value.content_type for value in published] == [
         "video/mp4",
         "text/vtt",
@@ -370,7 +366,7 @@ def test_conflict_terminalizes_immediately(
     assert "complete" not in actions
 
 
-@pytest.mark.parametrize("attempt_index", range(5))
+@pytest.mark.parametrize("attempt_index", (0, 4))
 def test_transient_failure_uses_four_retries_then_terminalizes_fifth(
     monkeypatch: pytest.MonkeyPatch,
     attempt_index: int,

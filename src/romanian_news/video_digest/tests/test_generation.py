@@ -592,6 +592,14 @@ def test_generation_is_ordered_and_records_unknown_cost(monkeypatch: pytest.Monk
         first.request_id,
         second.request_id,
     ]
+    harness.accept_latest()
+
+    completed = generation.generate_next_candidate(
+        _lease(prepared), prepared, _references(), provider=_UntouchableProvider()
+    )
+
+    assert isinstance(completed, generation.GenerationComplete)
+    assert completed.edition_id == prepared.plan.edition_id
 
 
 def test_generation_reuses_stored_receipt_without_submission(
@@ -664,6 +672,20 @@ def test_confirmed_submission_rejection_allows_retry(monkeypatch: pytest.MonkeyP
     assert isinstance(outcome, generation.GenerationRetryAvailable)
     assert harness.attempts[0].stage is GenerationStage.FAILED
     assert harness.failed_slot is False
+    provider = _Provider()
+
+    retried = generation.generate_next_candidate(
+        _lease(prepared),
+        prepared,
+        _references(),
+        provider=provider,
+        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+    )
+
+    assert isinstance(retried, generation.CandidateReady)
+    assert retried.attempt_index == 1
+    assert provider.submitted_positions == [0]
+    assert [item.request.attempt_index for item in harness.attempts] == [0, 1]
 
 
 @pytest.mark.parametrize("provider", [_StatusFailureProvider(), _ResultFailureProvider()])
@@ -747,39 +769,6 @@ def test_pending_restart_fails_closed_without_duplicate_submission(
     assert provider.submitted_positions == []
     assert harness.failed_slot is True
     assert harness.attempts[0].cost.kind == "unknown"
-
-
-def test_failed_first_attempt_creates_only_attempt_one(monkeypatch: pytest.MonkeyPatch) -> None:
-    prepared = _prepared()
-    harness = _Harness(monkeypatch, prepared)
-    provider = _Provider()
-    _, request_file, identity = generation._generation_request(
-        prepared, _references(), generation.PRODUCTION_GENERATION_POLICY, 0, 0
-    )
-    harness.attempts.append(
-        generation.GenerationAttemptReference(
-            request=identity,
-            stage=GenerationStage.FAILED,
-            provider_receipt_id="failed-receipt",
-            cost=UnknownAttemptCost(reason="provider failed"),
-            request_evidence=_reference(request_file),
-            receipt_evidence=None,
-            response_evidence=None,
-        )
-    )
-
-    outcome = generation.generate_next_candidate(
-        _lease(prepared),
-        prepared,
-        _references(),
-        provider=provider,
-        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
-    )
-
-    assert isinstance(outcome, generation.CandidateReady)
-    assert outcome.attempt_index == 1
-    assert provider.submitted_positions == [0]
-    assert [item.request.attempt_index for item in harness.attempts] == [0, 1]
 
 
 def test_budget_denial_happens_before_fal_submission(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -977,29 +966,6 @@ def test_exhausted_attempts_fail_the_edition_without_further_spend(
     assert "exhausted both generation attempts" in outcome.reason
     assert provider.calls == 0
     assert harness.failed_slot is False
-
-
-def test_all_positions_accepted_completes_the_edition(monkeypatch: pytest.MonkeyPatch) -> None:
-    prepared = _prepared()
-    harness = _Harness(monkeypatch, prepared)
-    provider = _Provider()
-    for _ in range(2):
-        outcome = generation.generate_next_candidate(
-            _lease(prepared),
-            prepared,
-            _references(),
-            provider=provider,
-            sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
-        )
-        assert isinstance(outcome, generation.CandidateReady)
-        harness.accept_latest()
-
-    completed = generation.generate_next_candidate(
-        _lease(prepared), prepared, _references(), provider=_UntouchableProvider()
-    )
-
-    assert isinstance(completed, generation.GenerationComplete)
-    assert completed.edition_id == prepared.plan.edition_id
 
 
 def test_deadline_stops_before_request_admission(monkeypatch: pytest.MonkeyPatch) -> None:

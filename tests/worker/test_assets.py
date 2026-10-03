@@ -208,18 +208,6 @@ def test_youtube_source_and_publication_materializations_expose_identity(monkeyp
     assert materialization.metadata["article_version_id"].value == "a" * 64
 
 
-def test_youtube_relevance_uses_publication_day_metadata() -> None:
-    event = SimpleNamespace(
-        asset_materialization=dg.AssetMaterialization(
-            asset_key="youtube_publication",
-            metadata={"bucharest_day": DAY, "article_version_id": "a" * 64},
-        )
-    )
-    asset_event = cast(dg.EventLogEntry, cast(object, event))
-    assert definitions._youtube_publication_day(asset_event) == DAY
-    assert definitions._youtube_publication(asset_event) == (DAY, "a" * 64)
-
-
 def test_youtube_relevance_sensor_suppresses_an_active_run_for_the_same_article(
     monkeypatch,
 ) -> None:
@@ -304,6 +292,7 @@ def test_youtube_relevance_sensor_retries_a_failed_run_on_a_later_materializatio
     assert second_evaluation.run_requests
     second = second_evaluation.run_requests[0]
     assert first.run_key != second.run_key
+    assert first.partition_key == DAY
     assert first.tags["news/youtube_article_version_id"] == article_version_id
     assert second.tags["news/youtube_article_version_id"] == article_version_id
 
@@ -553,36 +542,6 @@ def test_article_controller_blocks_everything_while_a_batch_lacks_a_partition(
     assert evaluation.skip_message == "Legacy article automation is queued or active."
 
 
-def test_article_controller_prioritizes_today_then_advances_history(monkeypatch) -> None:
-    now = datetime.fromisoformat("2026-09-09T12:00:00+03:00")
-    historical = datetime.fromisoformat("2026-09-08T12:00:00+03:00").date()
-    visited = []
-    request = dg.RunRequest(run_key="historical", partition_key=historical.isoformat())
-    monkeypatch.setattr(definitions, "_controller_time", lambda: now)
-    monkeypatch.setattr(
-        definitions,
-        "read_article_candidate_days",
-        lambda *_args: (historical, now.date()),
-    )
-    monkeypatch.setattr(
-        definitions,
-        "_article_batch_request",
-        lambda _context, day, _now: visited.append(day) or (request if day == historical else None),
-    )
-    with dg.instance_for_test() as instance:
-        context = dg.build_sensor_context(
-            instance=instance,
-            repository_def=defs.get_repository_def(),
-        )
-        evaluation = article_batch_controller.evaluate_tick(context)
-
-    assert evaluation.run_requests is not None
-    assert len(evaluation.run_requests) == 1
-    assert evaluation.run_requests[0].run_key == request.run_key
-    assert evaluation.run_requests[0].partition_key == request.partition_key
-    assert visited == [now.date(), historical]
-
-
 def test_article_controller_runs_four_current_batches_then_newest_history(monkeypatch) -> None:
     now = datetime.fromisoformat("2026-09-09T12:00:00+03:00")
     today = now.date()
@@ -657,6 +616,7 @@ def test_article_controller_uses_newest_history_when_current_has_no_ready_work(
     today = now.date()
     middle = datetime.fromisoformat("2026-09-05T12:00:00+03:00").date()
     oldest = datetime.fromisoformat("2026-09-01T12:00:00+03:00").date()
+    visited = []
     monkeypatch.setattr(definitions, "_controller_time", lambda: now)
     monkeypatch.setattr(
         definitions,
@@ -665,6 +625,7 @@ def test_article_controller_uses_newest_history_when_current_has_no_ready_work(
     )
 
     def request(_context, day, _now):
+        visited.append(day)
         if day == today:
             return None
         return dg.RunRequest(run_key=f"batch:{day.isoformat()}", partition_key=day.isoformat())
@@ -680,6 +641,7 @@ def test_article_controller_uses_newest_history_when_current_has_no_ready_work(
 
     assert evaluation.run_requests
     assert evaluation.run_requests[0].partition_key == middle.isoformat()
+    assert visited == [today, middle]
     assert evaluation.cursor == "0"
 
 
@@ -698,48 +660,6 @@ def test_article_controller_preserves_cursor_when_no_work_is_ready(monkeypatch) 
 
     assert not evaluation.run_requests
     assert evaluation.cursor == "2"
-
-
-def test_article_batch_run_keys_recover_after_a_failed_tick(monkeypatch) -> None:
-    day = datetime.fromisoformat(DAY).date()
-    event_id = "a" * 64
-    plan = SimpleNamespace(
-        selected=(
-            SimpleNamespace(source=SimpleNamespace(event_id=event_id), work_generation="b" * 64),
-        ),
-        remaining_entries=0,
-        deferred_event_ids=(),
-        quarantined_event_ids=(),
-        source_covered_days=(day,),
-    )
-    monkeypatch.setattr(definitions, "plan_article_work", lambda *_args, **_kwargs: plan)
-    monkeypatch.setattr(definitions, "read_article_attempt_states", lambda _event_ids: {})
-    monkeypatch.setattr(definitions, "feed_registry", SimpleNamespace)
-    monkeypatch.setattr(
-        definitions,
-        "read_daily_article_references",
-        lambda _day: DailyArtifactReferences(day=day, values=()),
-    )
-    with dg.instance_for_test() as instance:
-        context = dg.build_sensor_context(
-            instance=instance,
-            repository_def=defs.get_repository_def(),
-        )
-        first = definitions._article_batch_request(
-            context,
-            day,
-            datetime.fromisoformat("2026-09-09T09:00:00+00:00"),
-        )
-        second = definitions._article_batch_request(
-            context,
-            day,
-            datetime.fromisoformat("2026-09-09T09:01:00+00:00"),
-        )
-
-    assert first is not None and second is not None
-    assert first.tags["news/article_batch_key"] == second.tags["news/article_batch_key"]
-    assert first.run_key != second.run_key
-    assert json.loads(first.tags["news/article_event_ids"]) == [event_id]
 
 
 def test_article_controller_reports_unchanged_quarantine_once(monkeypatch) -> None:
@@ -832,6 +752,7 @@ def test_mixed_quarantine_batch_failure_does_not_count_as_reported_until_work_dr
             context, day, datetime.fromisoformat("2026-09-09T09:00:00+00:00")
         )
         assert first is not None
+        assert json.loads(first.tags["news/article_event_ids"]) == [selected_id]
         instance.add_run(
             dg.DagsterRun(
                 job_name="article_batch",

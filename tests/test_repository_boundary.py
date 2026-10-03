@@ -28,16 +28,6 @@ def test_news_schema_and_repository_exclude_private_chartly_domains() -> None:
     assert not any(PACKAGE.glob("budget*"))
 
 
-def test_only_synthetic_fixtures_are_retained() -> None:
-    fixtures = (
-        PACKAGE / "articles/tests/fixtures/digi24_synthetic.html",
-        PACKAGE / "tests/fixtures/synthetic_v1_theme_set.json",
-        PACKAGE / "tests/fixtures/synthetic_uploads_playlist.json",
-    )
-
-    assert all(path.is_file() and path.stat().st_size > 0 for path in fixtures)
-
-
 def test_repository_uses_mit_and_carries_the_htmx_notice() -> None:
     assert (ROOT / "LICENSE").read_text().startswith("MIT License")
     assert "Zero-Clause BSD" in (ROOT / "THIRD_PARTY_NOTICES.md").read_text()

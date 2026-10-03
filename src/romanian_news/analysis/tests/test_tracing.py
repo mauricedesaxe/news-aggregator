@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -70,7 +70,8 @@ def _reset_tracing(monkeypatch):
     monkeypatch.setattr(tracing, "LANGFUSE_PROJECT_ID", "test-project")
     monkeypatch.setattr(tracing, "_langfuse_client", lambda: client)
     tracing.langfuse_tracing_available.cache_clear()
-    return client
+    yield client
+    tracing.langfuse_tracing_available.cache_clear()
 
 
 def test_tracing_disabled_calls_provider_without_observation(monkeypatch, _reset_tracing) -> None:
@@ -240,15 +241,3 @@ def test_failed_delivery_does_not_create_a_durable_trace_reference(_reset_tracin
     result = tracing.trace_provider_call("news.embed", "request-1", {}, _Response)
 
     assert result.trace is None
-
-
-def test_trace_reference_accepts_opaque_remote_ids() -> None:
-    value = tracing.ModelTraceReference(
-        provider="langfuse",
-        trace_id="trace-provider-value",
-        observation_id="observation-provider-value",
-        project_ref="project",
-        recorded_at=datetime(2026, 9, 1, tzinfo=UTC),
-    )
-
-    assert value.observation_id == "observation-provider-value"

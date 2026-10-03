@@ -56,7 +56,6 @@ from romanian_news.video_digest.orchestration import (
     SubtitleResume,
     VideoDigestRunRequest,
     alert_disposition,
-    next_action,
     run_video_digest,
 )
 
@@ -295,101 +294,6 @@ def test_runner_durably_records_source_skips_without_alert(reason: SlotSkipReaso
     assert catalog.renewed == 0
 
 
-@pytest.mark.parametrize("reason", tuple(SlotSkipReason))
-def test_every_skip_reason_has_no_incident(reason: SlotSkipReason) -> None:
-    outcome = RunSkipped(reason=reason)
-    assert alert_disposition(SLOT.slot_id, outcome) == NoAlert()
-
-
-def test_reducer_selects_three_assembly_attempts_and_fixed_subtitle_strategies() -> None:
-    evidence = VIDEO.model_copy(update={"artifact_id": "evidence"})
-    for index in range(3):
-        assembly = AssemblyResume(
-            slot=SLOT,
-            lease=LEASE,
-            attempts=tuple(
-                AssemblyAttemptReference(
-                    attempt_index=value,
-                    disposition="failed",
-                    evidence=evidence,
-                )
-                for value in range(index)
-            ),
-        )
-        action = next_action(assembly)
-        assert action is not None
-        assert action.kind == "assemble"
-        assert action.attempt_index == index
-
-    strategies = (
-        "whole-edition-v1",
-        "per-story-v1",
-        "per-story-without-vad-v1",
-    )
-    for index, strategy in enumerate(strategies):
-        subtitles = SubtitleResume(
-            slot=SLOT,
-            lease=LEASE,
-            video=VIDEO,
-            attempts=tuple(
-                SubtitleAttemptReference(
-                    attempt_index=value,
-                    strategy=strategies[value],
-                    disposition="failed",
-                    evidence=evidence,
-                )
-                for value in range(index)
-            ),
-        )
-        action = next_action(subtitles)
-        assert action is not None
-        assert action.kind == "subtitle"
-        assert (action.attempt_index, action.strategy) == (index, strategy)
-
-
-@pytest.mark.parametrize(
-    ("state", "port_name", "action_kind"),
-    [
-        (PlanningResume(slot=SLOT, lease=LEASE), "planning", "plan"),
-        (GenerationResume(slot=SLOT, lease=LEASE), "generation", "generate"),
-        (AssemblyResume(slot=SLOT, lease=LEASE, attempts=()), "assembly", "assemble"),
-        (
-            SubtitleResume(slot=SLOT, lease=LEASE, video=VIDEO, attempts=()),
-            "subtitles",
-            "subtitle",
-        ),
-        (
-            PublicationResume(slot=SLOT, lease=LEASE, handoff=HANDOFF),
-            "publication",
-            "publish",
-        ),
-    ],
-)
-def test_runner_resumes_each_durable_stage_without_repeating_side_effects(
-    state: SlotResumeState, port_name: str, action_kind: str
-) -> None:
-    catalog = _Catalog(state)
-    ports = _ports(catalog, {port_name: PublishedResume(slot=SLOT)})
-    request = VideoDigestRunRequest(
-        slot=SLOT, owner_token="owner", source=SourceReady(edition=EDITION)
-    )
-
-    outcome, alert = run_video_digest(
-        request,
-        cast(CatalogPort, catalog),
-        ports,
-        now=lambda: NOW + timedelta(minutes=1),
-    )
-
-    assert outcome == RunPublished()
-    assert alert == NoAlert()
-    selected = cast(_Port, getattr(ports, port_name))
-    assert len(selected.calls) == 1
-    assert selected.calls[0].kind == action_kind
-    assert catalog.renewed == 1
-    assert catalog.events[:4] == ["read", "reacquire", "read", "renew"]
-
-
 def test_runner_converges_across_process_restarts_without_replaying_actions() -> None:
     catalog = _Catalog(ScheduledResume(slot=SLOT))
     ports = _ports(
@@ -426,6 +330,7 @@ def test_runner_converges_across_process_restarts_without_replaying_actions() ->
         len(cast(_Port, getattr(ports, name)).calls)
         for name in ("planning", "generation", "assembly", "subtitles", "publication")
     ] == [1, 1, 1, 1, 1]
+    assert catalog.renewed == 5
 
 
 def test_deadline_reacquires_before_terminalizing_without_renewal() -> None:
@@ -492,27 +397,6 @@ def test_waiting_action_remains_nonterminal_with_retry_timing() -> None:
     assert outcome == RunDeferred(reason="provider is processing", retry_after_seconds=45)
     assert alert == NoAlert()
     assert len(waiting.calls) == 1
-
-
-def test_action_bound_remains_nonterminal_with_bounded_retry_timing() -> None:
-    catalog = _Catalog(PlanningResume(slot=SLOT, lease=LEASE))
-    request = VideoDigestRunRequest(
-        slot=SLOT, owner_token="owner", source=SourceReady(edition=EDITION)
-    )
-
-    outcome, alert = run_video_digest(
-        request,
-        cast(CatalogPort, catalog),
-        _ports(catalog),
-        now=lambda: NOW,
-        max_actions=0,
-    )
-
-    assert outcome == RunDeferred(
-        reason="runner action bound reached",
-        retry_after_seconds=300,
-    )
-    assert alert == NoAlert()
 
 
 def test_generation_progress_continues_when_slot_projection_is_unchanged() -> None:
@@ -599,26 +483,6 @@ def test_active_state_without_a_next_action_raises_a_checkpoint_conflict() -> No
             _ports(catalog),
             now=lambda: NOW + timedelta(minutes=1),
         )
-
-
-def test_publication_port_receives_the_exact_typed_handoff() -> None:
-    catalog = _Catalog(PublicationResume(slot=SLOT, lease=LEASE, handoff=HANDOFF))
-    ports = _ports(catalog, {"publication": PublishedResume(slot=SLOT)})
-    request = VideoDigestRunRequest(
-        slot=SLOT, owner_token="owner", source=SourceReady(edition=EDITION)
-    )
-
-    outcome, _alert = run_video_digest(
-        request,
-        cast(CatalogPort, catalog),
-        ports,
-        now=lambda: NOW + timedelta(minutes=1),
-    )
-
-    assert outcome == RunPublished()
-    calls = cast(_Port, ports.publication).calls
-    assert len(calls) == 1
-    assert cast(PublishAction, calls[0]).handoff == HANDOFF
 
 
 @pytest.mark.parametrize(

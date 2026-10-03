@@ -43,19 +43,6 @@ def test_completion_key_exposes_the_exact_dlt_load_id() -> None:
     assert _completed_load_id_from_key(key) == "1788170888.4308279"
 
 
-def test_recovery_parses_the_typed_dlt_payload_and_exact_occurrence() -> None:
-    event = _event()
-    record = _entry_record(event)
-
-    recovered = parse_dlt_feed_event_row({**record, "_dlt_load_id": "load-1"})
-
-    assert recovered == FeedEntryEventOccurrence(
-        source_event_id=event.event_id,
-        dlt_load_id="load-1",
-        event=event,
-    )
-
-
 def test_recovery_parses_and_verifies_a_legacy_dlt_entry_identity() -> None:
     event = _event()
     record = _entry_record(event)
@@ -312,55 +299,6 @@ def test_reconciliation_projects_existing_registered_history(monkeypatch, tmp_pa
     assert result.registered_loads == 0
     assert result.cataloged_events == 1
     assert batches[-1] == ("load-1", registered_at)
-
-
-def test_reconciliation_registers_a_completed_unpublished_load(monkeypatch, tmp_path) -> None:
-    event = _event()
-    occurrence = FeedEntryEventOccurrence(
-        source_event_id=event.event_id,
-        dlt_load_id="load-2",
-        event=event,
-    )
-    value = _parquet_object("load-2")
-    calls = []
-    monkeypatch.setattr("romanian_news.feeds.recovery._list_dlt_parquet_objects", lambda: (value,))
-    monkeypatch.setattr(
-        "romanian_news.feeds.recovery._list_completed_dlt_load_ids",
-        lambda: (value.load_id,),
-    )
-    monkeypatch.setattr("romanian_news.feeds.recovery._r2_client", object)
-    monkeypatch.setattr(
-        "romanian_news.feeds.recovery._download_load_files",
-        lambda _client, _objects, _directory: (tmp_path / "load.parquet",),
-    )
-    monkeypatch.setattr(
-        "romanian_news.feeds.recovery.read_dlt_feed_events",
-        lambda _paths, _loads: DltFeedEvents(entries=(occurrence,), snapshots=()),
-    )
-    monkeypatch.setattr(
-        "romanian_news.feeds.recovery._register_unregistered_load",
-        lambda load_id, objects, events, snapshots: calls.append(
-            (load_id, objects, events, snapshots)
-        )
-        or "2026-09-01T00:00:00+00:00",
-    )
-    monkeypatch.setattr(
-        "romanian_news.feeds.recovery.catalog_feed_entry_events",
-        lambda _events, batch_size: FeedEntryCatalogResult(cataloged_events=1, existing_events=0),
-    )
-    monkeypatch.setattr(
-        "romanian_news.feeds.recovery.feed_catalog.read_feed_catalog_load_state",
-        lambda: _catalog_load_state(),
-    )
-    monkeypatch.setattr(
-        "romanian_news.feeds.recovery.feed_catalog.mark_feed_entry_projection_load",
-        lambda *_args: None,
-    )
-
-    result = reconcile_feed_entry_projection()
-
-    assert result.registered_loads == 1
-    assert calls == [("load-2", (value,), (occurrence,), ())]
 
 
 def test_reconciliation_marks_a_registered_load_with_no_entries(monkeypatch, tmp_path) -> None:

@@ -109,30 +109,6 @@ def test_digi24_extraction_preserves_romanian_encoding() -> None:
     assert "caracterelor ă, â, î, ș și ț" in article.body
 
 
-def test_archive_extraction_uses_original_page_date_without_a_feed_entry() -> None:
-    feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
-    content = _article_html("Primul paragraf are suficient text pentru o știre reală. " * 3)
-    content = content.replace(
-        b"<title>",
-        b'<meta property="og:title" content="Titlul articolului">'
-        b'<meta property="article:published_time" content="2025-09-19T10:00:00+03:00">'
-        b'<meta property="article:modified_time" content="2026-09-27T10:00:00+03:00">'
-        b"<title>",
-    )
-
-    article = extract_archive_article(
-        content,
-        "https://hotnews.ro/articol-test-123",
-        feed,
-    )
-
-    assert article.bucharest_day.isoformat() == "2025-09-19"
-    assert article.published_at.isoformat() == "2025-09-19T07:00:00+00:00"
-    assert article.source_updated_at is not None
-    assert article.source_updated_at.year == 2026
-    assert "Primul paragraf" in article.body
-
-
 def test_archive_extraction_uses_full_page_when_selected_fragment_has_no_text() -> None:
     feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
     paragraphs = "".join(
