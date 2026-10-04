@@ -275,24 +275,6 @@ def _average_link_clusters(
     return tuple(ordered), tuple(merges)
 
 
-def pairwise_similarities(
-    articles: tuple[EmbeddedArticle, ...],
-) -> tuple[tuple[str, str, float], ...]:
-    """Expose observed title pairs so the initial threshold can be inspected."""
-    values = []
-    for left_index, left in enumerate(articles):
-        left_vector = np.asarray(left.vector, dtype=np.float64)
-        for right in articles[left_index + 1 :]:
-            right_vector = np.asarray(right.vector, dtype=np.float64)
-            similarity = float(
-                left_vector
-                @ right_vector
-                / (np.linalg.norm(left_vector) * np.linalg.norm(right_vector))
-            )
-            values.append((left.value.title, right.value.title, similarity))
-    return tuple(sorted(values, key=lambda value: value[2], reverse=True))
-
-
 def _embedded_reference(value) -> EmbeddedArticleReference:
     return EmbeddedArticleReference(
         article=value.article,
