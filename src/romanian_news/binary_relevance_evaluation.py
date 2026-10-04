@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import time
 from collections.abc import Callable, Mapping
 from decimal import Decimal
@@ -18,6 +17,7 @@ from romanian_news.analysis.binary_evaluation import (
     build_relevance_binary_request,
     validate_binary_attempts,
 )
+from romanian_news.analysis.percentiles import decimal_linear_percentile
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.articles.models import ExtractedArticle
 from romanian_news.artifacts import ArtifactReference
@@ -484,8 +484,8 @@ def binary_relevance_metrics(
         total_tokens=input_tokens + output_tokens,
         total_cost_usd=total_cost_usd,
         total_attempt_latency_ms=total_latency_ms,
-        p50_wall_latency_ms=_percentile(latencies, Decimal("0.50")),
-        p95_wall_latency_ms=_percentile(latencies, Decimal("0.95")),
+        p50_wall_latency_ms=decimal_linear_percentile(latencies, Decimal("0.50")),
+        p95_wall_latency_ms=decimal_linear_percentile(latencies, Decimal("0.95")),
     )
 
 
@@ -691,17 +691,3 @@ def _request_id(
 
 def _ratio(numerator: int, denominator: int) -> Decimal:
     return Decimal(numerator) / Decimal(denominator) if denominator else Decimal(0)
-
-
-def _percentile(values: tuple[int, ...], quantile: Decimal) -> Decimal:
-    if not values:
-        return Decimal(0)
-    ordered = sorted(values)
-    position = Decimal(len(ordered) - 1) * quantile
-    lower = math.floor(position)
-    upper = math.ceil(position)
-    if lower == upper:
-        return Decimal(ordered[lower])
-    return Decimal(ordered[lower]) + Decimal(ordered[upper] - ordered[lower]) * (
-        position - Decimal(lower)
-    )

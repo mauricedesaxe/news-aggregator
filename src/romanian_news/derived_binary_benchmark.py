@@ -135,9 +135,3 @@ def load_v11_derived_binary_workload(
     concern: BenchmarkId, pin_content: bytes | str
 ) -> DerivedBinaryWorkload:
     return DERIVED_BINARY_DISPATCH[concern].load(pin_content)
-
-
-def prepare_derived_binary_workload(
-    concern: BenchmarkId, source: DerivedBinarySource
-) -> DerivedBinaryWorkload:
-    return DERIVED_BINARY_DISPATCH[concern].prepare(source)

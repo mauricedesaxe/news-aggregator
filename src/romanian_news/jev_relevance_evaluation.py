@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from typing import Annotated
 
 from pydantic import Field, model_validator
@@ -15,6 +14,7 @@ from romanian_news.analysis.jev_relevance import (
     JevExecutionPolicy,
     evaluate_jev_relevance,
 )
+from romanian_news.analysis.percentiles import float_linear_percentile
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.articles.models import ExtractedArticle
 from romanian_news.artifacts import ArtifactReference
@@ -162,8 +162,8 @@ def jev_relevance_metrics(
         input_tokens=sum(item.input_tokens for item in results),
         output_tokens=sum(item.output_tokens for item in results),
         estimated_cost_usd=sum(item.estimated_cost_usd for item in results),
-        p50_latency_ms=_percentile(latencies, 0.50),
-        p95_latency_ms=_percentile(latencies, 0.95),
+        p50_latency_ms=float_linear_percentile(latencies, 0.50),
+        p95_latency_ms=float_linear_percentile(latencies, 0.95),
     )
 
 
@@ -221,15 +221,3 @@ def _run_jev_relevance_trial(
 
 def _ratio(numerator: int, denominator: int) -> float:
     return numerator / denominator if denominator else 0.0
-
-
-def _percentile(values: tuple[int, ...], quantile: float) -> float:
-    if not values:
-        return 0.0
-    ordered = sorted(values)
-    position = (len(ordered) - 1) * quantile
-    lower = math.floor(position)
-    upper = math.ceil(position)
-    if lower == upper:
-        return float(ordered[lower])
-    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
