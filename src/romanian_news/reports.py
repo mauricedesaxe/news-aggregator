@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import threading
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Literal
 
@@ -297,23 +296,6 @@ _daily_input_cache: dict[date, DailyReportInput] = {}
 _daily_input_cache_lock = threading.Lock()
 
 
-@dataclass(frozen=True)
-class DailyReportInputIdentity:
-    """The exact artifact references whose versions pin one report input."""
-
-    value: DailyReportInput
-
-    @property
-    def references(self) -> tuple[ArtifactReference, ...]:
-        return (
-            self.value.themes,
-            self.value.assessments,
-            self.value.cluster_set,
-            *self.value.summaries,
-            *self.value.sentiments,
-        )
-
-
 def clear_daily_report_input_cache() -> None:
     """Drop every cached report input; tests and input re-reads use this."""
     with _daily_input_cache_lock:
@@ -330,16 +312,15 @@ def read_daily_report_input_cached(day: date) -> DailyReportInput:
     """
     cached = _read_daily_input_cache(day)
     if cached is not None and _daily_report_input_matches(cached):
-        return cached.value
+        return cached
     value = read_daily_report_input(day)
     _store_daily_input_cache(day, value)
     return value
 
 
-def _read_daily_input_cache(day: date) -> DailyReportInputIdentity | None:
+def _read_daily_input_cache(day: date) -> DailyReportInput | None:
     with _daily_input_cache_lock:
-        value = _daily_input_cache.get(day)
-    return DailyReportInputIdentity(value=value) if value is not None else None
+        return _daily_input_cache.get(day)
 
 
 def _store_daily_input_cache(day: date, value: DailyReportInput) -> None:
@@ -350,10 +331,17 @@ def _store_daily_input_cache(day: date, value: DailyReportInput) -> None:
             _daily_input_cache.pop(next(iter(_daily_input_cache)))
 
 
-def _daily_report_input_matches(identity: DailyReportInputIdentity) -> bool:
+def _daily_report_input_matches(value: DailyReportInput) -> bool:
     from romanian_news.catalog.artifacts import current_artifact_references
 
-    expected = {reference.artifact_id: reference.version_id for reference in identity.references}
+    references = (
+        value.themes,
+        value.assessments,
+        value.cluster_set,
+        *value.summaries,
+        *value.sentiments,
+    )
+    expected = {reference.artifact_id: reference.version_id for reference in references}
     current = {
         reference.artifact_id: reference.version_id
         for reference in current_artifact_references(tuple(expected))
@@ -736,15 +724,6 @@ def build_weekly_report_from_construction(
         content_digest=_sha256(content),
         content=content,
     )
-
-
-def _read_cluster_set(day: date) -> tuple[ArtifactReference, DailyClusterSet]:
-    from romanian_news.catalog.artifacts import current_artifact_reference
-
-    reference = current_artifact_reference(f"news:clusters:{day.isoformat()}", "news_clusters")
-    if reference is None:
-        raise ReportInputsUnavailable(f"No current cluster set exists for {day.isoformat()}")
-    return reference, _load_cluster_set(reference)
 
 
 def _read_daily_report_reference(day: date) -> ArtifactReference:
