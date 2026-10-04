@@ -9,7 +9,8 @@ import pytest
 
 from romanian_news import storage
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file
+from romanian_news.identity import canonical_json
 from romanian_news.storage import ResearchObjectIntegrityError
 from romanian_news.video_digest import subtitle_port
 from romanian_news.video_digest.errors import VideoDigestLeaseLostError

@@ -15,8 +15,6 @@ from romanian_news.catalog.artifacts import (
     ArtifactFile,
     artifact_file,
     artifact_statements,
-    canonical_json,
-    sha256,
 )
 from romanian_news.catalog_transport import (
     CatalogConnection,
@@ -26,6 +24,7 @@ from romanian_news.catalog_transport import (
     catalog_query,
     catalog_transaction,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.video_digest.errors import (
     VideoDigestCheckpointConflictError,
     VideoDigestLeaseLostError,

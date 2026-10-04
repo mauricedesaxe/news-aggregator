@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import model_validator
 
 from romanian_news import NewsModel, Sha256
-from romanian_news.catalog.artifacts import canonical_json, sha256
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.reports import DailyReport, DailyReportSection
 
 

@@ -12,8 +12,6 @@ from romanian_news.catalog.artifacts import (
     ArtifactFile,
     artifact_file,
     artifact_statements,
-    canonical_json,
-    sha256,
 )
 from romanian_news.catalog.model_calls import ModelAttemptRecord, ModelTraceRecord
 from romanian_news.catalog_transport import (
@@ -24,6 +22,7 @@ from romanian_news.catalog_transport import (
     catalog_mutation,
     catalog_query,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import publish_immutable_r2_objects, read_verified_r2_object
 from romanian_news.youtube.errors import (
     YouTubeEvidenceError,

@@ -6,9 +6,9 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from romanian_news import BUCHAREST
-from romanian_news.catalog.artifacts import canonical_json, sha256
 from romanian_news.catalog.video_digest import read_stalled_fal_queue_incidents
 from romanian_news.catalog_transport import catalog_query
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.video_digest.incidents import VideoIncident, VideoIncidentCategory
 
 MONITOR_LOOKBACK = timedelta(days=7)

@@ -16,8 +16,6 @@ from romanian_news.catalog.artifacts import (
     ArtifactFile,
     artifact_file,
     artifact_statements,
-    canonical_json,
-    sha256,
     version_digests,
 )
 from romanian_news.catalog_transport import (
@@ -25,6 +23,7 @@ from romanian_news.catalog_transport import (
     catalog_batch,
     catalog_query,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import publish_immutable_r2_objects
 
 

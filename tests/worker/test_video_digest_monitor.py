@@ -9,8 +9,8 @@ import dagster as dg
 import pytest
 
 from romanian_news.catalog import video_digest as catalog
-from romanian_news.catalog.artifacts import canonical_json, sha256
 from romanian_news.catalog.schema import ensure_news_catalog_schema
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.video_digest import incidents as incidents_module
 from romanian_news.video_digest.models import GenerationAdmission, GenerationBudgetLimits
 from romanian_news.worker import video_digest_monitor

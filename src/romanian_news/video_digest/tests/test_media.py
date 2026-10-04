@@ -8,8 +8,9 @@ from pathlib import Path
 import pytest
 
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, sha256
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file
 from romanian_news.catalog.video_digest import AcceptedClipReference, GenerationAttemptReference
+from romanian_news.identity import sha256
 from romanian_news.storage import ResearchObjectIntegrityError
 from romanian_news.video_digest import media, narration_quality
 from romanian_news.video_digest.generation import CandidateReady, CandidateReference

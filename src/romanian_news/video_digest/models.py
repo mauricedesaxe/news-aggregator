@@ -15,7 +15,7 @@ from pydantic import (
 )
 
 from romanian_news import BUCHAREST, NewsModel, Sha256
-from romanian_news.catalog.artifacts import canonical_json, sha256
+from romanian_news.identity import canonical_json, sha256
 
 EditionId = NewType("EditionId", str)
 SlotId = NewType("SlotId", str)

@@ -9,7 +9,7 @@ from pydantic import Field, StringConstraints, TypeAdapter, model_validator
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file
 from romanian_news.catalog.schema import ensure_news_catalog_schema
 from romanian_news.catalog.video_digest import (
     H3ReferenceMediaArtifact,
@@ -17,6 +17,7 @@ from romanian_news.catalog.video_digest import (
     read_h3_reference_pack_projection,
     record_h3_reference_pack,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import (
     publish_immutable_r2_objects,
     publish_private_reference_media_object,

@@ -13,13 +13,14 @@ from openai.types.chat import ChatCompletion
 
 from romanian_news import BUCHAREST, storage
 from romanian_news.analysis.tracing import ProviderChatRequest
-from romanian_news.catalog.artifacts import artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import artifact_file
 from romanian_news.catalog.video_digest import (
     read_generation_attempts,
     read_planning_attempts,
     read_slot_resume_state,
     schedule_slot,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.video_digest import generation, media, preflight, references
 from romanian_news.video_digest.generation_port import ProductionH3GenerationPort
 from romanian_news.video_digest.models import (

@@ -4,7 +4,8 @@ from datetime import UTC, datetime
 
 from romanian_news import Sha256
 from romanian_news.analysis.attempts import model_attempt_from_payload
-from romanian_news.catalog.artifacts import ArtifactFile, canonical_json, sha256
+from romanian_news.catalog.artifacts import ArtifactFile
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.video_digest.models import DigestPlan, EditionIdentity
 from romanian_news.video_digest.planning import (
     PlanningAttempt,

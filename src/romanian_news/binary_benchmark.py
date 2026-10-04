@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import hashlib
 import inspect
-import json
 import math
 import os
 import tempfile
@@ -40,6 +38,7 @@ from romanian_news.analysis.jev_relevance import (
     jev_execution_policy_digest,
 )
 from romanian_news.config import OPENROUTER_API_KEY, TYPESAFE_API_KEY
+from romanian_news.identity import canonical_json, sha256
 
 NonEmptyText = Annotated[str, StringConstraints(min_length=1)]
 TargetId = Literal[
@@ -738,7 +737,7 @@ def atomic_write(path: Path, content: bytes) -> None:
 
 
 def canonical_identity_hash(value: object) -> Sha256:
-    return hashlib.sha256(canonical_json(value)).hexdigest()
+    return sha256(canonical_json(value))
 
 
 def execution_identity_hash(
@@ -768,10 +767,6 @@ def execution_identity_hash(
             "execution_ref": execution_ref,
         }
     )
-
-
-def canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
 
 
 def _validate_benchmark_inputs(

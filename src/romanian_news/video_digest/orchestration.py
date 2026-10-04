@@ -10,7 +10,7 @@ from pydantic import AwareDatetime, Field
 
 from romanian_news import NewsModel, Sha256
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.artifacts import canonical_json, sha256
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.video_digest.errors import VideoDigestCheckpointConflictError
 from romanian_news.video_digest.models import (
     BusySlot,

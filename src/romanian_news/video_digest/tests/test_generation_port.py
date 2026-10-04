@@ -15,7 +15,6 @@ from botocore.exceptions import ClientError
 
 from romanian_news import storage
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.artifacts import sha256
 from romanian_news.catalog.schema import ensure_news_catalog_schema
 from romanian_news.catalog.video_digest import (
     checkpoint_edition_verification,
@@ -25,6 +24,7 @@ from romanian_news.catalog.video_digest import (
     read_generation_attempts,
     read_slot_resume_state,
 )
+from romanian_news.identity import sha256
 from romanian_news.storage import read_verified_r2_object
 from romanian_news.video_digest import generation, generation_port, media, preflight, references
 from romanian_news.video_digest.generation import (

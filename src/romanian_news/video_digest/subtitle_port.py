@@ -7,13 +7,14 @@ from tempfile import TemporaryDirectory
 from typing import Protocol
 
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file
 from romanian_news.catalog.video_digest import (
     read_assembly_attempts,
     read_subtitle_attempts,
     record_subtitle_attempt,
     renew_slot,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.storage import publish_immutable_r2_objects, read_verified_r2_object
 from romanian_news.video_digest.errors import VideoDigestCatalogError
 from romanian_news.video_digest.media import (

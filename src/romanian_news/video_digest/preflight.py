@@ -14,7 +14,7 @@ from romanian_news.analysis.attempts import record_model_attempt
 from romanian_news.analysis.client import openrouter_client
 from romanian_news.analysis.tracing import ProviderChatRequest, trace_provider_call
 from romanian_news.artifacts import ArtifactReference
-from romanian_news.catalog.artifacts import ArtifactFile, artifact_file, canonical_json, sha256
+from romanian_news.catalog.artifacts import ArtifactFile, artifact_file
 from romanian_news.catalog.video_digest import (
     AcceptedPlanReference,
     PlanningAttemptReference,
@@ -27,6 +27,7 @@ from romanian_news.catalog.video_digest import (
     record_policy_bundle,
 )
 from romanian_news.catalog.video_digest_selection import read_edition_subject_selection
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.reports import DailyReport, DailyReportSection
 from romanian_news.storage import publish_immutable_r2_objects, read_verified_r2_object
 from romanian_news.video_digest.models import DigestPlan, EditionId, SlotLease, edition_id

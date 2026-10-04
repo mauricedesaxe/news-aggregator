@@ -33,13 +33,13 @@ from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import (
     artifact_file,
     artifact_statements,
-    sha256,
 )
 from romanian_news.catalog_transport import (
     advance_artifact_current_version_statement,
 )
 from romanian_news.feeds import acquisition as feed_acquisition
 from romanian_news.feeds.registry import feed_registry
+from romanian_news.identity import sha256
 from romanian_news.storage import publish_immutable_r2_objects
 from romanian_news.worker import definitions, operations
 from romanian_news.worker.catalog_status import print_catalog_status

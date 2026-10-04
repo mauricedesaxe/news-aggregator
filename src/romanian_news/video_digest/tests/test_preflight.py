@@ -14,14 +14,13 @@ from romanian_news.artifacts import ArtifactReference
 from romanian_news.catalog.artifacts import (
     ArtifactFile,
     artifact_file,
-    canonical_json,
-    sha256,
 )
 from romanian_news.catalog.video_digest import (
     AcceptedPlanReference,
     GenerationPreparationReference,
     PlanningAttemptReference,
 )
+from romanian_news.identity import canonical_json, sha256
 from romanian_news.reports import (
     DailyReport,
     DailyReportSection,
