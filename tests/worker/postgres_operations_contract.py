@@ -12,7 +12,13 @@ import pytest
 import requests
 from pydantic import HttpUrl
 
+from romanian_news import EMBEDDING_DIMENSIONS
 from romanian_news.analysis.attempts import ModelCall
+from romanian_news.analysis.embeddings import (
+    EmbeddingInput,
+    EmbeddingOutput,
+    embedding_request_id,
+)
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.analysis.relevance_v3 import (
     RELEVANCE_V3_POLICY,
@@ -690,6 +696,165 @@ def test_relevance_materializer_uses_production_v3(
     assert (
         postgres_catalog.execute(
             "SELECT count(*) AS count FROM runs WHERE operation_key = 'news.relevance.v3'"
+        ).fetchone()["count"]
+        == 1
+    )
+
+
+def test_embedding_materializer_publishes_and_reads_back_from_the_catalog(
+    postgres_catalog,
+    fake_r2,
+    monkeypatch,
+    news_day,
+) -> None:
+    article = ExtractedArticle(
+        article_id="d" * 64,
+        outlet_id="testoutlet",
+        canonical_url=HttpUrl("https://feed.test/stire-analiza-embed"),
+        title="Analiza politicilor publice pentru infrastructura din România",
+        body=(
+            "Guvernul a prezentat un plan de investiții care schimbă prioritățile naționale "
+            "și reașază bugetul pentru următorii ani."
+        ),
+        author=None,
+        published_at=NOW,
+        source_updated_at=None,
+        bucharest_day=news_day,
+        material_digest="3" * 64,
+        extraction_digest="4" * 64,
+    )
+    article_reference = _seed_analysis_article(postgres_catalog, fake_r2, news_day, article)
+
+    def analyze(
+        value: ArticleAnalysisInput, *, mode: ExecutionMode, **_kwargs: object
+    ) -> RelevanceV3Output:
+        request_id = relevance_v3_request_id(value.reference, mode=mode)
+        context = ContextGateResult(
+            decision=ContextDecision(
+                subject_role="incidental",
+                news_cycle="current_cycle",
+                romanian_consequence="absent",
+                certainty="clear",
+                evidence_quote=value.article.title,
+                reason_ro="Articolul nu descrie o consecință românească directă.",
+            ),
+            provider=GateCall(
+                request_id=request_id,
+                call=ModelCall(
+                    response_id="resp-test",
+                    model="test-model",
+                    input_tokens=64,
+                    output_tokens=32,
+                    latency_ms=10,
+                ),
+                cost_usd=0.0,
+                response_count=1,
+                traces=(),
+                accounting_complete=True,
+            ),
+        )
+        payload = json.dumps(
+            {
+                "request_id": request_id,
+                "mode": mode,
+                "context_provider_responses": [
+                    {"id": "resp-test", "usage": {"prompt_tokens": 64, "completion_tokens": 32}}
+                ],
+            },
+            sort_keys=True,
+        ).encode()
+        return RelevanceV3Output(
+            request_id=request_id,
+            policy=RELEVANCE_V3_POLICY,
+            mode=mode,
+            execution_ref=None,
+            article=value.reference,
+            context=context,
+            impact=None,
+            accepted=False,
+            content=payload,
+        )
+
+    monkeypatch.setattr(operations, "analyze_relevance_v3", analyze)
+    monkeypatch.setattr(operations, "flush_langfuse_traces", lambda: None)
+    relevance_reference = operations.materialize_relevance(news_day, "git:test").values[0]
+    postgres_catalog.execute(
+        "UPDATE news_relevance_versions SET accepted = 1 WHERE artifact_version_id = %s",
+        (relevance_reference.version_id,),
+    )
+
+    embedded: list[EmbeddingInput] = []
+
+    def embed(value: EmbeddingInput) -> EmbeddingOutput:
+        embedded.append(value)
+        request_id = embedding_request_id(value.article.reference, value.relevance)
+        call = ModelCall(
+            response_id="resp-embed",
+            model="test-embedding-model",
+            input_tokens=32,
+            output_tokens=0,
+            latency_ms=5,
+        )
+        payload = json.dumps(
+            {
+                "request_id": request_id,
+                "provider_response": {
+                    "id": "resp-embed",
+                    "usage": {"prompt_tokens": 32, "completion_tokens": 0},
+                },
+            },
+            sort_keys=True,
+        ).encode()
+        return EmbeddingOutput(
+            request_id=request_id,
+            article=value.article.reference,
+            relevance=value.relevance,
+            vector=(0.0,) * EMBEDDING_DIMENSIONS,
+            call=call,
+            content=payload,
+        )
+
+    monkeypatch.setattr(operations, "embed_article", embed)
+
+    references = operations.materialize_embeddings(news_day, "git:test")
+
+    embedding_artifact_id = (
+        f"news:embedding:{embedding_request_id(article_reference, relevance_reference)}"
+    )
+    assert [value.artifact_id for value in references.values] == [embedding_artifact_id]
+    embedding_reference = references.values[0]
+    assert (
+        hashlib.sha256(fake_r2.objects[embedding_reference.r2_key]).hexdigest()
+        == embedding_reference.content_digest
+    )
+    run_row = postgres_catalog.execute(
+        "SELECT status FROM runs WHERE operation_key = 'news.embed'"
+    ).fetchone()
+    assert run_row is not None
+    assert run_row["status"] == "completed"
+    version_rows = postgres_catalog.execute(
+        "SELECT version.id AS version_id, artifact.current_version_id "
+        "FROM artifacts artifact JOIN artifact_versions version ON version.artifact_id "
+        "= artifact.id WHERE artifact.id = %s",
+        (embedding_artifact_id,),
+    ).fetchall()
+    assert [row["version_id"] for row in version_rows] == [embedding_reference.version_id]
+    assert version_rows[0]["current_version_id"] == embedding_reference.version_id
+    assert (
+        postgres_catalog.execute(
+            "SELECT accepted FROM news_relevance_versions WHERE artifact_version_id = %s",
+            (relevance_reference.version_id,),
+        ).fetchone()["accepted"]
+        == 1
+    )
+
+    repeat = operations.materialize_embeddings(news_day, "git:test")
+
+    assert repeat == references
+    assert len(embedded) == 1
+    assert (
+        postgres_catalog.execute(
+            "SELECT count(*) AS count FROM runs WHERE operation_key = 'news.embed'"
         ).fetchone()["count"]
         == 1
     )

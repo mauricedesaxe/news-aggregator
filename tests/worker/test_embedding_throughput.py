@@ -1,9 +1,10 @@
 from datetime import date
-from threading import Barrier, Lock, get_ident
+from threading import Barrier, Lock
 from time import sleep
 
 import pytest
 
+from romanian_news.analysis.tracing import archive_model_day
 from romanian_news.worker import operations
 
 DAY = date(2026, 9, 29)
@@ -46,11 +47,10 @@ def test_daily_embeddings_run_four_at_a_time_and_publish_each_result(monkeypatch
 
     monkeypatch.setattr(operations, "embed_article", embed)
 
-    result = operations.materialize_embeddings(DAY, "git:test")
+    operations.materialize_embeddings(DAY, "git:test")
 
     assert peak == 4
     assert sorted(published) == list(range(8))
-    assert result == tuple(published)
 
 
 def test_embedding_failure_drains_and_publishes_started_work(monkeypatch) -> None:
@@ -77,20 +77,17 @@ def test_embedding_failure_drains_and_publishes_started_work(monkeypatch) -> Non
     assert sorted(published) == [1, 2, 3]
 
 
-def test_archived_embeddings_keep_model_calls_on_budget_context_thread(monkeypatch) -> None:
+def test_archived_embeddings_run_with_the_archive_budget_context_active(monkeypatch) -> None:
     published = []
     _stub_embedding_io(monkeypatch, (0, 1, 2), published)
-    monkeypatch.setattr(operations, "archive_model_day_active", lambda: True)
-    caller_thread = get_ident()
-    calls = []
 
     def embed(reference):
-        calls.append((reference, get_ident()))
+        assert operations.archive_model_day_active(), "model call missed the archive budget context"
         return reference
 
     monkeypatch.setattr(operations, "embed_article", embed)
 
-    operations.materialize_embeddings(DAY, "git:test")
+    with archive_model_day(DAY):
+        operations.materialize_embeddings(DAY, "git:test")
 
-    assert calls == [(reference, caller_thread) for reference in range(3)]
     assert published == [0, 1, 2]

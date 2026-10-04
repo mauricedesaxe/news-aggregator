@@ -22,28 +22,20 @@ def _id(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def test_reused_sentiment_lineage_still_marks_current_report_fresh(
-    postgres_catalog: PostgresCatalog,
-) -> None:
+def _seed_daily_publication_lineage(
+    postgres_catalog: PostgresCatalog, *, with_report: bool
+) -> dict[str, dict[str, str]]:
+    """Seed one day's theme/assessment/sentiment lineage, optionally with a report run."""
     day = DAY.isoformat()
-    runs = {
-        name: _id(f"run:{name}")
-        for name in (
-            "themes",
-            "assessments",
-            "sentiment_old",
-            "sentiment_current",
-            "report",
-            "sentiment_update",
-        )
-    }
+    run_names = ("themes", "assessments", "sentiment_old", "sentiment_current", "sentiment_update")
+    if with_report:
+        run_names = (*run_names, "report")
+    runs = {name: _id(f"run:{name}") for name in run_names}
     artifact_ids = {
         "cluster": f"news:clusters:{day}",
         "themes": f"news:themes:{day}",
         "assessments": f"news:subject-assessments:{day}",
-        "report": f"news:daily:{day}",
         "summary_one": "news:summary:one",
-        "summary_two": "news:summary:two",
         "sentiment_one": "news:sentiment:one",
         "sentiment_two": "news:sentiment:two",
     }
@@ -51,23 +43,26 @@ def test_reused_sentiment_lineage_still_marks_current_report_fresh(
         "cluster": "news_daily_clusters",
         "themes": "news_daily_themes",
         "assessments": "news_daily_subject_assessments",
-        "report": "news_daily_report",
         "summary_one": "news_summary",
-        "summary_two": "news_summary",
         "sentiment_one": "news_sentiment",
         "sentiment_two": "news_sentiment",
     }
+    if with_report:
+        artifact_ids["report"] = f"news:daily:{day}"
+        artifact_ids["summary_two"] = "news:summary:two"
+        kinds["report"] = "news_daily_report"
+        kinds["summary_two"] = "news_summary"
     version_labels = (
         "cluster_old",
         "cluster",
         "themes",
         "assessments",
         "summary_one",
-        "summary_two",
         "sentiment_one",
         "sentiment_two",
-        "report",
     )
+    if with_report:
+        version_labels = (*version_labels, "summary_two", "report")
     versions = {name: _id(f"version:{name}") for name in version_labels}
     digests = {name: _id(f"content:{name}") for name in version_labels}
     version_artifacts = {
@@ -79,8 +74,9 @@ def test_reused_sentiment_lineage_still_marks_current_report_fresh(
         "assessments": "assessments",
         "sentiment_one": "sentiment_old",
         "sentiment_two": "sentiment_current",
-        "report": "report",
     }
+    if with_report:
+        produced_by["report"] = "report"
     statements: list[tuple[str, list[object]]] = []
     for name, run_id in runs.items():
         statements.append(
@@ -114,16 +110,20 @@ def test_reused_sentiment_lineage_still_marks_current_report_fresh(
             )
         )
 
-    inputs = {
-        "themes": (
-            ("cluster", "cluster_set"),
-            ("summary_one", "summary"),
-            ("summary_two", "summary"),
-        ),
+    theme_inputs: tuple[tuple[str, str], ...] = (
+        ("cluster", "cluster_set"),
+        ("summary_one", "summary"),
+    )
+    if with_report:
+        theme_inputs = (*theme_inputs, ("summary_two", "summary"))
+    inputs: dict[str, tuple[tuple[str, str], ...]] = {
+        "themes": theme_inputs,
         "assessments": (("themes", "themes"),),
         "sentiment_old": (("cluster_old", "cluster_set"),),
         "sentiment_current": (("cluster", "cluster_set"),),
-        "report": (
+    }
+    if with_report:
+        inputs["report"] = (
             ("themes", "themes"),
             ("assessments", "assessments"),
             ("cluster", "cluster_set"),
@@ -131,8 +131,7 @@ def test_reused_sentiment_lineage_still_marks_current_report_fresh(
             ("summary_two", "summary"),
             ("sentiment_one", "sentiment"),
             ("sentiment_two", "sentiment"),
-        ),
-    }
+        )
     for run_name, references in inputs.items():
         for position, (version_name, role) in enumerate(references):
             statements.append(
@@ -151,31 +150,39 @@ def test_reused_sentiment_lineage_still_marks_current_report_fresh(
                 [runs[run_name], versions[version_name]],
             )
         )
-    statements.append(
-        (
-            "INSERT INTO artifact_files (id, artifact_version_id, r2_key, media_type, "
-            "content_digest, byte_size) VALUES (%s, %s, %s, 'application/json', %s, 0)",
-            [
-                _id("report_file"),
-                versions["report"],
-                f"news/reports/daily/{day}/report.json",
-                digests["report"],
-            ],
+    if with_report:
+        statements.append(
+            (
+                "INSERT INTO artifact_files (id, artifact_version_id, r2_key, media_type, "
+                "content_digest, byte_size) VALUES (%s, %s, %s, 'application/json', %s, 0)",
+                [
+                    _id("report_file"),
+                    versions["report"],
+                    f"news/reports/daily/{day}/report.json",
+                    digests["report"],
+                ],
+            )
         )
-    )
     for name in artifact_ids:
-        current_name = "cluster" if name == "cluster" else name
         statements.append(
             (
                 "UPDATE artifacts SET current_version_id = %s, current_run_id = %s WHERE id = %s",
                 [
-                    versions[current_name],
+                    versions[name],
                     runs[produced_by[name]] if name in produced_by else None,
                     artifact_ids[name],
                 ],
             )
         )
     postgres_catalog.batch(statements)
+    return {"runs": runs, "versions": versions, "artifact_ids": artifact_ids}
+
+
+def test_reused_sentiment_lineage_still_marks_current_report_fresh(
+    postgres_catalog: PostgresCatalog,
+) -> None:
+    seeded = _seed_daily_publication_lineage(postgres_catalog, with_report=True)
+    versions = seeded["versions"]
 
     current = read_current_daily_report_input_versions(DAY)
     assert current is not None
@@ -192,21 +199,38 @@ def test_reused_sentiment_lineage_still_marks_current_report_fresh(
                 "produced_by_run_id, created_at) VALUES (%s, %s, 1, %s, %s, %s)",
                 [
                     updated_version,
-                    artifact_ids["sentiment_one"],
+                    seeded["artifact_ids"]["sentiment_one"],
                     _id("content:sentiment_one_updated"),
-                    runs["sentiment_update"],
+                    seeded["runs"]["sentiment_update"],
                     CAPTURED_AT,
                 ],
             ),
             (
                 "INSERT INTO run_outputs (run_id, position, artifact_version_id, role) "
                 "VALUES (%s, 0, %s, 'output')",
-                [runs["sentiment_update"], updated_version],
+                [seeded["runs"]["sentiment_update"], updated_version],
             ),
             (
                 "UPDATE artifacts SET current_version_id = %s, current_run_id = %s WHERE id = %s",
-                [updated_version, runs["sentiment_update"], artifact_ids["sentiment_one"]],
+                [
+                    updated_version,
+                    seeded["runs"]["sentiment_update"],
+                    seeded["artifact_ids"]["sentiment_one"],
+                ],
             ),
         ]
     )
     assert read_daily_report_freshness(DAY).kind == "stale"
+
+
+def test_sentiment_lineage_is_read_before_any_report_is_captured(
+    postgres_catalog: PostgresCatalog,
+) -> None:
+    seeded = _seed_daily_publication_lineage(postgres_catalog, with_report=False)
+    versions = seeded["versions"]
+
+    current = read_current_daily_report_input_versions(DAY)
+
+    assert current is not None
+    assert current.sentiments == (versions["sentiment_two"],)
+    assert read_daily_report_freshness(DAY).kind == "missing"

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from romanian_news.analysis.tracing import archive_model_day
 from romanian_news.worker import operations
 
 DAY = date(2026, 9, 29)
@@ -90,3 +91,28 @@ def test_group_sentiment_preserves_concurrent_successes_when_one_model_call_fail
         operations.materialize_group_sentiment(DAY, "git:test")
 
     assert sorted(published) == [0, 2, 3]
+
+
+def test_group_summaries_run_with_the_archive_budget_context_when_archiving(monkeypatch) -> None:
+    pending = tuple(SimpleNamespace(index=index, summary_needed=True) for index in range(3))
+    published = []
+    monkeypatch.setattr(operations, "read_pending_group_analysis_references", lambda _days: pending)
+    monkeypatch.setattr(operations, "load_group_analysis_input", lambda reference: reference)
+    monkeypatch.setattr(operations, "flush_langfuse_traces", lambda: None)
+    monkeypatch.setattr(operations, "read_daily_group_summary_references", lambda _day: ())
+    monkeypatch.setattr(
+        operations,
+        "publish_group_analysis_outputs",
+        lambda outputs, _implementation_ref: published.append(outputs[0].index),
+    )
+
+    def summarize(value):
+        assert operations.archive_model_day_active(), "model call missed the archive budget context"
+        return value
+
+    monkeypatch.setattr(operations, "summarize_group", summarize)
+
+    with archive_model_day(DAY):
+        operations.materialize_group_summaries(DAY, "git:test")
+
+    assert sorted(published) == [0, 1, 2]
