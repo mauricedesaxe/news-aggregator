@@ -354,13 +354,6 @@ def parse_daily_research_trigger_set(content: bytes) -> DailyResearchTriggerSet:
     return DailyResearchTriggerSet.model_validate_json(content, strict=True)
 
 
-def _report_day(artifact_id: str) -> date:
-    prefix = "news:daily:"
-    if not artifact_id.startswith(prefix):
-        raise ValueError(f"Invalid daily report artifact identity: {artifact_id}")
-    return date.fromisoformat(artifact_id.removeprefix(prefix))
-
-
 def _freeze_triggers(
     response: _TriggerResponse,
     value: DailyResearchTriggerInput,
