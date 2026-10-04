@@ -139,3 +139,65 @@ def test_reconciliation_rejects_invalid_evidence_before_writing(postgres_catalog
     with pytest.raises(ValueError):
         reconcile_archive_spend(reservation_id, Decimal("0"), **{**evidence, "reason": " "})
     assert read_archive_spend_holds(DAY)[0].reservation_id == reservation_id
+
+
+def test_reserve_archive_spend_rejects_non_positive_limit(postgres_catalog) -> None:
+    with pytest.raises(ValueError, match="Archive spend limit must be positive"):
+        reserve_archive_spend(DAY, uuid4(), "news.relevance", "request-1", limit_usd=Decimal("0"))
+    assert read_archive_spend(DAY).calls == 0
+
+
+def test_settle_archive_spend_rejects_negative_cost(postgres_catalog) -> None:
+    reservation_id = uuid4()
+    reserve_archive_spend(
+        DAY, reservation_id, "news.relevance", "request-1", limit_usd=Decimal("1")
+    )
+    with pytest.raises(ValueError, match="Archive model cost cannot be negative"):
+        settle_archive_spend(reservation_id, Decimal("-0.01"))
+    spend = read_archive_spend(DAY)
+    assert spend.spent_usd == Decimal("0")
+    assert spend.held_usd == Decimal("1")
+
+
+def test_settle_archive_spend_rejects_unknown_and_repeat_settlement(postgres_catalog) -> None:
+    with pytest.raises(RuntimeError, match="missing or already settled"):
+        settle_archive_spend(uuid4(), Decimal("0.01"))
+
+    reservation_id = uuid4()
+    reserve_archive_spend(
+        DAY, reservation_id, "news.relevance", "request-1", limit_usd=Decimal("1")
+    )
+    settle_archive_spend(reservation_id, Decimal("0.003"))
+    settled = postgres_catalog.execute(
+        "SELECT actual_usd, settled_at FROM news_archive_model_reservations "
+        "WHERE reservation_id = %s",
+        (reservation_id,),
+    ).fetchone()
+    assert settled is not None
+    with pytest.raises(RuntimeError, match="missing or already settled"):
+        settle_archive_spend(reservation_id, Decimal("0.5"))
+    assert (
+        postgres_catalog.execute(
+            "SELECT actual_usd, settled_at FROM news_archive_model_reservations "
+            "WHERE reservation_id = %s",
+            (reservation_id,),
+        ).fetchone()
+        == settled
+    )
+
+
+def test_replay_preflight_reports_a_saturated_day_and_rejects_out_of_window_days(
+    postgres_catalog,
+) -> None:
+    from romanian_news.archive.replay_preflight import read_replay_preflight
+
+    reserve_archive_spend(
+        DAY, uuid4(), "news.relevance", "request-saturated", limit_usd=Decimal("10")
+    )
+    preflight = read_replay_preflight(DAY)
+    assert preflight.available_usd == Decimal("0")
+    assert preflight.paid_work_admissible is False
+    with pytest.raises(ArchiveSpendLimitReached):
+        reserve_archive_spend(DAY, uuid4(), "news.embed", "request-next", limit_usd=Decimal("10"))
+    with pytest.raises(ValueError, match="Replay day is outside the one-year archive"):
+        read_replay_preflight(date(2027, 1, 1))

@@ -367,3 +367,71 @@ def test_weekly_schedule_tick_refreshes_the_four_most_recent_completed_mondays()
             }
         }
     }
+
+
+def test_historical_weekly_schedule_waits_while_a_refresh_is_running(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        weekly_status,
+        "next_historical_week",
+        lambda _today: pytest.fail("An active run should stop historical week selection"),
+    )
+    with dg.instance_for_test() as instance:
+        instance.create_run_for_job(
+            defs.resolve_job_def("weekly_status_refresh"),
+            run_config={
+                "ops": {"refresh_weekly_statuses": {"config": {"week_starts": [WEEK.isoformat()]}}}
+            },
+            status=dg.DagsterRunStatus.STARTED,
+        )
+        with dg.build_schedule_context(
+            instance=instance,
+            scheduled_execution_time=datetime(2026, 9, 27, 20, 20, tzinfo=UTC),
+            repository_def=defs.get_repository_def(),
+        ) as context:
+            evaluation = weekly_status.scheduled_historical_weekly_status.evaluate_tick(context)
+
+    assert evaluation.run_requests == []
+    assert evaluation.skip_message == "A weekly status refresh is already running."
+
+
+def test_historical_schedule_tick_retargets_a_week_saved_under_a_stale_policy(
+    postgres_catalog: PostgresCatalog,
+    fake_r2: FakeR2Client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_published_daily_reports(
+        monkeypatch, postgres_catalog, fake_r2, HISTORICAL_WEEK, MIN_REPORT_DAYS
+    )
+    stale_inputs = WeekInput(
+        week_start=HISTORICAL_WEEK,
+        policy="completed-week-ranked-sources-v1",
+        days=weekly_status.read_week_input(HISTORICAL_WEEK).days,
+    )
+    reports = {
+        slot.report.version_id: daily_report(slot.day)
+        for slot in stale_inputs.days
+        if slot.report is not None
+    }
+    _install_status_model_stub(monkeypatch)
+    stale_output = weekly_status_generation.build_weekly_status(stale_inputs, reports)
+    stale_publication = publish_weekly_status(stale_output, "git:test")
+
+    assert stale_publication.status == "published"
+    with dg.instance_for_test() as instance:
+        with dg.build_schedule_context(
+            instance=instance,
+            scheduled_execution_time=datetime(2026, 9, 27, 20, 20, tzinfo=UTC),
+            repository_def=defs.get_repository_def(),
+        ) as context:
+            evaluation = weekly_status.scheduled_historical_weekly_status.evaluate_tick(context)
+
+    assert evaluation.run_requests is not None
+    (request,) = evaluation.run_requests
+    assert request.tags["news/archive_week"] == HISTORICAL_WEEK.isoformat()
+    assert request.run_config == {
+        "ops": {
+            "refresh_weekly_statuses": {"config": {"week_starts": [HISTORICAL_WEEK.isoformat()]}}
+        }
+    }

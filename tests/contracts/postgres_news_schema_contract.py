@@ -2022,3 +2022,142 @@ def test_schema_check_stops_at_first_migration_denied_to_the_news_role(
             ensure_news_catalog_schema()
     finally:
         drop_role()
+
+
+@pytest.mark.skipif(TEST_POSTGRES_DSN is None, reason="NEWS_TEST_POSTGRES_DSN is required")
+def test_archive_article_captures_reject_updates_and_deletes(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        (capture_version,) = _record_artifact_versions(connection, 2100, 1)
+        observation_id, capture_id, content_sha256 = (
+            _sha256_id(value) for value in range(2101, 2104)
+        )
+        discovered_url = "https://hotnews.ro/story-immutable"
+        connection.execute(
+            "INSERT INTO news_archive_sitemap_observations "
+            "(id, outlet_id, sitemap_url, content_sha256, fetched_at, entry_count) "
+            "VALUES (%s, 'hotnews', 'https://hotnews.ro/sitemap.xml', %s, %s, 1)",
+            (observation_id, content_sha256, datetime(2026, 9, 27, tzinfo=UTC)),
+        )
+        connection.execute(
+            "INSERT INTO news_archive_sitemap_entries VALUES (%s, %s, %s)",
+            (observation_id, discovered_url, discovered_url),
+        )
+        connection.execute(
+            "INSERT INTO news_archive_article_captures "
+            "(id, observation_id, discovered_url, final_url, capture_artifact_version_id, "
+            "page_sha256, fetched_at, published_at, publication_evidence) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'meta article:published_time')",
+            (
+                capture_id,
+                observation_id,
+                discovered_url,
+                discovered_url,
+                capture_version,
+                content_sha256,
+                datetime(2026, 9, 28, tzinfo=UTC),
+                datetime(2025, 9, 27, 10, tzinfo=UTC),
+            ),
+        )
+        with pytest.raises(
+            psycopg.errors.IntegrityConstraintViolation,
+            match="archive sitemap evidence is immutable",
+        ):
+            connection.execute(
+                "UPDATE news_archive_article_captures SET final_url = final_url || 'x'"
+            )
+        with pytest.raises(
+            psycopg.errors.IntegrityConstraintViolation,
+            match="archive sitemap evidence is immutable",
+        ):
+            connection.execute("DELETE FROM news_archive_article_captures")
+        assert connection.execute(
+            "SELECT final_url FROM news_archive_article_captures"
+        ).fetchone() == (discovered_url,)
+
+
+@pytest.mark.skipif(TEST_POSTGRES_DSN is None, reason="NEWS_TEST_POSTGRES_DSN is required")
+def test_news_article_versions_require_exactly_one_provenance_source(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        (version_id,) = _record_artifact_versions(connection, 2110, 1)
+        with pytest.raises(
+            psycopg.errors.CheckViolation, match="news_article_versions_exact_source"
+        ):
+            connection.execute(
+                "INSERT INTO news_article_versions "
+                "(artifact_version_id, article_artifact_id, outlet_id, canonical_url, "
+                "published_at, bucharest_day, material_digest, extraction_digest, captured_at) "
+                "VALUES (%s, %s, 'hotnews', 'https://hotnews.ro/story-sourceless', %s, "
+                "(CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Bucharest')::DATE, %s, %s, %s)",
+                (
+                    version_id,
+                    f"artifact-{version_id}",
+                    datetime(2025, 9, 27, 10, tzinfo=UTC),
+                    version_id,
+                    version_id,
+                    datetime(2026, 9, 28, tzinfo=UTC),
+                ),
+            )
+        assert connection.execute("SELECT count(*) FROM news_article_versions").fetchone() == (0,)
+
+
+@pytest.mark.skipif(TEST_POSTGRES_DSN is None, reason="NEWS_TEST_POSTGRES_DSN is required")
+def test_archive_model_reservations_are_append_only_and_settle_only(
+    postgres_news_schema: str,
+) -> None:
+    ensure_news_catalog_schema()
+    assert news_schema.NEWS_POSTGRES_DSN is not None
+    with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
+        reservation_id = uuid4()
+        connection.execute(
+            "INSERT INTO news_archive_model_reservations "
+            "(reservation_id, day, operation_key, request_id, reserved_usd) "
+            "VALUES (%s, DATE '2025-09-27', 'news.relevance', 'request-1', 1)",
+            (reservation_id,),
+        )
+        with pytest.raises(psycopg.errors.RaiseException, match="identity is immutable"):
+            connection.execute(
+                "UPDATE news_archive_model_reservations SET reserved_usd = 2 "
+                "WHERE reservation_id = %s",
+                (reservation_id,),
+            )
+        with pytest.raises(psycopg.errors.RaiseException, match="identity is immutable"):
+            connection.execute(
+                "UPDATE news_archive_model_reservations SET day = DATE '2025-09-28' "
+                "WHERE reservation_id = %s",
+                (reservation_id,),
+            )
+        # settled_at = NULL keeps every identity column unchanged, so the guard
+        # reaches its settle-only branch instead of the identity branch.
+        with pytest.raises(psycopg.errors.RaiseException, match="can only be settled"):
+            connection.execute(
+                "UPDATE news_archive_model_reservations SET settled_at = NULL "
+                "WHERE reservation_id = %s",
+                (reservation_id,),
+            )
+        with pytest.raises(
+            psycopg.errors.IntegrityConstraintViolation,
+            match="archive sitemap evidence is immutable",
+        ):
+            connection.execute(
+                "DELETE FROM news_archive_model_reservations WHERE reservation_id = %s",
+                (reservation_id,),
+            )
+        with pytest.raises(psycopg.errors.CheckViolation, match="reserved_usd"):
+            connection.execute(
+                "INSERT INTO news_archive_model_reservations "
+                "(reservation_id, day, operation_key, request_id, reserved_usd) "
+                "VALUES (%s, DATE '2025-09-27', 'news.relevance', 'request-2', 0)",
+                (uuid4(),),
+            )
+        assert connection.execute(
+            "SELECT day::text, operation_key, request_id, reserved_usd, actual_usd, settled_at "
+            "FROM news_archive_model_reservations"
+        ).fetchone() == ("2025-09-27", "news.relevance", "request-1", Decimal("1"), None, None)
