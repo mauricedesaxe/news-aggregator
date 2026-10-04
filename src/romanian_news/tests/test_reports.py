@@ -22,8 +22,11 @@ from romanian_news.reports import (
     DailyReportConstruction,
     DailyReportInput,
     DailyReportOutput,
+    DailyReportSection,
     ReportArticleSource,
     ReportCoverageStatus,
+    ReportEvent,
+    ReportSubjectCitation,
     RetrospectiveCoverage,
     RetrospectiveDailyReport,
     WeeklyReport,
@@ -426,21 +429,67 @@ def test_daily_report_records_assessment_in_output_and_request_identity(monkeypa
         monkeypatch,
         (("a", "Romania loses PNRR funds", 1, "major", "strong", "strong"),),
     )
-    without_assessment = reports_module._sha256(
-        reports_module._canonical_json(
-            {
-                "theme_version_id": output.themes.version_id,
-                "cluster_set_version_id": output.cluster_set.version_id,
-                "operation": "news.publish_daily",
-                "report_schema": DailyReport.model_json_schema(),
-                "sentiment_version_ids": [value.version_id for value in output.sentiments],
-                "summary_version_ids": [value.version_id for value in output.summaries],
-            }
-        )
+    base = DailyReportInput(
+        day=output.report.day,
+        themes=output.themes,
+        assessments=output.assessments,
+        cluster_set=output.cluster_set,
+        summaries=output.summaries,
+        sentiments=output.sentiments,
+    )
+    other_assessments = base.model_copy(
+        update={"assessments": _analysis_reference("subject-assessments", "7" * 64)}
     )
 
     assert output.assessments.artifact_id == "news:subject-assessments"
-    assert output.request_id != without_assessment
+    assert output.request_id == daily_report_request_id(base)
+    assert daily_report_request_id(base) != daily_report_request_id(other_assessments)
+
+
+def test_daily_report_event_parses_without_an_uncertainty_note() -> None:
+    report = DailyReport(
+        day=date(2026, 8, 31),
+        accepted_article_count=1,
+        theme_count=1,
+        group_count=1,
+        sections=(
+            DailyReportSection(
+                theme_id="f" * 64,
+                title="Budget policy",
+                summary="The draft budget and reactions form the subject of the day.",
+                tier="main",
+                semantic_rank=1,
+                consequence_rationale="Budget decisions with direct national effects.",
+                citations=(
+                    ReportSubjectCitation(
+                        article_version_id="d" * 64,
+                        evidence_quote="Guvernul a publicat proiectul.",
+                    ),
+                ),
+                events=(
+                    ReportEvent(
+                        group_id="c" * 64,
+                        title_ro="The public budget enters debate",
+                        summary_ro="The government published the draft.",
+                        key_points_ro=(),
+                        disagreements_ro=(),
+                        uncertainty_ro=None,
+                        sentiment_label="neutral",
+                        sentiment_score=0.0,
+                        sentiment_rationale_ro="The tone is factual.",
+                        articles=(),
+                    ),
+                ),
+            ),
+        ),
+    )
+    payload = json.loads(report.model_dump_json())
+    assert payload["sections"][0]["events"][0]["uncertainty_ro"] is None
+
+    parsed = parse_daily_report(json.dumps(payload).encode())
+
+    assert isinstance(parsed, DailyReport)
+    assert parsed.sections[0].events[0].uncertainty_ro is None
 
 
 def test_archived_daily_report_section_keeps_permissive_generated_text() -> None:

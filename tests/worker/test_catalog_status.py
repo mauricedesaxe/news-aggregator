@@ -1,6 +1,6 @@
 from datetime import date
 
-from romanian_news.worker.catalog_status import recent_catalog_days
+from romanian_news.worker.catalog_status import format_catalog_status, recent_catalog_days
 
 
 def test_recent_catalog_days_are_inclusive_and_oldest_first() -> None:
@@ -10,3 +10,7 @@ def test_recent_catalog_days_are_inclusive_and_oldest_first() -> None:
         date(2026, 9, 22),
         date(2026, 9, 23),
     )
+
+
+def test_format_catalog_status_without_rows_reports_no_days() -> None:
+    assert format_catalog_status(()) == "catalog_status: no days"

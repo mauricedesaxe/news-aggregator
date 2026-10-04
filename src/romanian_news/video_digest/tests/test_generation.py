@@ -45,7 +45,9 @@ SUBJECTS = ("1" * 64, "2" * 64)
 ARTICLES = ("3" * 64, "4" * 64)
 
 
-def _prepared() -> preflight.PreparedPaidGeneration:
+def _prepared(
+    narration: str = " ".join(f"cuvant{index}" for index in range(20)),
+) -> preflight.PreparedPaidGeneration:
     sections = tuple(
         _section(subject, article, position)
         for position, (subject, article) in enumerate(zip(SUBJECTS, ARTICLES, strict=True))
@@ -57,7 +59,6 @@ def _prepared() -> preflight.PreparedPaidGeneration:
         group_count=2,
         sections=sections,
     )
-    narration = " ".join(f"cuvant{index}" for index in range(20))
     stories = tuple(
         ScreenplayStory(
             report_subject_id=subject,
@@ -98,52 +99,74 @@ def _prepared() -> preflight.PreparedPaidGeneration:
     )
 
 
-def test_fal_prompt_requires_english_speech() -> None:
+def test_fal_prompt_requires_english_speech(monkeypatch: pytest.MonkeyPatch) -> None:
     prepared = _prepared()
-    request, _, _ = generation._generation_request(
-        prepared, _references(), generation.PRODUCTION_GENERATION_POLICY, 0, 0
+    _Harness(monkeypatch, prepared)
+    provider = _PromptRecordingProvider()
+
+    outcome = generation.generate_next_candidate(
+        _lease(prepared),
+        prepared,
+        _references(),
+        provider=provider,
+        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
     )
 
-    prompt = generation._fal_arguments(request, lambda _: "https://r2.example/reference")["prompt"]
+    assert isinstance(outcome, generation.CandidateReady)
+    story = prepared.verified_plan.plan.stories[outcome.story_position]
+    prompt = provider.prompts[0]
+    assert prompt.count(story.narration) == 1
+    assert f"[English] {story.narration}" in prompt
+    assert story.visual_direction in prompt
 
-    assert isinstance(prompt, str)
-    assert prompt.count(request.story.narration) == 1
-    assert f"[English] {request.story.narration}" in prompt
-    assert request.story.visual_direction in prompt
 
-
-def test_fal_prompt_requires_unambiguous_reference_positions() -> None:
-    request, _, _ = generation._generation_request(
-        _prepared(), _references(), generation.PRODUCTION_GENERATION_POLICY, 0, 0
-    )
-    extra_video = _artifact_reference("other-video", "8" * 64)
-    request = request.model_copy(
-        update={
-            "references": request.references.model_copy(
-                update={"videos": (*request.references.videos, extra_video)}
-            )
-        }
+def test_fal_prompt_requires_unambiguous_reference_positions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared()
+    _Harness(monkeypatch, prepared)
+    provider = _PromptRecordingProvider()
+    references = generation.H3ReferencePack(
+        videos=(
+            _artifact_reference("video", "6" * 64),
+            _artifact_reference("other-video", "8" * 64),
+        ),
+        audio=(_artifact_reference("audio", "7" * 64),),
     )
 
     with pytest.raises(ValueError, match="one video and one audio reference"):
-        generation._fal_arguments(request, lambda _: "https://r2.example/reference")
+        generation.generate_next_candidate(
+            _lease(prepared),
+            prepared,
+            references,
+            provider=provider,
+            sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
+        )
+
+    assert provider.prompts == []
+    assert provider.submitted_positions == []
 
 
-def test_fal_prompt_keeps_quoted_narration_inside_spoken_line() -> None:
-    request, _, _ = generation._generation_request(
-        _prepared(), _references(), generation.PRODUCTION_GENERATION_POLICY, 0, 0
+def test_fal_prompt_keeps_quoted_narration_inside_spoken_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    narration = " ".join(f"cuvant{index}" for index in range(16)) + (' The scientist says "hello".')
+    prepared = _prepared(narration)
+    _Harness(monkeypatch, prepared)
+    provider = _PromptRecordingProvider()
+
+    outcome = generation.generate_next_candidate(
+        _lease(prepared),
+        prepared,
+        _references(),
+        provider=provider,
+        sign_reference=lambda item: f"https://r2.example/{item.r2_key}",
     )
-    request = request.model_copy(
-        update={
-            "story": request.story.model_copy(update={"narration": 'The scientist says "hello".'})
-        }
-    )
 
-    prompt = generation._fal_arguments(request, lambda _: "https://r2.example/reference")["prompt"]
-
-    assert isinstance(prompt, str)
-    assert request.story.narration.replace('"', "'") in prompt
-    assert request.story.narration not in prompt
+    assert isinstance(outcome, generation.CandidateReady)
+    prompt = provider.prompts[0]
+    assert narration.replace('"', "'") in prompt
+    assert narration not in prompt
 
 
 def _section(subject: str, article: str, position: int) -> DailyReportSection:
@@ -280,6 +303,16 @@ class _ReferenceRecordingProvider(_Provider):
     def submit(self, arguments: dict[str, Any]) -> generation.FalSubmissionReceipt:
         self._provided_urls.append(list(arguments["reference_video_urls"]))
         self._provided_urls.append(list(arguments["reference_audio_urls"]))
+        return super().submit(arguments)
+
+
+class _PromptRecordingProvider(_Provider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.prompts: list[str] = []
+
+    def submit(self, arguments: dict[str, object]) -> generation.FalSubmissionReceipt:
+        self.prompts.append(str(arguments["prompt"]))
         return super().submit(arguments)
 
 

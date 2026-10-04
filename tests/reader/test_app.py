@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass, field
@@ -9,8 +10,8 @@ from uuid import UUID
 
 import pytest
 from fasthtml.common import FastHTML
-from starlette.requests import Request
 from starlette.testclient import TestClient
+from starlette.types import Message, Scope
 
 from romanian_news import BUCHAREST
 from romanian_news.artifacts import ArtifactReference
@@ -30,14 +31,13 @@ from romanian_news.feedback import (
     GroupFeedbackTarget,
     NewsFeedbackCommand,
     NewsFeedbackEvent,
+    ReportFeedbackTarget,
     ThemeFeedbackTarget,
 )
 from romanian_news.reader.app import (
-    _STYLES,
     SESSION_COOKIE,
     ReaderDomain,
     ReaderSettings,
-    _require_owner,
     create_app,
     decode_session_cookie,
 )
@@ -752,8 +752,8 @@ def test_event_disclosure_is_closed_with_its_title_and_singular_count() -> None:
     )
     assert articles_marker
     assert '<details open class="articles">' not in response.text
-    assert ".articles > summary { cursor: pointer; }" in _STYLES
-    assert ".articles > summary:focus-visible" in _STYLES
+    assert ".articles > summary { cursor: pointer; }" in response.text
+    assert ".articles > summary:focus-visible" in response.text
     assert "Feedback on this subject" in subject_content
     assert (
         '<a href="https://example.com/analiza" target="_blank" rel="noreferrer">' in article_content
@@ -941,11 +941,14 @@ def test_reader_declares_automatic_dark_mode_without_light_component_backgrounds
     response = _read_report_response(_daily_report())
 
     assert '<meta name="color-scheme" content="light dark">' in response.text
-    assert "@media (prefers-color-scheme: dark)" in _STYLES
-    assert "--paper: #171714;" in _STYLES
-    assert "background: white" not in _STYLES
-    assert ".assessment { background: #f0ede4;" not in _STYLES
-    assert ".site-header { border-bottom: 1px solid var(--line); background: rgba(" not in _STYLES
+    assert "@media (prefers-color-scheme: dark)" in response.text
+    assert "--paper: #171714;" in response.text
+    forbidden_light_backgrounds = (
+        "background: white",
+        ".assessment { background: #f0ede4;",
+        ".site-header { border-bottom: 1px solid var(--line); background: rgba(",
+    )
+    assert all(rule not in response.text for rule in forbidden_light_backgrounds)
 
 
 def test_archived_report_version_redirects_to_current_version(harness: Harness) -> None:
@@ -973,6 +976,7 @@ def test_feedback_rejects_invalid_csrf_before_domain_call(harness: Harness) -> N
 @pytest.mark.parametrize(
     ("kind", "extra", "target_type"),
     [
+        ("report", {}, ReportFeedbackTarget),
         ("theme", {"theme_id": THEME_ID}, ThemeFeedbackTarget),
         ("group", {"group_id": GROUP_ID}, GroupFeedbackTarget),
         (
@@ -1339,23 +1343,33 @@ def test_unauthenticated_htmx_request_asks_htmx_to_redirect(harness: Harness) ->
     assert response.text == ""
 
 
-def test_require_owner_rejects_traversal_paths() -> None:
-    request = Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "scheme": "http",
-            "server": ("testserver", 80),
-            "path": "/../../pyproject.toml",
-            "query_string": b"",
-            "headers": [],
-        }
-    )
+def test_require_owner_rejects_traversal_paths(harness: Harness) -> None:
+    messages: list[Message] = []
 
-    response = _require_owner(request)
+    async def receive() -> Message:
+        return {"type": "http.request", "body": b"", "more_body": False}
 
-    assert response is not None
-    assert response.status_code == 404
+    async def send(message: Message) -> None:
+        messages.append(message)
+
+    scope: Scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "server": ("testserver", 80),
+        "client": ("127.0.0.1", 123),
+        "root_path": "",
+        "path": "/../../pyproject.toml",
+        "raw_path": b"/../../pyproject.toml",
+        "query_string": b"",
+        "headers": [(b"host", b"testserver")],
+    }
+
+    asyncio.run(harness.app(scope, receive, send))
+
+    assert messages[0]["type"] == "http.response.start"
+    assert messages[0]["status"] == 404
 
 
 def test_negative_htmx_feedback_swaps_the_control_with_saved_state(

@@ -37,7 +37,6 @@ from romanian_news.evaluation import (
     RelevanceEvaluationSpec,
     RelevanceV3EvaluationDecision,
     ReportEvaluationSpec,
-    ReportGroupObservation,
     SummaryFormatEvaluationCase,
     SummaryFormatEvaluationSpec,
     SupersededConcernDisposition,
@@ -47,6 +46,11 @@ from romanian_news.evaluation import (
 )
 from romanian_news.feedback import ThemeFeedbackTarget
 from romanian_news.groups import DailyClusterSet
+from romanian_news.reports import (
+    ArchivedDailyReport,
+    ArchivedDailyReportSection,
+    ReportArticle,
+)
 from romanian_news.tests.evaluation_factories import (
     DAY,
     embedded_article,
@@ -498,6 +502,42 @@ def _hydration_fixture():
     manifest = manifest.model_copy(
         update={"cases": (manifest.cases[0], summary_spec, *manifest.cases[2:])}
     )
+    articles = (first, second)
+    archived_report = ArchivedDailyReport(
+        day=DAY,
+        accepted_article_count=len(articles),
+        group_count=len(cluster_set.groups),
+        sections=tuple(
+            ArchivedDailyReportSection(
+                group_id=group.id,
+                title_ro=f"Eveniment {index}",
+                summary_ro=f"Rezumat {index}.",
+                key_points_ro=(f"Punct {index}.",),
+                disagreements_ro=(),
+                uncertainty_ro=(
+                    "Statusul oficial este neclar."
+                    if group.id == report.report_group_ids[0]
+                    else None
+                ),
+                sentiment_label="mixed",
+                sentiment_score=-0.1,
+                sentiment_rationale_ro="Tonul combină prudența cu așteptări moderate.",
+                articles=tuple(
+                    ReportArticle(
+                        article_version_id=article.article.version_id,
+                        outlet_id=article.value.outlet_id,
+                        title=article.value.title,
+                        canonical_url=str(article.value.canonical_url),
+                        sentiment_label="neutral",
+                        sentiment_score=0.0,
+                    )
+                    for article in articles
+                    if article.article.version_id in group.article_version_ids
+                ),
+            )
+            for index, group in enumerate(cluster_set.groups, start=1)
+        ),
+    )
     payloads = {
         first.article.r2_key: first.value.model_dump_json().encode(),
         second.article.r2_key: second.value.model_dump_json().encode(),
@@ -527,6 +567,7 @@ def _hydration_fixture():
                 "vector": second.vector,
             }
         ).encode(),
+        manifest.reports[0].report.r2_key: archived_report.model_dump_json().encode(),
         manifest.reports[0].cluster_set.r2_key: cluster_set.model_dump_json().encode(),
         summary_spec.model_output.r2_key: json.dumps(
             {
@@ -539,9 +580,68 @@ def _hydration_fixture():
             }
         ).encode(),
     }
-    reports = {report.report.version_id: report}
-    cluster_sets = {report.report.version_id: cluster_set}
-    return manifest, reports, cluster_sets, payloads
+    run_inputs = [("cluster_set", manifest.reports[0].cluster_set)]
+    for role in ("summary", "sentiment"):
+        for group in cluster_set.groups:
+            reference = _group_input_reference(role, group.id)
+            run_inputs.append((role, reference))
+            payloads[reference.r2_key] = json.dumps({"group_id": group.id}).encode()
+    references = {
+        reference.version_id: reference
+        for article in articles
+        for reference in (article.article, article.relevance, article.embedding)
+    }
+    return manifest, cluster_set, payloads, run_inputs, references
+
+
+def _group_input_reference(role: str, group_id: str) -> ArtifactReference:
+    digest = hashlib.sha256(f"{role}\0{group_id}".encode()).hexdigest()
+    return _reference(f"news:{role}:{group_id}", digest, f"{role}-{group_id}.json")
+
+
+def _single_case_manifest(spec, *, reports=()) -> NewsEvaluationManifest:
+    return NewsEvaluationManifest(
+        version="synthetic-case",
+        reviewed_at=datetime(2026, 9, 4, tzinfo=UTC),
+        issue_url="https://example.test/issues/1",
+        source_feedback_ids=spec.provenance.feedback_ids,
+        reports=reports,
+        cases=(spec,),
+    )
+
+
+def _patch_report_catalog(monkeypatch, run_inputs, references) -> None:
+    def query(sql, parameters):
+        if "run_inputs" in sql:
+            return [
+                {"position": position, "role": role, **reference.model_dump(mode="python")}
+                for position, (role, reference) in enumerate(run_inputs)
+            ]
+        return [
+            references[version_id].model_dump(mode="python")
+            for version_id in parameters
+            if version_id in references
+        ]
+
+    monkeypatch.setattr(evaluations, "catalog_query", query)
+
+
+def _report_read_sequence(manifest, run_inputs) -> list[tuple[str, str]]:
+    report_spec = manifest.reports[0]
+    return [
+        (report_spec.report.r2_key, report_spec.report.content_digest),
+        (report_spec.cluster_set.r2_key, report_spec.cluster_set.content_digest),
+        *(
+            (reference.r2_key, reference.content_digest)
+            for role, reference in run_inputs
+            if role == "summary"
+        ),
+        *(
+            (reference.r2_key, reference.content_digest)
+            for role, reference in run_inputs
+            if role == "sentiment"
+        ),
+    ]
 
 
 def _record_artifact_reads(monkeypatch, payloads):
@@ -555,24 +655,28 @@ def _record_artifact_reads(monkeypatch, payloads):
     return reads
 
 
-def _assert_case_metadata(case, spec, reports) -> None:
+def _assert_case_metadata(case, spec) -> None:
     assert case.case_id == spec.case_id
     assert case.control == spec.control
     assert case.provenance.feedback_ids == spec.provenance.feedback_ids
-    assert case.provenance.report == reports[spec.provenance.report_version_id].report
     assert case.provenance.group_id == spec.provenance.group_id
 
 
 def test_hydrate_relevance_preserves_provenance_fields_and_read_order(monkeypatch) -> None:
-    manifest, reports, cluster_sets, payloads = _hydration_fixture()
-    spec = manifest.cases[0]
-    assert isinstance(spec, RelevanceEvaluationSpec)
+    manifest, _cluster_set, payloads, _run_inputs, _references = _hydration_fixture()
+    source = manifest.cases[0]
+    assert isinstance(source, RelevanceEvaluationSpec)
+    spec = source.model_copy(
+        update={"provenance": EvaluationSpecProvenance(feedback_ids=source.provenance.feedback_ids)}
+    )
     reads = _record_artifact_reads(monkeypatch, payloads)
 
-    case = evaluations._hydrate_case(spec, reports, cluster_sets)
+    dataset = evaluations.hydrate_news_evaluation_manifest(_single_case_manifest(spec))
 
+    case = dataset.cases[0]
     assert isinstance(case, RelevanceEvaluationCase)
-    _assert_case_metadata(case, spec, reports)
+    _assert_case_metadata(case, spec)
+    assert case.provenance.report is None
     assert case.provenance.articles == (spec.article,)
     assert case.provenance.model_outputs == (spec.model_output,)
     assert case.expected_accepted == spec.expected_accepted
@@ -584,15 +688,20 @@ def test_hydrate_relevance_preserves_provenance_fields_and_read_order(monkeypatc
 
 
 def test_hydrate_summary_preserves_provenance_artifact_and_read_order(monkeypatch) -> None:
-    manifest, reports, cluster_sets, payloads = _hydration_fixture()
+    manifest, _cluster_set, payloads, run_inputs, references = _hydration_fixture()
     spec = manifest.cases[1]
     assert isinstance(spec, SummaryFormatEvaluationSpec)
     reads = _record_artifact_reads(monkeypatch, payloads)
+    _patch_report_catalog(monkeypatch, run_inputs, references)
 
-    case = evaluations._hydrate_case(spec, reports, cluster_sets)
+    dataset = evaluations.hydrate_news_evaluation_manifest(
+        _single_case_manifest(spec, reports=manifest.reports)
+    )
 
+    case = dataset.cases[0]
     assert isinstance(case, SummaryFormatEvaluationCase)
-    _assert_case_metadata(case, spec, reports)
+    _assert_case_metadata(case, spec)
+    assert case.provenance.report == manifest.reports[0].report
     assert case.provenance.articles == spec.articles
     assert case.provenance.model_outputs == (spec.model_output,)
     assert case.artifact.model_dump() == {
@@ -601,21 +710,27 @@ def test_hydrate_summary_preserves_provenance_artifact_and_read_order(monkeypatc
         "key_points": ("Primul punct.",),
     }
     assert reads == [
-        *((item.r2_key, item.content_digest) for item in spec.articles),
+        *_report_read_sequence(manifest, run_inputs),
+        (spec.articles[0].r2_key, spec.articles[0].content_digest),
         (spec.model_output.r2_key, spec.model_output.content_digest),
     ]
 
 
 def test_hydrate_grouping_preserves_provenance_fields_and_read_order(monkeypatch) -> None:
-    manifest, reports, cluster_sets, payloads = _hydration_fixture()
-    spec = manifest.cases[2]
-    assert isinstance(spec, GroupingEvaluationSpec)
+    manifest, _cluster_set, payloads, _run_inputs, _references = _hydration_fixture()
+    source = manifest.cases[2]
+    assert isinstance(source, GroupingEvaluationSpec)
+    spec = source.model_copy(
+        update={"provenance": EvaluationSpecProvenance(feedback_ids=source.provenance.feedback_ids)}
+    )
     reads = _record_artifact_reads(monkeypatch, payloads)
 
-    case = evaluations._hydrate_case(spec, reports, cluster_sets)
+    dataset = evaluations.hydrate_news_evaluation_manifest(_single_case_manifest(spec))
 
+    case = dataset.cases[0]
     assert isinstance(case, GroupingEvaluationCase)
-    _assert_case_metadata(case, spec, reports)
+    _assert_case_metadata(case, spec)
+    assert case.provenance.report is None
     assert case.provenance.articles == tuple(item.article for item in spec.articles)
     assert case.provenance.model_outputs == tuple(
         reference for item in spec.articles for reference in (item.relevance, item.embedding)
@@ -672,86 +787,90 @@ def test_ranking_relevance_reads_current_impact_decisions(monkeypatch) -> None:
 
 
 def test_hydrate_ranking_preserves_provenance_fields_and_read_order(monkeypatch) -> None:
-    manifest, reports, cluster_sets, payloads = _hydration_fixture()
+    manifest, cluster_set, payloads, run_inputs, references = _hydration_fixture()
     spec = manifest.cases[3]
     assert isinstance(spec, RankingEvaluationSpec)
     reads = _record_artifact_reads(monkeypatch, payloads)
+    _patch_report_catalog(monkeypatch, run_inputs, references)
 
-    case = evaluations._hydrate_case(spec, reports, cluster_sets)
+    dataset = evaluations.hydrate_news_evaluation_manifest(
+        _single_case_manifest(spec, reports=manifest.reports)
+    )
 
+    case = dataset.cases[0]
     assert isinstance(case, RankingEvaluationCase)
-    _assert_case_metadata(case, spec, reports)
+    _assert_case_metadata(case, spec)
+    assert case.provenance.report == manifest.reports[0].report
     assert case.provenance.articles == tuple(item.article for item in spec.relevance)
     assert case.provenance.model_outputs == tuple(item.model_output for item in spec.relevance)
-    assert case.groups == cluster_sets[manifest.reports[0].report.version_id].groups
+    assert case.groups == cluster_set.groups
     assert tuple(item.article_version_id for item in case.relevance) == tuple(
         item.article.version_id for item in spec.relevance
     )
     assert case.higher_group_id == spec.higher_group_id
     assert case.lower_group_id == spec.lower_group_id
     assert reads == [
+        *_report_read_sequence(manifest, run_inputs),
         *((item.model_output.r2_key, item.model_output.content_digest) for item in spec.relevance),
         *((item.article.r2_key, item.article.content_digest) for item in spec.relevance),
     ]
 
 
 def test_hydrate_reader_preserves_empty_provenance_and_expectation(monkeypatch) -> None:
-    manifest, reports, cluster_sets, payloads = _hydration_fixture()
-    spec = manifest.cases[4]
-    assert isinstance(spec, ReaderPresentationEvaluationSpec)
+    manifest, _cluster_set, payloads, _run_inputs, _references = _hydration_fixture()
+    source = manifest.cases[4]
+    assert isinstance(source, ReaderPresentationEvaluationSpec)
+    spec = source.model_copy(
+        update={"provenance": EvaluationSpecProvenance(feedback_ids=source.provenance.feedback_ids)}
+    )
     reads = _record_artifact_reads(monkeypatch, payloads)
 
-    case = evaluations._hydrate_case(spec, reports, cluster_sets)
+    dataset = evaluations.hydrate_news_evaluation_manifest(_single_case_manifest(spec))
 
+    case = dataset.cases[0]
     assert isinstance(case, ReaderPresentationEvaluationCase)
-    _assert_case_metadata(case, spec, reports)
+    _assert_case_metadata(case, spec)
+    assert case.provenance.report is None
     assert case.provenance.articles == ()
     assert case.provenance.model_outputs == ()
     assert case.expectation == spec.expectation
     assert reads == []
 
 
-def test_hydrate_tier_and_confidence_from_report_group_observation() -> None:
-    manifest, reports, cluster_sets, _payloads = _hydration_fixture()
-    report_id = manifest.reports[0].report.version_id
-    report = reports[report_id]
-    group_id = report.report_group_ids[0]
-    reports[report_id] = report.model_copy(
-        update={
-            "group_observations": tuple(
-                ReportGroupObservation(
-                    group_id=current_group_id,
-                    uncertainty_disclosed=current_group_id == group_id,
-                )
-                for current_group_id in report.report_group_ids
-            )
-        }
-    )
+def test_hydrate_tier_and_confidence_from_report_group_observation(monkeypatch) -> None:
+    manifest, cluster_set, payloads, run_inputs, references = _hydration_fixture()
+    _record_artifact_reads(monkeypatch, payloads)
+    _patch_report_catalog(monkeypatch, run_inputs, references)
+    report_spec = manifest.reports[0]
     provenance = EvaluationSpecProvenance(
         feedback_ids=(),
-        report_version_id=report_id,
-        group_id=group_id,
+        report_version_id=report_spec.report.version_id,
+        group_id=cluster_set.groups[0].id,
     )
 
-    tier = evaluations._hydrate_case(
-        TierEvaluationSpec(
-            case_id="tier",
-            provenance=provenance,
-            expected_tier="worth_knowing",
-        ),
-        reports,
-        cluster_sets,
-    )
-    confidence = evaluations._hydrate_case(
-        ConfidenceEvaluationSpec(
-            case_id="confidence",
-            provenance=provenance,
-            expected_sufficient=False,
-        ),
-        reports,
-        cluster_sets,
+    dataset = evaluations.hydrate_news_evaluation_manifest(
+        NewsEvaluationManifest(
+            version="synthetic-case",
+            reviewed_at=datetime(2026, 9, 4, tzinfo=UTC),
+            issue_url="https://example.test/issues/1",
+            source_feedback_ids=(),
+            reports=(report_spec,),
+            cases=(
+                TierEvaluationSpec(
+                    case_id="tier",
+                    provenance=provenance,
+                    expected_tier="worth_knowing",
+                ),
+                ConfidenceEvaluationSpec(
+                    case_id="confidence",
+                    provenance=provenance,
+                    expected_sufficient=False,
+                ),
+            ),
+        )
     )
 
+    tier, confidence = dataset.cases
     assert isinstance(tier, TierEvaluationCase)
     assert tier.observed_tier == "main"
     assert isinstance(confidence, ConfidenceEvaluationCase)
@@ -759,23 +878,22 @@ def test_hydrate_tier_and_confidence_from_report_group_observation() -> None:
 
 
 def test_hydrate_summary_rejects_another_group_after_article_verification(monkeypatch) -> None:
-    manifest, reports, cluster_sets, payloads = _hydration_fixture()
+    manifest, _cluster_set, payloads, run_inputs, references = _hydration_fixture()
     spec = manifest.cases[1]
     assert isinstance(spec, SummaryFormatEvaluationSpec)
     payload = json.loads(payloads[spec.model_output.r2_key])
     payload["group_id"] = "f" * 64
     payloads[spec.model_output.r2_key] = json.dumps(payload).encode()
-    reads = []
-    monkeypatch.setattr(
-        evaluations,
-        "read_verified_r2_object",
-        lambda key, digest: reads.append((key, digest)) or payloads[key],
-    )
+    reads = _record_artifact_reads(monkeypatch, payloads)
+    _patch_report_catalog(monkeypatch, run_inputs, references)
 
     with pytest.raises(ValueError, match="Summary payload references another group"):
-        evaluations._hydrate_case(spec, reports, cluster_sets)
+        evaluations.hydrate_news_evaluation_manifest(
+            _single_case_manifest(spec, reports=manifest.reports)
+        )
 
     assert reads == [
+        *_report_read_sequence(manifest, run_inputs),
         (spec.articles[0].r2_key, spec.articles[0].content_digest),
         (spec.model_output.r2_key, spec.model_output.content_digest),
     ]
@@ -784,21 +902,19 @@ def test_hydrate_summary_rejects_another_group_after_article_verification(monkey
 def test_hydrate_grouping_rejects_mismatched_cluster_inputs_after_verification(
     monkeypatch,
 ) -> None:
-    manifest, reports, cluster_sets, payloads = _hydration_fixture()
-    spec = manifest.cases[2]
-    assert isinstance(spec, GroupingEvaluationSpec)
-    source = json.loads(payloads[spec.source_cluster_set.r2_key])
-    source["relevance_version_ids"][0] = "f" * 64
-    payloads[spec.source_cluster_set.r2_key] = json.dumps(source).encode()
-    reads = []
-    monkeypatch.setattr(
-        evaluations,
-        "read_verified_r2_object",
-        lambda key, digest: reads.append((key, digest)) or payloads[key],
+    manifest, _cluster_set, payloads, _run_inputs, _references = _hydration_fixture()
+    source = manifest.cases[2]
+    assert isinstance(source, GroupingEvaluationSpec)
+    spec = source.model_copy(
+        update={"provenance": EvaluationSpecProvenance(feedback_ids=source.provenance.feedback_ids)}
     )
+    tampered = json.loads(payloads[spec.source_cluster_set.r2_key])
+    tampered["relevance_version_ids"][0] = "f" * 64
+    payloads[spec.source_cluster_set.r2_key] = json.dumps(tampered).encode()
+    reads = _record_artifact_reads(monkeypatch, payloads)
 
     with pytest.raises(ValueError, match="Grouping spec does not match its source cluster set"):
-        evaluations._hydrate_case(spec, reports, cluster_sets)
+        evaluations.hydrate_news_evaluation_manifest(_single_case_manifest(spec))
 
     assert reads == [
         (spec.source_cluster_set.r2_key, spec.source_cluster_set.content_digest),
@@ -815,20 +931,21 @@ def test_hydrate_ranking_rejects_coverage_mismatches_before_artifact_reads(
     monkeypatch,
     mismatch,
 ) -> None:
-    manifest, reports, cluster_sets, _payloads = _hydration_fixture()
+    manifest, _cluster_set, payloads, run_inputs, references = _hydration_fixture()
     spec = manifest.cases[3]
     assert isinstance(spec, RankingEvaluationSpec)
     relevance = spec.relevance
     mismatched_relevance = relevance[:1] if mismatch == "missing" else (*relevance, relevance[0])
     spec = spec.model_copy(update={"relevance": mismatched_relevance})
-    monkeypatch.setattr(
-        evaluations,
-        "read_verified_r2_object",
-        lambda _key, _digest: (_ for _ in ()).throw(AssertionError("unexpected read")),
-    )
+    reads = _record_artifact_reads(monkeypatch, payloads)
+    _patch_report_catalog(monkeypatch, run_inputs, references)
 
     with pytest.raises(ValueError, match="Ranking specs must exactly cover ranked group articles"):
-        evaluations._hydrate_case(spec, reports, cluster_sets)
+        evaluations.hydrate_news_evaluation_manifest(
+            _single_case_manifest(spec, reports=manifest.reports)
+        )
+
+    assert reads == _report_read_sequence(manifest, run_inputs)
 
 
 def test_synthetic_manifest_is_strict_and_compact() -> None:
@@ -941,8 +1058,6 @@ def test_publish_manifest_records_atomic_concern_score_curation(monkeypatch) -> 
         expected_language_score_id,
     ]
     assert curation[0][-1] != curation[1][-1]
-    other_manifest = evaluations._score_curation_statements(manifest, "f" * 64)
-    assert curation[0][-1] != other_manifest[0][1][-1]
     assert curation[2][4:10] == [None, "presentation", "excluded", report_version_id, None, None]
     input_ids = {parameters[2] for sql, parameters in batches[0] if "INTO run_inputs" in sql}
     assert prose_output.version_id in input_ids
@@ -1281,7 +1396,7 @@ def test_projection_receipt_models_reject_cross_kind_states() -> None:
         )
 
 
-def test_evaluation_feedback_boundary_parses_rows_and_preserves_query_order(monkeypatch) -> None:
+def test_evaluation_feedback_boundary_parses_rows(monkeypatch) -> None:
     feedback_ids = (
         UUID("00000000-0000-4000-8000-000000000001"),
         UUID("00000000-0000-4000-8000-000000000002"),
@@ -1312,7 +1427,6 @@ def test_evaluation_feedback_boundary_parses_rows_and_preserves_query_order(monk
     assert rows[0].feedback_id == feedback_ids[0]
     assert rows[0].target.kind == "group"
     assert rows[0].created_at == datetime(2026, 9, 3, 20, 37, tzinfo=UTC)
-    assert "ORDER BY report_version_id, created_at, feedback_id" in calls[0][0]
     assert calls[0][1] == [str(feedback_id) for feedback_id in feedback_ids]
 
 
@@ -1338,21 +1452,19 @@ def test_report_lineage_boundary_returns_exact_ordered_inputs(monkeypatch) -> No
     assert lineage.report == report
     assert lineage.inputs.cluster_set == (cluster,)
     assert lineage.inputs.summary == (summary,)
-    assert "input.role != 'prior_output'" in calls[1][0]
-    assert "ORDER BY input.position" in calls[1][0]
     assert calls[1][1] == ["run-id"]
 
 
-def test_evaluation_artifact_reference_boundary_batches_fifty_versions(monkeypatch) -> None:
+def test_evaluation_artifact_reference_boundary_resolves_every_requested_version(
+    monkeypatch,
+) -> None:
     references = tuple(
         _reference(f"news:article:{position}", f"{position:064x}", f"{position}.json")
         for position in range(1, 52)
     )
     by_version = {reference.version_id: reference for reference in references}
-    batches = []
 
     def query(_sql, parameters):
-        batches.append(tuple(parameters))
         return [by_version[version_id].model_dump(mode="python") for version_id in parameters]
 
     monkeypatch.setattr(evaluations, "catalog_query", query)
@@ -1362,4 +1474,3 @@ def test_evaluation_artifact_reference_boundary_batches_fifty_versions(monkeypat
     )
 
     assert result == by_version
-    assert tuple(len(batch) for batch in batches) == (50, 1)

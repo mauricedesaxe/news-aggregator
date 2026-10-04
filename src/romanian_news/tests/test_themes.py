@@ -672,6 +672,7 @@ def test_sparse_evidence_accepts_one_exact_correction(monkeypatch) -> None:
         "rejected",
         "accepted",
     )
+    assert parsed == output.theme_set
 
 
 def _message_document_digest(messages: list[dict[str, object]]) -> str:
