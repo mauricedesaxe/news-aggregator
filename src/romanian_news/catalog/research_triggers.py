@@ -15,6 +15,7 @@ from romanian_news.catalog.artifacts import (
     run_output_statement,
     run_status,
 )
+from romanian_news.catalog.model_calls import ModelCallRegistration, model_call_statement
 from romanian_news.catalog_transport import (
     advance_artifact_current_version_from_run_statement,
     catalog_batch,
@@ -213,21 +214,20 @@ def publish_daily_research_triggers(
     statements.append(run_output_statement(run_id, file))
     if isinstance(construction, ModelResearchTriggerConstruction):
         statements.append(
-            (
-                "INSERT INTO news_model_calls VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                [
-                    file.version_id,
-                    "news.trigger_daily_research",
-                    construction.call.model,
-                    construction.call.input_tokens,
-                    construction.call.output_tokens,
-                    sum(
+            model_call_statement(
+                ModelCallRegistration(
+                    artifact_version_id=file.version_id,
+                    operation_key="news.trigger_daily_research",
+                    model=construction.call.model,
+                    input_tokens=construction.call.input_tokens,
+                    output_tokens=construction.call.output_tokens,
+                    cost_usd=sum(
                         response_cost(attempt.provider_response)
                         for attempt in construction.attempts
                     ),
-                    construction.call.latency_ms,
-                    len(construction.attempts),
-                ],
+                    latency_ms=construction.call.latency_ms,
+                    response_count=len(construction.attempts),
+                )
             )
         )
     statements.append(

@@ -18,6 +18,7 @@ from romanian_news.catalog.artifacts import (
     existing_run_ids,
     run_output_statement,
 )
+from romanian_news.catalog.model_calls import ModelCallRegistration, model_call_statement
 from romanian_news.catalog_transport import (
     advance_artifact_current_version_from_run_statement,
     catalog_batch,
@@ -226,18 +227,17 @@ def _analysis_catalog_statements(
     responses = _analysis_provider_responses(payload)
     cost = sum(_provider_response_cost(response) for response in responses)
     statements.append(
-        (
-            "INSERT INTO news_model_calls VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-            [
-                file.version_id,
-                operation_key,
-                model,
-                sum(call.input_tokens for call in calls),
-                sum(call.output_tokens for call in calls),
-                cost,
-                sum(call.latency_ms for call in calls),
-                len(responses),
-            ],
+        model_call_statement(
+            ModelCallRegistration(
+                artifact_version_id=file.version_id,
+                operation_key=operation_key,
+                model=model,
+                input_tokens=sum(call.input_tokens for call in calls),
+                output_tokens=sum(call.output_tokens for call in calls),
+                cost_usd=cost,
+                latency_ms=sum(call.latency_ms for call in calls),
+                response_count=len(responses),
+            )
         )
     )
     statements.append(

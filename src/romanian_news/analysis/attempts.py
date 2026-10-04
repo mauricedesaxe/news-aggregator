@@ -146,13 +146,6 @@ def model_attempt_from_payload(
     )
 
 
-def read_model_usage() -> tuple[int, int, float]:
-    from romanian_news.catalog.model_calls import read_model_usage as read_usage
-
-    usage = read_usage()
-    return usage.input_tokens, usage.output_tokens, usage.cost_usd
-
-
 def _payload_int(value: object) -> int:
     if isinstance(value, int) and not isinstance(value, bool):
         return value
