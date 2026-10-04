@@ -81,18 +81,24 @@ def test_historical_recovery_moves_to_next_stage_when_input_matches(monkeypatch)
         assert evaluation.run_requests[0].asset_selection == [dg.AssetKey("embeddings")]
 
 
-def test_historical_recovery_uses_input_pointer_when_parent_updates_during_child_run() -> None:
+def test_historical_recovery_reruns_a_stage_whose_parent_advanced_after_it(monkeypatch) -> None:
+    monkeypatch.setattr(recovery, "_recovery_time", lambda: NOW)
     with dg.instance_for_test() as instance:
         old_article = _materialize(instance, "articles", "2026-09-10")
-        new_article = _materialize(instance, "articles", "2026-09-10")
-        child = _materialize(
+        _materialize(
             instance,
             "relevance",
             "2026-09-10",
             parent="articles",
             pointer=old_article.storage_id,
         )
-        assert not recovery._matches_inputs(child, {dg.AssetKey("articles"): new_article}, instance)
+        _materialize(instance, "articles", "2026-09-10")
+
+        evaluation = _evaluate(instance)
+
+        assert evaluation.run_requests is not None
+        assert len(evaluation.run_requests) == 1
+        assert evaluation.run_requests[0].asset_selection == [dg.AssetKey("relevance")]
 
 
 def test_historical_recovery_suppresses_active_work(monkeypatch) -> None:
@@ -112,25 +118,34 @@ def test_historical_recovery_suppresses_active_work(monkeypatch) -> None:
         assert evaluation.skip_message == "A historical daily repair is queued or active."
 
 
-def test_historical_recovery_retries_failed_generation_after_cooldown() -> None:
+def test_historical_recovery_retries_a_failed_repair_only_after_its_cooldown(monkeypatch) -> None:
     with dg.instance_for_test() as instance:
+
+        def tick(now: datetime):
+            monkeypatch.setattr(recovery, "_recovery_time", lambda: now)
+            return _evaluate(instance)
+
         _materialize(instance, "articles", "2026-09-10")
-        first = recovery._repair_request(instance, "2026-09-10", datetime.now(UTC))
-        assert first is not None
+        first = tick(datetime.now(UTC))
+        assert first.run_requests is not None
+        request = first.run_requests[0]
         instance.add_run(
             dg.DagsterRun(
                 job_name=recovery.historical_daily_recovery_job.name,
                 run_id="failed-recovery",
                 status=dg.DagsterRunStatus.FAILURE,
-                tags=dict(first.tags),
+                tags=dict(request.tags),
             )
         )
-        assert recovery._repair_request(instance, "2026-09-10", datetime.now(UTC)) is None
-        retry = recovery._repair_request(
-            instance, "2026-09-10", datetime.now(UTC) + timedelta(minutes=16)
-        )
-        assert retry is not None
-        assert retry.run_key != first.run_key
+
+        immediate = tick(datetime.now(UTC))
+        assert immediate.run_requests == []
+
+        cooled = tick(datetime.now(UTC) + timedelta(minutes=16))
+        assert cooled.run_requests is not None
+        assert len(cooled.run_requests) == 1
+        assert cooled.run_requests[0].asset_selection == request.asset_selection
+        assert cooled.run_requests[0].run_key != request.run_key
 
 
 def test_historical_recovery_rotates_after_bounded_scan(monkeypatch) -> None:
@@ -178,6 +193,7 @@ def test_historical_recovery_repairs_stale_report_even_with_unchanged_asset_inpu
     monkeypatch,
 ) -> None:
     day = "2026-09-10"
+    monkeypatch.setattr(recovery, "_recovery_time", lambda: NOW)
     with dg.instance_for_test() as instance:
         latest = {dg.AssetKey("articles"): _materialize(instance, "articles", day)}
         for key, parents in recovery.STAGES:
@@ -193,13 +209,15 @@ def test_historical_recovery_repairs_stale_report_even_with_unchanged_asset_inpu
             "read_daily_report_freshness",
             lambda _day: SimpleNamespace(kind="stale"),
         )
-        stale = recovery._repair_request(instance, day, NOW)
-        assert stale is not None
-        assert stale.asset_selection == [dg.AssetKey("daily_reports")]
+        stale = _evaluate(instance)
+        assert stale.run_requests is not None
+        assert len(stale.run_requests) == 1
+        assert stale.run_requests[0].asset_selection == [dg.AssetKey("daily_reports")]
 
         monkeypatch.setattr(
             recovery,
             "read_daily_report_freshness",
             lambda _day: SimpleNamespace(kind="fresh"),
         )
-        assert recovery._repair_request(instance, day, NOW) is None
+        settled = _evaluate(instance)
+        assert settled.run_requests == []

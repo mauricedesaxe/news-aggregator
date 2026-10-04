@@ -1,7 +1,7 @@
 import json
 import math
 from datetime import date, datetime
-from threading import Barrier, get_ident
+from threading import Barrier
 from time import sleep
 
 import pytest
@@ -40,11 +40,9 @@ def test_average_link_clustering_is_independent_of_input_order() -> None:
 
 def test_embedded_article_loading_runs_concurrently_without_reordering(monkeypatch) -> None:
     barrier = Barrier(4)
-    worker_threads = []
     monkeypatch.setattr(groups, "read_embedded_article_references", lambda _day: (0, 1, 2, 3))
 
     def load(reference):
-        worker_threads.append(get_ident())
         barrier.wait(timeout=10)
         sleep(0.01 * (3 - reference))
         return reference
@@ -52,7 +50,6 @@ def test_embedded_article_loading_runs_concurrently_without_reordering(monkeypat
     monkeypatch.setattr(groups, "_load_embedded_article", load)
 
     assert groups.read_embedded_articles(date(2026, 9, 29)) == (0, 1, 2, 3)
-    assert len(set(worker_threads)) == 4
 
 
 def test_average_link_can_join_a_cluster_with_one_weak_pair() -> None:

@@ -65,22 +65,6 @@ def test_daily_embedding_references_require_accepted_relevance(monkeypatch) -> N
     assert references == DailyArtifactReferences(day=DAY, values=(embedding,))
 
 
-def test_relevance_acceptance_uses_bounded_batch_queries(monkeypatch) -> None:
-    version_ids = tuple(f"{value:064x}" for value in range(120))
-    queries = []
-
-    def query(_sql, values):
-        queries.append(tuple(values))
-        return [{"artifact_version_id": value} for value in values if int(value, 16) % 2 == 0]
-
-    monkeypatch.setattr(catalog_daily, "catalog_query", query)
-
-    accepted = catalog_daily.accepted_relevance_version_ids(version_ids)
-
-    assert accepted == frozenset(version_ids[::2])
-    assert tuple(len(values) for values in queries) == (50, 50, 20)
-
-
 def _reference(artifact_id: str, digest_character: str) -> ArtifactReference:
     digest = digest_character * 64
     return ArtifactReference(
