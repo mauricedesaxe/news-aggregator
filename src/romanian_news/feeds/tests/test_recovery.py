@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 from datetime import datetime
+from pathlib import Path
 
 import duckdb
 import pytest
@@ -22,8 +23,6 @@ from romanian_news.feeds.models import (
 )
 from romanian_news.feeds.recovery import (
     DltParquetObject,
-    _completed_load_id_from_key,
-    _register_unregistered_load,
     parse_dlt_feed_event_row,
     read_dlt_feed_events,
     reconcile_feed_entry_projection,
@@ -34,13 +33,50 @@ _REGISTRY = "b" * 64
 _SNAPSHOT = "c" * 64
 
 
-def test_completion_key_exposes_the_exact_dlt_load_id() -> None:
-    key = (
+def test_completion_key_exposes_the_exact_dlt_load_id(monkeypatch) -> None:
+    load_id = "1788170888.4308279"
+    objects = {
         "dlt/romanian-news/romanian_news_intake/_dlt_loads/"
-        "chartly_romanian_news_live__1788170888.4308279.jsonl"
+        "chartly_romanian_news_live__1788170888.4308279.jsonl": b"{}",
+        "dlt/romanian-news/romanian_news_intake/rss_events/"
+        "1788170888.4308279.file.parquet": b"parquet bytes",
+    }
+    registrations = []
+    batches = []
+    client = _FakeR2Client(objects)
+    monkeypatch.setattr("romanian_news.feeds.recovery._r2_client", lambda: client)
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery.read_dlt_feed_events",
+        lambda _paths, _loads: DltFeedEvents(entries=(), snapshots=()),
+    )
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery.feed_catalog.read_feed_catalog_load_state",
+        lambda: _catalog_load_state(),
+    )
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery.publish_immutable_r2_objects",
+        lambda _published: None,
+    )
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery.feed_catalog.register_recovered_dlt_load",
+        lambda *args: registrations.append(args),
+    )
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery.catalog_feed_entry_events",
+        lambda _entries, batch_size: FeedEntryCatalogResult(cataloged_events=0, existing_events=0),
+    )
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery.feed_catalog.mark_feed_entry_projection_load",
+        lambda *args: batches.append(args),
     )
 
-    assert _completed_load_id_from_key(key) == "1788170888.4308279"
+    result = reconcile_feed_entry_projection()
+
+    assert result.listed_loads == 1
+    assert result.examined_loads == 1
+    assert result.registered_loads == 1
+    assert registrations[0][0] == load_id
+    assert batches[-1][0] == load_id
 
 
 def test_recovery_parses_and_verifies_a_legacy_dlt_entry_identity() -> None:
@@ -369,7 +405,10 @@ def test_reconciliation_is_a_listing_only_noop_after_projection(monkeypatch) -> 
     assert result.cataloged_events == 0
 
 
-def test_historical_load_without_snapshot_event_uses_canonical_fallback(monkeypatch) -> None:
+def test_historical_load_without_snapshot_event_uses_canonical_fallback(
+    monkeypatch,
+    tmp_path,
+) -> None:
     content = b"exact immutable feed snapshot"
     digest = hashlib.sha256(content).hexdigest()
     entry = _event().entry.model_copy(update={"feed_id": "hotnews"})
@@ -387,6 +426,7 @@ def test_historical_load_without_snapshot_event_uses_canonical_fallback(monkeypa
     value = _parquet_object("load-3")
     publications = []
     batches = []
+    marked = []
 
     def read(key, expected_digest):
         assert key == f"news/feeds/hotnews/{digest}.xml"
@@ -401,8 +441,34 @@ def test_historical_load_without_snapshot_event_uses_canonical_fallback(monkeypa
         "romanian_news.feeds.recovery.feed_catalog.register_recovered_dlt_load",
         lambda *args: batches.append(args),
     )
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery.feed_catalog.mark_feed_entry_projection_load",
+        lambda *args: marked.append(args),
+    )
+    monkeypatch.setattr("romanian_news.feeds.recovery._list_dlt_parquet_objects", lambda: (value,))
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery._list_completed_dlt_load_ids",
+        lambda: ("load-3",),
+    )
+    monkeypatch.setattr("romanian_news.feeds.recovery._r2_client", object)
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery._download_load_files",
+        lambda _client, _objects, _directory: (tmp_path / "load.parquet",),
+    )
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery.read_dlt_feed_events",
+        lambda _paths, _loads: DltFeedEvents(entries=(occurrence,), snapshots=()),
+    )
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery.feed_catalog.read_feed_catalog_load_state",
+        lambda: _catalog_load_state(),
+    )
+    monkeypatch.setattr(
+        "romanian_news.feeds.recovery.catalog_feed_entry_events",
+        lambda _entries, batch_size: FeedEntryCatalogResult(cataloged_events=1, existing_events=0),
+    )
 
-    _register_unregistered_load("load-3", (value,), (occurrence,), ())
+    result = reconcile_feed_entry_projection()
 
     manifest_objects = tuple(publications[0])
     assert len(manifest_objects) == 1
@@ -412,6 +478,37 @@ def test_historical_load_without_snapshot_event_uses_canonical_fallback(monkeypa
     assert len(snapshots) == 1
     assert manifest.artifact_kind == "news_dlt_load"
     assert registered_at.tzinfo is not None
+    assert marked[-1] == ("load-3", registered_at)
+    assert result.registered_loads == 1
+    assert result.cataloged_events == 1
+
+
+class _FakeObjectPaginator:
+    def __init__(self, objects: dict[str, bytes]) -> None:
+        self._objects = objects
+
+    def paginate(self, *, Bucket: str, Prefix: str):
+        contents = [
+            {
+                "Key": key,
+                "Size": len(self._objects[key]),
+                "ETag": '"etag"',
+            }
+            for key in sorted(self._objects)
+            if key.startswith(Prefix)
+        ]
+        yield {"Contents": contents}
+
+
+class _FakeR2Client:
+    def __init__(self, objects: dict[str, bytes]) -> None:
+        self._objects = objects
+
+    def get_paginator(self, _name: str) -> _FakeObjectPaginator:
+        return _FakeObjectPaginator(self._objects)
+
+    def download_file(self, _bucket: str, key: str, path: str) -> None:
+        Path(path).write_bytes(self._objects[key])
 
 
 def _catalog_load_state(

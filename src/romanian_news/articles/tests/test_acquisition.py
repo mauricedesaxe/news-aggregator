@@ -8,25 +8,18 @@ import requests
 from pydantic import HttpUrl
 
 from romanian_news.articles.acquisition import (
-    _article_outcome,
-    _article_states,
     _ArticlePage,
-    _covered_news_days,
-    _fetch_article_page,
-    _plan_article_work,
-    _select_article_sources,
     acquire_article_batch_item,
     acquire_articles,
     classify_article_request_failure,
     load_exact_article_work,
+    plan_article_work,
 )
-from romanian_news.articles.extraction import normalize_article_url
 from romanian_news.articles.models import (
     ArticleAcquisitionFailure,
     ArticleBatchSkip,
     ArticleWorkItem,
     ArticleWorkLane,
-    MaterializedArticleWorkItem,
 )
 from romanian_news.articles.recovery import (
     ArticleAttemptState,
@@ -56,24 +49,6 @@ def test_article_acquisition_rejects_limits_above_tick_capacity() -> None:
             now=datetime.fromisoformat("2026-09-01T12:00:00+03:00"),
             limit=51,
         )
-
-
-def test_article_states_request_all_normalized_aliases_from_catalog(monkeypatch) -> None:
-    entries = tuple(_entry(f"article-{index}", "2026-09-09T12:00:00+03:00") for index in range(75))
-    sources = tuple(_source(entry, event_id=f"{index:064x}") for index, entry in enumerate(entries))
-    registry = feed_registry()
-    feeds = {feed.id: feed for feed in registry.feeds}
-    requested = set()
-    monkeypatch.setattr(
-        "romanian_news.articles.acquisition.article_catalog.read_article_catalog_states",
-        lambda aliases: requested.update(aliases) or {},
-    )
-
-    assert _article_states(sources, feeds) == {}
-    hotnews = feeds["hotnews"]
-    assert requested == {
-        f"url:{normalize_article_url(str(entry.url), hotnews.article_hosts)}" for entry in entries
-    }
 
 
 def test_article_acquisition_reads_rolled_off_catalog_entry(monkeypatch) -> None:
@@ -351,15 +326,20 @@ def test_article_plan_treats_quarantine_as_terminal_and_deferment_as_remaining(
             unchanged_deterministic_attempts=0,
         ),
     }
-    monkeypatch.setattr("romanian_news.articles.acquisition._article_states", lambda *_args: {})
-
-    plan = _plan_article_work(
+    _wire_public_plan(
+        monkeypatch,
         (quarantined, deferred),
-        {feed.id: feed for feed in feed_registry().feeds},
+        attempt_states=states,
+    )
+
+    plan = plan_article_work(
+        feed_registry(),
+        implementation_ref="git:test",
         now=now,
+        start_at=datetime.fromisoformat("2026-09-02T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-03T00:00:00+03:00"),
         limit=10,
         revalidate_before=None,
-        attempt_states=states,
     )
 
     assert plan.selected == ()
@@ -384,15 +364,14 @@ def test_article_plan_reserves_live_and_historical_capacity(monkeypatch) -> None
         )
         for index in range(30)
     )
-    monkeypatch.setattr(
-        "romanian_news.articles.acquisition.article_catalog.read_article_catalog_states",
-        lambda _aliases: {},
-    )
+    _wire_public_plan(monkeypatch, sources)
 
-    plan = _plan_article_work(
-        sources,
-        {feed.id: feed for feed in feed_registry().feeds},
+    plan = plan_article_work(
+        feed_registry(),
+        implementation_ref="git:test",
         now=now,
+        start_at=datetime.fromisoformat("2026-08-31T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-02T00:00:00+03:00"),
         limit=50,
         revalidate_before=None,
     )
@@ -420,15 +399,14 @@ def test_article_plan_borrows_unused_live_capacity(monkeypatch) -> None:
         )
         for index in range(50)
     )
-    monkeypatch.setattr(
-        "romanian_news.articles.acquisition.article_catalog.read_article_catalog_states",
-        lambda _aliases: {},
-    )
+    _wire_public_plan(monkeypatch, sources)
 
-    plan = _plan_article_work(
-        sources,
-        {feed.id: feed for feed in feed_registry().feeds},
+    plan = plan_article_work(
+        feed_registry(),
+        implementation_ref="git:test",
         now=now,
+        start_at=datetime.fromisoformat("2026-08-31T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-01T00:00:00+03:00"),
         limit=50,
         revalidate_before=None,
     )
@@ -456,27 +434,32 @@ def test_article_plan_blocks_updates_and_revalidation_until_prior_work_fits(monk
             captured_at=datetime.fromisoformat("2026-08-30T07:00:00+00:00"),
         ),
     }
-    monkeypatch.setattr("romanian_news.articles.acquisition._article_states", lambda *_: states)
-    feeds = {feed.id: feed for feed in feed_registry().feeds}
+    _wire_public_plan(monkeypatch, (unseen, update, revalidation), article_states=states)
 
-    one = _plan_article_work(
-        (unseen, update, revalidation),
-        feeds,
+    one = plan_article_work(
+        feed_registry(),
+        implementation_ref="git:test",
         now=now,
+        start_at=datetime.fromisoformat("2026-08-31T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-01T00:00:00+03:00"),
         limit=1,
         revalidate_before=datetime.fromisoformat("2026-08-31T00:00:00+00:00"),
     )
-    two = _plan_article_work(
-        (unseen, update, revalidation),
-        feeds,
+    two = plan_article_work(
+        feed_registry(),
+        implementation_ref="git:test",
         now=now,
+        start_at=datetime.fromisoformat("2026-08-31T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-01T00:00:00+03:00"),
         limit=2,
         revalidate_before=datetime.fromisoformat("2026-08-31T00:00:00+00:00"),
     )
-    three = _plan_article_work(
-        (unseen, update, revalidation),
-        feeds,
+    three = plan_article_work(
+        feed_registry(),
+        implementation_ref="git:test",
         now=now,
+        start_at=datetime.fromisoformat("2026-08-31T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-01T00:00:00+03:00"),
         limit=3,
         revalidate_before=datetime.fromisoformat("2026-08-31T00:00:00+00:00"),
     )
@@ -502,15 +485,14 @@ def test_historical_plan_prioritizes_newest_day_and_advances_oldest_day(monkeypa
         _source(_entry("recent-2", "2026-08-31T09:00:00+03:00")),
         _source(_entry("recent-3", "2026-08-31T10:00:00+03:00")),
     )
-    monkeypatch.setattr(
-        "romanian_news.articles.acquisition.article_catalog.read_article_catalog_states",
-        lambda _aliases: {},
-    )
+    _wire_public_plan(monkeypatch, tuple(reversed(sources)))
 
-    plan = _plan_article_work(
-        tuple(reversed(sources)),
-        {feed.id: feed for feed in feed_registry().feeds},
+    plan = plan_article_work(
+        feed_registry(),
+        implementation_ref="git:test",
         now=now,
+        start_at=datetime.fromisoformat("2026-08-20T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-01T00:00:00+03:00"),
         limit=3,
         revalidate_before=None,
     )
@@ -535,15 +517,14 @@ def test_historical_reservation_allocates_eighty_percent_to_newest_day(monkeypat
         )
         + (_source(_entry("middle", "2026-08-25T12:00:00+03:00")),)
     )
-    monkeypatch.setattr(
-        "romanian_news.articles.acquisition.article_catalog.read_article_catalog_states",
-        lambda _aliases: {},
-    )
+    _wire_public_plan(monkeypatch, sources)
 
-    plan = _plan_article_work(
-        sources,
-        {feed.id: feed for feed in feed_registry().feeds},
+    plan = plan_article_work(
+        feed_registry(),
+        implementation_ref="git:test",
         now=now,
+        start_at=datetime.fromisoformat("2026-08-20T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-01T00:00:00+03:00"),
         limit=10,
         revalidate_before=None,
     )
@@ -578,15 +559,14 @@ def test_historical_plan_round_robins_feeds_within_each_day(monkeypatch) -> None
             )
         ),
     )
-    monkeypatch.setattr(
-        "romanian_news.articles.acquisition.article_catalog.read_article_catalog_states",
-        lambda _aliases: {},
-    )
+    _wire_public_plan(monkeypatch, tuple(reversed(sources)))
 
-    plan = _plan_article_work(
-        tuple(reversed(sources)),
-        {feed.id: feed for feed in feed_registry().feeds},
+    plan = plan_article_work(
+        feed_registry(),
+        implementation_ref="git:test",
         now=now,
+        start_at=datetime.fromisoformat("2026-08-31T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-01T00:00:00+03:00"),
         limit=4,
         revalidate_before=None,
     )
@@ -600,7 +580,7 @@ def test_historical_plan_round_robins_feeds_within_each_day(monkeypatch) -> None
 
 
 def test_article_download_interrupts_a_response_that_never_yields(monkeypatch) -> None:
-    work = _materialized_work("blocked")
+    work, source = _batch_item("blocked")
     handlers = {"current": signal.SIG_IGN}
     timers = []
 
@@ -612,9 +592,10 @@ def test_article_download_interrupts_a_response_that_never_yields(monkeypatch) -
             handler(signal.SIGALRM, None)
             yield b"unreachable"
 
-    response = BlockingResponse((), url="https://hotnews.ro/final")
+    response = BlockingResponse((), url="https://hotnews.ro/blocked")
     session = requests.Session()
     monkeypatch.setattr(session, "get", lambda *_args, **_kwargs: response)
+    _wire_batch_item(monkeypatch, source, session)
     monkeypatch.setattr(
         "romanian_news.articles.acquisition.signal.getsignal",
         lambda _signal_number: signal.SIG_IGN,
@@ -634,16 +615,17 @@ def test_article_download_interrupts_a_response_that_never_yields(monkeypatch) -
     monkeypatch.setattr("romanian_news.articles.acquisition.signal.setitimer", set_timer)
     monkeypatch.setattr("romanian_news.articles.acquisition.time.monotonic", lambda: 0.0)
 
-    page = _fetch_article_page(session, work)
+    result = acquire_article_batch_item(work, feed_registry())
 
-    assert page.must_fail
-    assert page.failure_kind is not None
-    assert page.failure_kind.value == "infrastructure"
+    assert isinstance(result, ArticleAcquisitionFailure)
+    assert result.kind.value == "infrastructure"
+    assert "exceeded 20 seconds" in result.message
+    assert result.event_id == work.source.event_id
     assert response.closed
 
 
 def test_article_download_stops_a_trickling_response_at_total_deadline(monkeypatch) -> None:
-    work = _materialized_work("trickle")
+    work, source = _batch_item("trickle")
     response = _StreamingResponse((b"a", b"b", b"c"), url="https://hotnews.ro/final")
     session = requests.Session()
     monkeypatch.setattr(session, "get", lambda *_args, **_kwargs: response)
@@ -652,50 +634,32 @@ def test_article_download_stops_a_trickling_response_at_total_deadline(monkeypat
         "romanian_news.articles.acquisition.time.monotonic",
         lambda: next(clock),
     )
+    _wire_batch_item(monkeypatch, source, session)
 
-    page = _fetch_article_page(session, work)
+    result = acquire_article_batch_item(work, feed_registry())
 
-    assert page.content is None
-    assert page.url == "https://hotnews.ro/final"
-    assert page.failure_kind is not None
-    assert page.failure_kind.value == "infrastructure"
-    assert page.must_fail
-    assert "exceeded 20 seconds" in str(page.retrieval_error)
-    capture, failure = _article_outcome(
-        work,
-        {feed.id: feed for feed in feed_registry().feeds},
-        page,
-    )
-    assert capture is None
-    assert failure is not None
-    assert failure.kind.value == "infrastructure"
+    assert isinstance(result, ArticleAcquisitionFailure)
+    assert result.kind.value == "infrastructure"
+    assert "exceeded 20 seconds" in result.message
+    assert result.event_id == work.source.event_id
     assert response.closed
 
 
 def test_article_download_rejects_oversized_stream_without_buffering_it(monkeypatch) -> None:
-    work = _materialized_work("oversized")
+    work, source = _batch_item("oversized")
     response = _StreamingResponse((b"ab", b"cd"), url="https://hotnews.ro/final")
     session = requests.Session()
     monkeypatch.setattr(session, "get", lambda *_args, **_kwargs: response)
     monkeypatch.setattr("romanian_news.articles.acquisition._ARTICLE_MAX_RESPONSE_BYTES", 3)
     monkeypatch.setattr("romanian_news.articles.acquisition.time.monotonic", lambda: 0.0)
+    _wire_batch_item(monkeypatch, source, session)
 
-    page = _fetch_article_page(session, work)
+    result = acquire_article_batch_item(work, feed_registry())
 
-    assert page.content is None
-    assert page.url == "https://hotnews.ro/final"
-    assert page.failure_kind is not None
-    assert page.failure_kind.value == "deterministic"
-    assert page.must_fail
-    assert "exceeds 3 bytes" in str(page.retrieval_error)
-    capture, failure = _article_outcome(
-        work,
-        {feed.id: feed for feed in feed_registry().feeds},
-        page,
-    )
-    assert capture is None
-    assert failure is not None
-    assert failure.kind.value == "deterministic"
+    assert isinstance(result, ArticleAcquisitionFailure)
+    assert result.kind.value == "deterministic"
+    assert "exceeds 3 bytes" in result.message
+    assert result.event_id == work.source.event_id
     assert response.closed
 
 
@@ -725,24 +689,64 @@ def test_article_connection_failures_are_infrastructure() -> None:
     )
 
 
-def test_article_source_selection_excludes_entries_at_the_end_boundary() -> None:
+def test_article_source_selection_excludes_entries_at_the_end_boundary(monkeypatch) -> None:
     end_at = datetime.fromisoformat("2026-09-01T12:00:00+03:00")
-    future = _source(_entry("future", end_at.isoformat()))
-
-    selected, skipped = _select_article_sources(
-        (future,),
-        {feed.id: feed for feed in feed_registry().feeds},
-        None,
-        end_at,
+    present = _entry("present", "2026-09-01T11:00:00+03:00")
+    future = _entry("future", end_at.isoformat())
+    references = (_source(present), _source(future))
+    present_source = CatalogedFeedEntry(**references[0].model_dump(), entry=present)
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.read_cataloged_feed_entry_references",
+        lambda **_kwargs: references,
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.article_catalog.read_article_catalog_states",
+        lambda _aliases: {},
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.feed_catalog.read_successful_feed_counts",
+        lambda _days: {},
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.materialize_cataloged_feed_entries",
+        lambda _references, _registry: (present_source,),
+    )
+    monkeypatch.setattr("romanian_news.articles.acquisition.create_news_session", object)
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition._fetch_article_page",
+        lambda _session, _work: _ArticlePage(
+            content=None,
+            url=None,
+            latency_ms=0,
+            retrieval_error=None,
+        ),
     )
 
-    assert selected == ()
-    assert skipped == 1
+    result = acquire_articles(
+        feed_registry(),
+        now=end_at,
+        start_at=datetime.fromisoformat("2026-09-01T00:00:00+03:00"),
+        end_at=end_at,
+        limit=2,
+    )
+
+    assert [capture.source.source_id for capture in result.captures] == ["present"]
+    assert result.skipped_entries == 1
 
 
 def test_source_coverage_uses_successful_observations_not_published_entries(monkeypatch) -> None:
-    days = (date(2026, 8, 31), date(2026, 9, 1))
     registry = feed_registry()
+    entry = _entry("coverage", "2026-08-31T12:00:00+03:00")
+    reference = _source(entry)
+    source = CatalogedFeedEntry(**reference.model_dump(), entry=entry)
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.read_cataloged_feed_entry_references",
+        lambda **_kwargs: (reference,),
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.article_catalog.read_article_catalog_states",
+        lambda _aliases: {},
+    )
     monkeypatch.setattr(
         "romanian_news.articles.acquisition.feed_catalog.read_successful_feed_counts",
         lambda _days: {
@@ -750,8 +754,31 @@ def test_source_coverage_uses_successful_observations_not_published_entries(monk
             date(2026, 9, 1): len(registry.feeds) - 1,
         },
     )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.materialize_cataloged_feed_entries",
+        lambda _references, _registry: (source,),
+    )
+    monkeypatch.setattr("romanian_news.articles.acquisition.create_news_session", object)
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition._fetch_article_page",
+        lambda _session, _work: _ArticlePage(
+            content=None,
+            url=None,
+            latency_ms=0,
+            retrieval_error=None,
+        ),
+    )
 
-    assert _covered_news_days(registry, days) == (date(2026, 8, 31),)
+    result = acquire_articles(
+        registry,
+        now=datetime.fromisoformat("2026-09-01T12:00:00+03:00"),
+        start_at=datetime.fromisoformat("2026-08-31T00:00:00+03:00"),
+        end_at=datetime.fromisoformat("2026-09-01T12:00:00+03:00"),
+        limit=1,
+    )
+
+    assert result.source_covered_days == (date(2026, 8, 31),)
+    assert [capture.source.source_id for capture in result.captures] == ["coverage"]
 
 
 class _StreamingResponse:
@@ -772,12 +799,60 @@ class _StreamingResponse:
         self.closed = True
 
 
-def _materialized_work(source_id: str) -> MaterializedArticleWorkItem:
+def _wire_public_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    references: tuple[CatalogedFeedEntryReference, ...],
+    *,
+    attempt_states: dict[str, ArticleAttemptState] | None = None,
+    article_states: dict[str, ArticleCatalogState] | None = None,
+) -> None:
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.read_cataloged_feed_entry_references",
+        lambda **_kwargs: references,
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition._article_states",
+        lambda *_args: article_states if article_states is not None else {},
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.read_article_recovery_view",
+        lambda generations: ArticleRecoveryView(dict(generations), attempt_states or {}),
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.feed_catalog.read_successful_feed_counts",
+        lambda _days: {},
+    )
+
+
+def _wire_batch_item(
+    monkeypatch: pytest.MonkeyPatch,
+    source: CatalogedFeedEntry,
+    session: requests.Session,
+) -> None:
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.article_work_is_complete",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.materialize_cataloged_feed_entries",
+        lambda _references, _registry: (source,),
+    )
+    monkeypatch.setattr(
+        "romanian_news.articles.acquisition.create_news_session",
+        lambda: session,
+    )
+
+
+def _batch_item(source_id: str) -> tuple[ArticleWorkItem, CatalogedFeedEntry]:
     entry = _entry(source_id, "2026-09-02T08:00:00+03:00")
     reference = _source(entry)
-    return MaterializedArticleWorkItem(
-        source=CatalogedFeedEntry(**reference.model_dump(), entry=entry),
-        lane=ArticleWorkLane.LIVE_UNSEEN,
+    return (
+        ArticleWorkItem(
+            source=reference,
+            lane=ArticleWorkLane.LIVE_UNSEEN,
+            work_generation="d" * 64,
+        ),
+        CatalogedFeedEntry(**reference.model_dump(), entry=entry),
     )
 
 

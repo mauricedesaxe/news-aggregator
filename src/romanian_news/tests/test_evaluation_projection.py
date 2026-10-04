@@ -468,18 +468,16 @@ def test_experiment_rejects_conflicting_deterministic_output_without_rerun(monke
 def test_remote_experiment_treats_blank_output_as_not_yet_visible(monkeypatch) -> None:
     release = _release()
     client, _events, _receipts = _patch_boundaries(monkeypatch)
-    result = evaluation_projection.run_news_evaluation_experiment(release, "git:blank")
+    _seed_completed_remote_experiment(client, release, "git:blank", run_id="run-blank")
     client.blank_item_reads = 1
+    delays = []
+    monkeypatch.setattr(evaluation_projection, "_sleep", delays.append)
 
-    remote = evaluation_projection._read_remote_experiment(
-        evaluation_projection._langfuse_client(),
-        result.dataset_name,
-        result.experiment_name,
-        evaluation_projection._experiment_metadata(release, "git:blank"),
-    )
+    result = evaluation_projection.run_news_evaluation_experiment(release, "git:blank")
 
-    assert remote is not None
-    assert remote.outputs == {}
+    assert result.experiment_id == "run-blank"
+    assert client.run_calls == []
+    assert delays == [0.5]
 
 
 @pytest.mark.parametrize("failed_first", [True, False])
@@ -488,24 +486,42 @@ def test_remote_experiment_ignores_failed_retry_rows_in_any_order(
 ) -> None:
     release = _release()
     client, _events, _receipts = _patch_boundaries(monkeypatch)
-    result = evaluation_projection.run_news_evaluation_experiment(release, "git:retried-item")
-    run = client.runs[result.experiment_name]
-    item_id, output = next(iter(run["items"].items()))
-    successful = SimpleNamespace(
-        experiment_id=run["id"],
-        experiment_item_id=item_id,
-        end_time="complete",
-        level="DEFAULT",
-        output=json.dumps(output),
+    name, _items, _outputs = _seed_completed_remote_experiment(
+        client, release, "git:retried-item", run_id="run-retried"
     )
+    run = client.runs[name]
+    rows = _remote_success_rows(run)
     failed = SimpleNamespace(
         experiment_id=run["id"],
-        experiment_item_id=item_id,
+        experiment_item_id=rows[0].experiment_item_id,
         end_time="complete",
         level="ERROR",
         output=None,
     )
-    rows = [failed, successful] if failed_first else [successful, failed]
+    ordered = [failed, *rows] if failed_first else [*rows, failed]
+    monkeypatch.setattr(
+        client.api.experiments,
+        "list_items",
+        lambda **_arguments: SimpleNamespace(
+            data=ordered,
+            meta=SimpleNamespace(cursor=None),
+        ),
+    )
+
+    result = evaluation_projection.run_news_evaluation_experiment(release, "git:retried-item")
+
+    assert result.experiment_id == "run-retried"
+    assert client.run_calls == []
+
+
+def test_remote_experiment_rejects_two_successful_rows(monkeypatch) -> None:
+    release = _release()
+    client, _events, _receipts = _patch_boundaries(monkeypatch)
+    name, _items, _outputs = _seed_completed_remote_experiment(
+        client, release, "git:duplicate-item", run_id="run-duplicate"
+    )
+    rows = _remote_success_rows(client.runs[name])
+    rows.append(rows[0])
     monkeypatch.setattr(
         client.api.experiments,
         "list_items",
@@ -515,51 +531,35 @@ def test_remote_experiment_ignores_failed_retry_rows_in_any_order(
         ),
     )
 
-    remote = evaluation_projection._read_remote_experiment(
-        evaluation_projection._langfuse_client(),
-        result.dataset_name,
-        result.experiment_name,
-        evaluation_projection._experiment_metadata(release, "git:retried-item"),
-    )
-
-    assert remote is not None
-    assert remote.outputs == {item_id: output}
+    with pytest.raises(ValueError, match="Experiment contains duplicate item"):
+        evaluation_projection.run_news_evaluation_experiment(release, "git:duplicate-item")
 
 
-def test_remote_experiment_rejects_two_successful_rows(monkeypatch) -> None:
+def test_experiment_output_keeps_non_empty_malformed_json_strict(monkeypatch) -> None:
     release = _release()
     client, _events, _receipts = _patch_boundaries(monkeypatch)
-    result = evaluation_projection.run_news_evaluation_experiment(release, "git:duplicate-item")
-    run = client.runs[result.experiment_name]
-    item_id, output = next(iter(run["items"].items()))
-    successful = SimpleNamespace(
+    name, items, _outputs = _seed_completed_remote_experiment(
+        client, release, "git:malformed", run_id="run-malformed"
+    )
+    run = client.runs[name]
+    malformed = SimpleNamespace(
         experiment_id=run["id"],
-        experiment_item_id=item_id,
+        experiment_item_id=items[0].id,
         end_time="complete",
         level="DEFAULT",
-        output=json.dumps(output),
+        output="not-json",
     )
     monkeypatch.setattr(
         client.api.experiments,
         "list_items",
         lambda **_arguments: SimpleNamespace(
-            data=[successful, successful],
+            data=[malformed],
             meta=SimpleNamespace(cursor=None),
         ),
     )
 
-    with pytest.raises(ValueError, match="Experiment contains duplicate item"):
-        evaluation_projection._read_remote_experiment(
-            evaluation_projection._langfuse_client(),
-            result.dataset_name,
-            result.experiment_name,
-            evaluation_projection._experiment_metadata(release, "git:duplicate-item"),
-        )
-
-
-def test_experiment_output_keeps_non_empty_malformed_json_strict() -> None:
     with pytest.raises(json.JSONDecodeError):
-        evaluation_projection._experiment_output("not-json")
+        evaluation_projection.run_news_evaluation_experiment(release, "git:malformed")
 
 
 def test_existing_active_experiment_waits_for_completion_without_new_work(
@@ -705,14 +705,11 @@ def test_fresh_relevance_experiment_uses_exact_article_and_does_no_work_on_retry
         lambda value, policy: calls.append(("analyze", value.reference, policy.policy_id))
         or _relevance_output(value.reference, policy, accepted=True),
     )
+    plan = evaluation_projection.FreshEvaluationPlan(implementation_ref="git:fresh")
 
-    first = evaluation_projection._run_relevance_policy_experiment(
-        release, RELEVANCE_POLICY_V1, "git:fresh"
-    )
+    first = evaluation_projection.compare_relevance_policies(release, plan)
     calls_after_first = tuple(calls)
-    retry = evaluation_projection._run_relevance_policy_experiment(
-        release, RELEVANCE_POLICY_V1, "git:fresh"
-    )
+    retry = evaluation_projection.compare_relevance_policies(release, plan)
 
     relevance_case = next(case for case in release.manifest.cases if case.concern == "relevance")
     assert retry == first
@@ -723,15 +720,23 @@ def test_fresh_relevance_experiment_uses_exact_article_and_does_no_work_on_retry
         relevance_case.article.content_digest,
     )
     assert calls[1] == ("analyze", relevance_case.article, RELEVANCE_POLICY_V1.policy_id)
-    assert len(client.run_calls) == 1
-    assert first.case_results[0].article_version_id == relevance_case.article.version_id
-    assert first.case_results[0].policy_digest == relevance_policy_digest(RELEVANCE_POLICY_V1)
+    assert [call[0] for call in calls] == ["read", "analyze"] * 6
+    analyze_calls = [call for call in calls if call[0] == "analyze"]
+    assert all(call[1] == relevance_case.article for call in analyze_calls)
+    assert {call[2] for call in analyze_calls} == {
+        RELEVANCE_POLICY_V1.policy_id,
+        RELEVANCE_POLICY_V2.policy_id,
+    }
+    assert len(client.run_calls) == 6
+    baseline = first.trials[0].baseline
+    assert baseline.case_results[0].article_version_id == relevance_case.article.version_id
+    assert baseline.case_results[0].policy_digest == relevance_policy_digest(RELEVANCE_POLICY_V1)
     assert (
         "langfuse",
         MANIFEST_VERSION_ID,
         "relevance",
         relevance_policy_digest(RELEVANCE_POLICY_V1),
-        "git:fresh",
+        plan.implementation_refs[0],
     ) in receipts
 
 
@@ -752,19 +757,18 @@ def test_candidate_policy_has_its_own_receipt_and_rejects_conflicting_receipt(mo
         lambda value, policy: calls.append(("analyze", policy.policy_id))
         or _relevance_output(value.reference, policy, accepted=True),
     )
+    plan = evaluation_projection.FreshEvaluationPlan(implementation_ref="git:compare")
 
-    baseline = evaluation_projection._run_relevance_policy_experiment(
-        release, RELEVANCE_POLICY_V1, "git:compare"
-    )
-    candidate = evaluation_projection._run_relevance_policy_experiment(
-        release, RELEVANCE_POLICY_V2, "git:compare"
-    )
+    first = evaluation_projection.compare_relevance_policies(release, plan)
+
+    baseline = first.trials[0].baseline
+    candidate = first.trials[0].candidate
     candidate_key = (
         "langfuse",
         MANIFEST_VERSION_ID,
         "relevance",
         relevance_policy_digest(RELEVANCE_POLICY_V2),
-        "git:compare",
+        plan.implementation_refs[0],
     )
 
     assert baseline.experiment_id != candidate.experiment_id
@@ -773,7 +777,7 @@ def test_candidate_policy_has_its_own_receipt_and_rejects_conflicting_receipt(mo
         "provider": "langfuse",
         "manifest_artifact_version_id": MANIFEST_VERSION_ID,
         "policy_digest": relevance_policy_digest(RELEVANCE_POLICY_V2),
-        "implementation_ref": "git:compare",
+        "implementation_ref": plan.implementation_refs[0],
         "policy_id": RELEVANCE_POLICY_V2.policy_id,
         "dataset_id": candidate.dataset_id,
         "dataset_name": candidate.dataset_name,
@@ -784,11 +788,9 @@ def test_candidate_policy_has_its_own_receipt_and_rejects_conflicting_receipt(mo
     calls_before_conflict = tuple(calls)
     receipts[candidate_key]["policy_id"] = "conflicting-policy"
     with pytest.raises(ValueError, match="receipt conflicts"):
-        evaluation_projection._run_relevance_policy_experiment(
-            release, RELEVANCE_POLICY_V2, "git:compare"
-        )
+        evaluation_projection.compare_relevance_policies(release, plan)
     assert tuple(calls) == calls_before_conflict
-    assert len(client.run_calls) == 2
+    assert len(client.run_calls) == 6
 
 
 def test_fresh_relevance_experiment_resumes_only_missing_cases(monkeypatch) -> None:
@@ -800,16 +802,17 @@ def test_fresh_relevance_experiment_resumes_only_missing_cases(monkeypatch) -> N
         for item in client.get_dataset(dataset.dataset_name).items
         if item.metadata["concern"] == "relevance"
     )
+    plan = evaluation_projection.FreshEvaluationPlan(implementation_ref="git:partial-fresh")
     expected = evaluation_projection._fresh_relevance_expected(release, items, RELEVANCE_POLICY_V1)
     name = evaluation_projection._relevance_experiment_name(
         MANIFEST_VERSION_ID,
         relevance_policy_digest(RELEVANCE_POLICY_V1),
-        "git:partial-fresh",
+        plan.implementation_refs[0],
     )
     client.runs[name] = {
         "id": "run-partial-relevance",
         "metadata": evaluation_projection._relevance_experiment_metadata(
-            release, RELEVANCE_POLICY_V1, "git:partial-fresh"
+            release, RELEVANCE_POLICY_V1, plan.implementation_refs[0]
         ),
         "items": {
             items[0].id: _fresh_run_output(
@@ -832,14 +835,12 @@ def test_fresh_relevance_experiment_resumes_only_missing_cases(monkeypatch) -> N
         or _relevance_output(value.reference, policy, accepted=True),
     )
 
-    result = evaluation_projection._run_relevance_policy_experiment(
-        release, RELEVANCE_POLICY_V1, "git:partial-fresh"
-    )
+    result = evaluation_projection.compare_relevance_policies(release, plan)
 
     assert [item.id for item in client.run_calls[0]["data"]] == [items[1].id]
-    assert [call[0] for call in calls] == ["read", "analyze"]
-    assert len(result.case_results) == 2
-    assert result.experiment_id == "run-partial-relevance"
+    assert [len(call["data"]) for call in client.run_calls] == [1, 2, 2, 2, 2, 2]
+    assert result.trials[0].baseline.experiment_id == "run-partial-relevance"
+    assert len(result.trials[0].baseline.case_results) == 2
 
 
 def test_fresh_relevance_experiment_waits_for_delayed_item_output(monkeypatch) -> None:
@@ -859,20 +860,21 @@ def test_fresh_relevance_experiment_waits_for_delayed_item_output(monkeypatch) -
         "analyze_relevance",
         lambda value, policy: _relevance_output(value.reference, policy, accepted=True),
     )
+    plan = evaluation_projection.FreshEvaluationPlan(implementation_ref="git:delayed-output")
+    _seed_adopted_comparison_runs(client, release, plan)
 
-    result = evaluation_projection._run_relevance_policy_experiment(
-        release, RELEVANCE_POLICY_V1, "git:delayed-output"
-    )
+    result = evaluation_projection.compare_relevance_policies(release, plan)
 
-    assert result.case_results[0].accepted is True
-    assert delays == [0.5, 1.0, 2.0, 4.0, 8.0, 15.0, 30.0, 60.0, 0.5, 1.0]
+    ladder = (0.5, 1.0, 2.0, 4.0, 8.0, 15.0, 30.0, 60.0)
+    assert result.trials[0].baseline.case_results[0].accepted is True
+    assert delays == [*ladder, 0.5, 1.0]
     assert events[-1] == "receipt:relevance"
     assert (
         "langfuse",
         MANIFEST_VERSION_ID,
         "relevance",
         relevance_policy_digest(RELEVANCE_POLICY_V1),
-        "git:delayed-output",
+        plan.implementation_refs[0],
     ) in receipts
 
 
@@ -885,9 +887,10 @@ def test_fresh_relevance_run_rejects_conflicting_identity(monkeypatch) -> None:
         for item in client.get_dataset(dataset.dataset_name).items
         if item.metadata["concern"] == "relevance"
     )
+    plan = evaluation_projection.FreshEvaluationPlan(implementation_ref="git:conflict")
     policy_digest = relevance_policy_digest(RELEVANCE_POLICY_V1)
     name = evaluation_projection._relevance_experiment_name(
-        MANIFEST_VERSION_ID, policy_digest, "git:conflict"
+        MANIFEST_VERSION_ID, policy_digest, plan.implementation_refs[0]
     )
     expected = evaluation_projection._fresh_relevance_expected(
         release, (item,), RELEVANCE_POLICY_V1
@@ -897,15 +900,13 @@ def test_fresh_relevance_run_rejects_conflicting_identity(monkeypatch) -> None:
     client.runs[name] = {
         "id": "run-conflict",
         "metadata": evaluation_projection._relevance_experiment_metadata(
-            release, RELEVANCE_POLICY_V1, "git:conflict"
+            release, RELEVANCE_POLICY_V1, plan.implementation_refs[0]
         ),
         "items": {item.id: output},
     }
 
     with pytest.raises(ValueError, match="identity conflicts"):
-        evaluation_projection._run_relevance_policy_experiment(
-            release, RELEVANCE_POLICY_V1, "git:conflict"
-        )
+        evaluation_projection.compare_relevance_policies(release, plan)
 
 
 def test_v3_experiment_reports_manifest_slices_accounting_and_resumes(monkeypatch) -> None:
@@ -929,26 +930,32 @@ def test_v3_experiment_reports_manifest_slices_accounting_and_resumes(monkeypatc
         )
         or _v3_output(value.reference, policy, execution_ref),
     )
+    plan = evaluation_projection.FreshEvaluationPlan(implementation_ref="git:v3")
 
-    first = evaluation_projection._run_relevance_v3_experiment(release, "git:v3")
-    retry = evaluation_projection._run_relevance_v3_experiment(release, "git:v3")
+    first = evaluation_projection.run_relevance_v3_evaluation(release, plan)
+    calls_after_first = tuple(calls)
+    retry = evaluation_projection.run_relevance_v3_evaluation(release, plan)
 
+    relevance_cases = tuple(case for case in release.manifest.cases if case.concern == "relevance")
     assert retry == first
-    assert len(client.run_calls) == 1
+    assert tuple(calls) == calls_after_first
     assert calls == [
-        (case.article.version_id, "full_evaluation", "git:v3")
-        for case in release.manifest.cases
-        if case.concern == "relevance"
+        (case.article.version_id, "full_evaluation", implementation_ref)
+        for implementation_ref in plan.implementation_refs
+        for case in relevance_cases
     ]
-    assert first.policy_id == RELEVANCE_V3_POLICY.policy_id
-    assert first.policy_digest == relevance_v3_policy_digest()
-    assert first.full_metrics.total_cases == 2
-    assert first.prior_metrics.total_cases == 1
-    assert first.new_metrics.total_cases == 1
-    assert first.context_early_exit_rate == 0
-    assert first.input_tokens == 6
-    assert first.output_tokens == 10
-    assert first.cost_usd == pytest.approx(0.02)
+    run = first.runs[0]
+    assert run.policy_id == RELEVANCE_V3_POLICY.policy_id
+    assert run.policy_digest == relevance_v3_policy_digest()
+    assert run.full_metrics.total_cases == 2
+    assert run.prior_metrics.total_cases == 1
+    assert run.new_metrics.total_cases == 1
+    assert run.context_early_exit_rate == 0
+    assert run.input_tokens == 6
+    assert run.output_tokens == 10
+    assert run.cost_usd == pytest.approx(0.02)
+    assert len(client.run_calls) == 3
+    assert first.passed is True
 
 
 def test_v3_incomplete_observability_persists_without_repeating_paid_calls(
@@ -977,28 +984,22 @@ def test_v3_incomplete_observability_persists_without_repeating_paid_calls(
             observability_complete=False,
         ),
     )
-
     plan = evaluation_projection.FreshEvaluationPlan(implementation_ref="git:v3-observability")
-    first = evaluation_projection._run_relevance_v3_experiment(release, plan.implementation_refs[0])
-    retry = evaluation_projection._run_relevance_v3_experiment(release, plan.implementation_refs[0])
+
+    first = evaluation_projection.run_relevance_v3_evaluation(release, plan)
+    retry = evaluation_projection.run_relevance_v3_evaluation(release, plan)
 
     assert retry == first
-    assert len(calls) == 2
-    assert first.observability_complete is False
-    assert all(not result.observability_complete for result in first.case_results)
-    projection = evaluation_projection.RelevanceV3EvaluationProjection(
-        manifest_artifact_version_id=first.manifest_artifact_version_id,
-        plan=plan,
-        runs=(
-            first,
-            *(_v3_projection(ref, 0.90, 0.90, ()) for ref in plan.implementation_refs[1:]),
-        ),
-        false_negative_ids=(),
-        threshold_failures=("run 1 has incomplete observability",),
-        passed=False,
+    assert len(calls) == 6
+    assert first.passed is False
+    assert first.threshold_failures == tuple(
+        f"run {position} has incomplete observability" for position in (1, 2, 3)
     )
-    assert projection.threshold_failures == ("run 1 has incomplete observability",)
-    assert len(client.run_calls) == 1
+    assert all(not run.observability_complete for run in first.runs)
+    assert all(
+        not result.observability_complete for run in first.runs for result in run.case_results
+    )
+    assert len(client.run_calls) == 3
 
 
 def test_v3_remote_output_is_strict_and_binds_the_execution_reference(monkeypatch) -> None:
@@ -1020,20 +1021,26 @@ def test_v3_remote_output_is_strict_and_binds_the_execution_reference(monkeypatc
             value.reference, policy, execution_ref
         ),
     )
-    result = evaluation_projection._run_relevance_v3_experiment(release, "git:v3-strict")
-    remote = client.runs[result.experiment_name]
+    plan = evaluation_projection.FreshEvaluationPlan(implementation_ref="git:v3-strict")
+    evaluation_projection.run_relevance_v3_evaluation(release, plan)
+    name = evaluation_projection._relevance_experiment_name(
+        MANIFEST_VERSION_ID,
+        relevance_v3_policy_digest(),
+        plan.implementation_refs[0],
+    )
+    remote = client.runs[name]
     output = next(iter(remote["items"].values()))
 
     output["accepted"] = 1
     with pytest.raises(ValueError, match="invalid decision"):
-        evaluation_projection._run_relevance_v3_experiment(release, "git:v3-strict")
+        evaluation_projection.run_relevance_v3_evaluation(release, plan)
 
     output["accepted"] = True
     output["execution_ref"] = "git:other"
     with pytest.raises(ValueError, match="identity conflicts"):
-        evaluation_projection._run_relevance_v3_experiment(release, "git:v3-strict")
+        evaluation_projection.run_relevance_v3_evaluation(release, plan)
 
-    assert len(client.run_calls) == 1
+    assert len(client.run_calls) == 3
 
 
 def test_fresh_evaluation_plan_validates_and_derives_stable_refs() -> None:
@@ -1622,6 +1629,78 @@ def _patch_boundaries(monkeypatch):
     monkeypatch.setattr(evaluations, "catalog_batch", batch)
     monkeypatch.setattr(evaluation_projection, "_sleep", lambda _delay: None)
     return client, events, receipts
+
+
+def _seed_completed_remote_experiment(client, release, implementation_ref, *, run_id):
+    dataset = evaluation_projection.project_news_evaluation_release(release)
+    items = tuple(
+        item
+        for item in client.get_dataset(dataset.dataset_name).items
+        if item.metadata["split"] == "executable"
+    )
+    outputs = evaluation_projection._expected_run_outputs(
+        items, evaluation_projection._results_by_case(release)
+    )
+    name = evaluation_projection._experiment_name(
+        release.manifest_reference.version_id, implementation_ref
+    )
+    client.runs[name] = {
+        "id": run_id,
+        "metadata": evaluation_projection._experiment_metadata(release, implementation_ref),
+        "items": outputs,
+        "end_time": "complete",
+        "item_count": len(items),
+    }
+    return name, items, outputs
+
+
+def _remote_success_rows(run):
+    return [
+        SimpleNamespace(
+            experiment_id=run["id"],
+            experiment_item_id=item_id,
+            end_time="complete",
+            level="DEFAULT",
+            output=json.dumps(output),
+        )
+        for item_id, output in run["items"].items()
+    ]
+
+
+def _seed_adopted_comparison_runs(client, release, plan):
+    dataset = evaluation_projection.project_news_evaluation_release(release)
+    items = tuple(
+        item
+        for item in client.get_dataset(dataset.dataset_name).items
+        if item.metadata["concern"] == "relevance"
+    )
+    seeded = (
+        (RELEVANCE_POLICY_V2, plan.implementation_refs[0]),
+        *(
+            (policy, implementation_ref)
+            for implementation_ref in plan.implementation_refs[1:]
+            for policy in (RELEVANCE_POLICY_V1, RELEVANCE_POLICY_V2)
+        ),
+    )
+    for policy, implementation_ref in seeded:
+        expected = evaluation_projection._fresh_relevance_expected(release, items, policy)
+        name = evaluation_projection._relevance_experiment_name(
+            release.manifest_reference.version_id,
+            relevance_policy_digest(policy),
+            implementation_ref,
+        )
+        client.runs[name] = {
+            "id": f"run-{policy.policy_id}-{implementation_ref}",
+            "metadata": evaluation_projection._relevance_experiment_metadata(
+                release, policy, implementation_ref
+            ),
+            "items": {
+                item.id: _fresh_run_output(expected[item.id], policy, accepted=True)
+                for item in items
+            },
+            "end_time": "complete",
+            "item_count": len(items),
+        }
 
 
 def _release() -> LoadedNewsEvaluationRelease:

@@ -432,22 +432,19 @@ def test_article_controller_blocks_active_legacy_article_automation() -> None:
     assert evaluation.skip_message == "Legacy article automation is queued or active."
 
 
-def test_article_controller_blocks_unscoped_legacy_automation() -> None:
-    with dg.instance_for_test() as instance:
-        instance.add_run(
-            dg.DagsterRun(
-                job_name="__ASSET_JOB",
-                run_id="legacy-all-assets",
-                status=dg.DagsterRunStatus.STARTED,
-                tags={"dagster/auto_materialize": "true"},
-                asset_selection=None,
-            )
-        )
-
-        assert definitions._active_article_batch_work(instance) is None
-
-
-def test_article_controller_ignores_unrelated_or_terminal_legacy_runs() -> None:
+def test_article_controller_ignores_unrelated_or_terminal_legacy_runs(monkeypatch) -> None:
+    now = datetime.fromisoformat("2026-09-09T12:00:00+03:00")
+    today = now.date()
+    monkeypatch.setattr(definitions, "_controller_time", lambda: now)
+    monkeypatch.setattr(definitions, "read_article_candidate_days", lambda *_args: (today,))
+    monkeypatch.setattr(
+        definitions,
+        "_article_batch_request",
+        lambda _context, day, _now: dg.RunRequest(
+            run_key=f"batch:{day.isoformat()}",
+            partition_key=day.isoformat(),
+        ),
+    )
     with dg.instance_for_test() as instance:
         for run in (
             dg.DagsterRun(
@@ -473,8 +470,13 @@ def test_article_controller_ignores_unrelated_or_terminal_legacy_runs() -> None:
             ),
         ):
             instance.add_run(run)
+        context = dg.build_sensor_context(
+            instance=instance,
+            repository_def=defs.get_repository_def(),
+        )
+        evaluation = article_batch_controller.evaluate_tick(context)
 
-        assert definitions._active_article_batch_work(instance) == set()
+    assert evaluation.run_requests
 
 
 def test_article_controller_blocks_only_the_active_partition(monkeypatch) -> None:
@@ -616,7 +618,6 @@ def test_article_controller_uses_newest_history_when_current_has_no_ready_work(
     today = now.date()
     middle = datetime.fromisoformat("2026-09-05T12:00:00+03:00").date()
     oldest = datetime.fromisoformat("2026-09-01T12:00:00+03:00").date()
-    visited = []
     monkeypatch.setattr(definitions, "_controller_time", lambda: now)
     monkeypatch.setattr(
         definitions,
@@ -625,7 +626,6 @@ def test_article_controller_uses_newest_history_when_current_has_no_ready_work(
     )
 
     def request(_context, day, _now):
-        visited.append(day)
         if day == today:
             return None
         return dg.RunRequest(run_key=f"batch:{day.isoformat()}", partition_key=day.isoformat())
@@ -641,7 +641,6 @@ def test_article_controller_uses_newest_history_when_current_has_no_ready_work(
 
     assert evaluation.run_requests
     assert evaluation.run_requests[0].partition_key == middle.isoformat()
-    assert visited == [today, middle]
     assert evaluation.cursor == "0"
 
 
@@ -664,6 +663,7 @@ def test_article_controller_preserves_cursor_when_no_work_is_ready(monkeypatch) 
 
 def test_article_controller_reports_unchanged_quarantine_once(monkeypatch) -> None:
     day = datetime.fromisoformat(DAY).date()
+    now = datetime.fromisoformat("2026-09-09T09:00:00+00:00")
     plan = SimpleNamespace(
         selected=(),
         remaining_entries=0,
@@ -671,6 +671,8 @@ def test_article_controller_reports_unchanged_quarantine_once(monkeypatch) -> No
         quarantined_event_ids=("a" * 64,),
         source_covered_days=(day,),
     )
+    monkeypatch.setattr(definitions, "_controller_time", lambda: now)
+    monkeypatch.setattr(definitions, "read_article_candidate_days", lambda *_args: (day,))
     monkeypatch.setattr(definitions, "plan_article_work", lambda *_args, **_kwargs: plan)
     monkeypatch.setattr(definitions, "read_article_attempt_states", lambda _event_ids: {})
     monkeypatch.setattr(definitions, "feed_registry", SimpleNamespace)
@@ -684,23 +686,22 @@ def test_article_controller_reports_unchanged_quarantine_once(monkeypatch) -> No
             instance=instance,
             repository_def=defs.get_repository_def(),
         )
-        first = definitions._article_batch_request(
-            context, day, datetime.fromisoformat("2026-09-09T09:00:00+00:00")
+        first = article_batch_controller.evaluate_tick(context)
+        assert first.run_requests
+        first_key = first.run_requests[0].tags["news/article_batch_key"]
+        instance.create_run_for_job(
+            defs.resolve_job_def(article_batch_job.name),
+            status=dg.DagsterRunStatus.FAILURE,
+            tags={"news/article_batch_key": first_key},
         )
-        assert first is not None
-        instance.add_run(
-            dg.DagsterRun(
-                job_name="article_batch",
-                run_id="quarantine-reported",
-                status=dg.DagsterRunStatus.FAILURE,
-                tags=first.tags,
-            )
+        second_context = dg.build_sensor_context(
+            instance=instance,
+            repository_def=defs.get_repository_def(),
         )
-        second = definitions._article_batch_request(
-            context, day, datetime.fromisoformat("2026-09-09T09:01:00+00:00")
-        )
+        second = article_batch_controller.evaluate_tick(second_context)
 
-    assert second is None
+    assert not second.run_requests
+    assert second.skip_message == "No article work is ready."
 
 
 def test_mixed_quarantine_batch_failure_does_not_count_as_reported_until_work_drains(
@@ -725,17 +726,13 @@ def test_mixed_quarantine_batch_failure_does_not_count_as_reported_until_work_dr
         quarantined_event_ids=(quarantined_id,),
         source_covered_days=(day,),
     )
-    plans = {"mixed": mixed_plan, "drained": drained_plan}
-    requested = {"mixed": 0, "drained": 0}
-
-    def plan(*_args, **_kwargs):
-        if requested["mixed"] < 2:
-            requested["mixed"] += 1
-            return plans["mixed"]
-        requested["drained"] += 1
-        return plans["drained"]
-
-    monkeypatch.setattr(definitions, "plan_article_work", plan)
+    plans = iter((mixed_plan, mixed_plan, drained_plan, drained_plan))
+    clock = iter(
+        datetime.fromisoformat(f"2026-09-02T09:{minute:02d}:00+00:00") for minute in range(4)
+    )
+    monkeypatch.setattr(definitions, "_controller_time", lambda: next(clock))
+    monkeypatch.setattr(definitions, "read_article_candidate_days", lambda *_args: (day,))
+    monkeypatch.setattr(definitions, "plan_article_work", lambda *_args, **_kwargs: next(plans))
     monkeypatch.setattr(definitions, "read_article_attempt_states", lambda _event_ids: {})
     monkeypatch.setattr(definitions, "feed_registry", SimpleNamespace)
     monkeypatch.setattr(
@@ -744,48 +741,48 @@ def test_mixed_quarantine_batch_failure_does_not_count_as_reported_until_work_dr
         lambda _day: DailyArtifactReferences(day=day, values=()),
     )
     with dg.instance_for_test() as instance:
-        context = dg.build_sensor_context(
-            instance=instance,
-            repository_def=defs.get_repository_def(),
-        )
-        first = definitions._article_batch_request(
-            context, day, datetime.fromisoformat("2026-09-09T09:00:00+00:00")
-        )
-        assert first is not None
-        assert json.loads(first.tags["news/article_event_ids"]) == [selected_id]
-        instance.add_run(
-            dg.DagsterRun(
-                job_name="article_batch",
-                run_id="mixed-batch-failed",
-                status=dg.DagsterRunStatus.FAILURE,
-                tags=first.tags,
-            )
-        )
-        second = definitions._article_batch_request(
-            context, day, datetime.fromisoformat("2026-09-09T09:01:00+00:00")
-        )
-        assert second is not None
-        assert second.tags["news/article_batch_key"] == first.tags["news/article_batch_key"]
-        assert second.run_key != first.run_key
 
-        third = definitions._article_batch_request(
-            context, day, datetime.fromisoformat("2026-09-09T09:02:00+00:00")
-        )
-        assert third is not None
-        assert third.tags["news/article_batch_key"] != first.tags["news/article_batch_key"]
-        instance.add_run(
-            dg.DagsterRun(
-                job_name="article_batch",
-                run_id="drained-batch-failed",
-                status=dg.DagsterRunStatus.FAILURE,
-                tags=third.tags,
+        def tick():
+            context = dg.build_sensor_context(
+                instance=instance,
+                repository_def=defs.get_repository_def(),
             )
-        )
-        fourth = definitions._article_batch_request(
-            context, day, datetime.fromisoformat("2026-09-09T09:03:00+00:00")
-        )
+            return article_batch_controller.evaluate_tick(context)
 
-    assert fourth is None
+        first = tick()
+        assert first.run_requests
+        first_request = first.run_requests[0]
+        assert json.loads(first_request.tags["news/article_event_ids"]) == [selected_id]
+        instance.create_run_for_job(
+            defs.resolve_job_def(article_batch_job.name),
+            status=dg.DagsterRunStatus.FAILURE,
+            tags={"news/article_batch_key": first_request.tags["news/article_batch_key"]},
+        )
+        second = tick()
+        assert second.run_requests
+        second_request = second.run_requests[0]
+        assert (
+            second_request.tags["news/article_batch_key"]
+            == first_request.tags["news/article_batch_key"]
+        )
+        assert second_request.run_key != first_request.run_key
+
+        third = tick()
+        assert third.run_requests
+        third_request = third.run_requests[0]
+        assert (
+            third_request.tags["news/article_batch_key"]
+            != first_request.tags["news/article_batch_key"]
+        )
+        instance.create_run_for_job(
+            defs.resolve_job_def(article_batch_job.name),
+            status=dg.DagsterRunStatus.FAILURE,
+            tags={"news/article_batch_key": third_request.tags["news/article_batch_key"]},
+        )
+        fourth = tick()
+
+    assert not fourth.run_requests
+    assert fourth.skip_message == "No article work is ready."
 
 
 def test_mixed_quarantine_batch_fails_the_asset_without_materializing(monkeypatch) -> None:
@@ -834,6 +831,7 @@ def test_mixed_quarantine_batch_fails_the_asset_without_materializing(monkeypatc
 def test_article_batch_identity_changes_with_implementation_ref(monkeypatch) -> None:
     day = datetime.fromisoformat(DAY).date()
     event_id = "a" * 64
+    now = datetime.fromisoformat("2026-09-02T09:00:00+00:00")
     plan = SimpleNamespace(
         selected=(
             SimpleNamespace(source=SimpleNamespace(event_id=event_id), work_generation="b" * 64),
@@ -843,6 +841,8 @@ def test_article_batch_identity_changes_with_implementation_ref(monkeypatch) -> 
         quarantined_event_ids=(),
         source_covered_days=(day,),
     )
+    monkeypatch.setattr(definitions, "_controller_time", lambda: now)
+    monkeypatch.setattr(definitions, "read_article_candidate_days", lambda *_args: (day,))
     monkeypatch.setattr(definitions, "plan_article_work", lambda *_args, **_kwargs: plan)
     monkeypatch.setattr(definitions, "read_article_attempt_states", lambda *_args: {})
     monkeypatch.setattr(definitions, "feed_registry", SimpleNamespace)
@@ -852,25 +852,24 @@ def test_article_batch_identity_changes_with_implementation_ref(monkeypatch) -> 
         lambda _day: DailyArtifactReferences(day=day, values=()),
     )
     with dg.instance_for_test() as instance:
-        context = dg.build_sensor_context(
+        monkeypatch.setattr(definitions, "IMPLEMENTATION_REF", "git:old")
+        with dg.build_sensor_context(
             instance=instance,
             repository_def=defs.get_repository_def(),
-        )
-        monkeypatch.setattr(definitions, "IMPLEMENTATION_REF", "git:old")
-        old = definitions._article_batch_request(
-            context,
-            day,
-            datetime.fromisoformat("2026-09-09T09:00:00+00:00"),
-        )
+        ) as context:
+            old = article_batch_controller.evaluate_tick(context)
         monkeypatch.setattr(definitions, "IMPLEMENTATION_REF", "git:new")
-        new = definitions._article_batch_request(
-            context,
-            day,
-            datetime.fromisoformat("2026-09-09T09:00:00+00:00"),
-        )
+        with dg.build_sensor_context(
+            instance=instance,
+            repository_def=defs.get_repository_def(),
+        ) as context:
+            new = article_batch_controller.evaluate_tick(context)
 
-    assert old is not None and new is not None
-    assert old.tags["news/article_batch_key"] != new.tags["news/article_batch_key"]
+    assert old.run_requests and new.run_requests
+    assert (
+        old.run_requests[0].tags["news/article_batch_key"]
+        != new.run_requests[0].tags["news/article_batch_key"]
+    )
 
 
 def test_past_uncovered_article_day_is_complete_once_entries_are_gone() -> None:

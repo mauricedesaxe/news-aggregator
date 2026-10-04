@@ -95,15 +95,83 @@ def test_publication_port_from_environment_builds_from_a_safe_boundary(
     monkeypatch.setattr(publication, "NEWS_R2_BUCKET", "private-environment")
     monkeypatch.setattr(publication, "NEWS_PUBLIC_MEDIA_R2_BUCKET", "public-environment")
     monkeypatch.setattr(publication, "NEWS_PUBLIC_MEDIA_BASE_URL", "https://media.environment")
-    monkeypatch.setattr(publication, "r2_client", lambda: cast(BaseClient, object()))
+    port_client = cast(BaseClient, object())
+    monkeypatch.setattr(publication, "r2_client", lambda: port_client)
+    read_buckets: list[str] = []
+    public_buckets: list[str] = []
+    evidence_buckets: list[str] = []
+    verification_urls: list[str] = []
+
+    monkeypatch.setattr(
+        publication,
+        "record_publication_intent",
+        lambda _lease, intent, *, recorded_at: PublicationStatus(
+            publication_id=intent.publication_id,
+            edition_id=intent.edition_id,
+            stage=PublicationState.PENDING,
+        ),
+    )
+    monkeypatch.setattr(
+        publication,
+        "begin_publication_attempt",
+        lambda *_args, **_kwargs: PublicationAttemptReady(attempt_index=0),
+    )
+    monkeypatch.setattr(
+        publication,
+        "checkpoint_publication_progress",
+        lambda _lease, publication_id, _attempt_index, progress, **_kwargs: PublicationStatus(
+            publication_id=publication_id,
+            edition_id=EDITION_ID,
+            stage=PublicationState(progress.kind),
+        ),
+    )
+    monkeypatch.setattr(
+        publication,
+        "complete_publication",
+        lambda *_args, **_kwargs: None,
+    )
+
+    def read_private(_key, _digest, *, client, bucket) -> bytes:
+        assert client is port_client
+        read_buckets.append(bucket)
+        return VIDEO
+
+    def publish_public(client, bucket, _value) -> None:
+        assert client is port_client
+        public_buckets.append(bucket)
+
+    def publish_evidence(objects, *, client, bucket) -> None:
+        assert client is port_client
+        evidence_buckets.append(bucket)
+
+    def verify(url: str, value, **_kwargs) -> PublicObjectVerification:
+        verification_urls.append(url)
+        return PublicObjectVerification(
+            key=value.key,
+            content_digest=value.content_digest,
+            byte_size=value.byte_size,
+            content_type=value.content_type,
+            cache_control=value.cache_control,
+            visibility=value.visibility,
+            retention=value.retention,
+            source_lineage=value.source_lineage,
+            validator='"validator"',
+        )
+
+    monkeypatch.setattr(publication, "read_verified_r2_object", read_private)
+    monkeypatch.setattr(publication, "publish_public_r2_object", publish_public)
+    monkeypatch.setattr(publication, "publish_immutable_r2_objects", publish_evidence)
+    monkeypatch.setattr(publication, "verify_public_object_url", verify)
 
     port = publication.R2PublicationPort.from_environment()
 
-    assert port._configuration == publication.PublicMediaConfiguration(
-        private_bucket="private-environment",
-        public_bucket="public-environment",
-        base_url="https://media.environment",
-    )
+    assert port.execute(ACTION) == ActionAdvanced()
+    assert read_buckets == ["private-environment", "private-environment"]
+    assert public_buckets == ["public-environment", "public-environment"]
+    assert evidence_buckets == ["private-environment", "private-environment"]
+    assert verification_urls == [
+        f"https://media.environment/video-digests/{EDITION_ID}/{VIDEO_DIGEST}.mp4"
+    ]
 
 
 @pytest.mark.parametrize(

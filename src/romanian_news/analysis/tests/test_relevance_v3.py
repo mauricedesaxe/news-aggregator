@@ -450,6 +450,7 @@ def test_impact_policy_is_recall_first_without_article_special_cases(changes, ac
             {"consequence_status": "committed"},
             False,
         ),
+        ({}, {"effect_basis": "foregone_opportunity"}, False),
     ),
 )
 def test_combined_policy_applies_attempt_two_distinctions(
