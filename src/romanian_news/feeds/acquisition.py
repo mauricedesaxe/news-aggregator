@@ -23,6 +23,7 @@ from romanian_news.feeds.models import (
     FeedSnapshotEvent,
     FeedSpec,
     FeedValidator,
+    dlt_feed_entry_payload,
     feed_entry_version_id,
     feed_schedule_slot,
 )
@@ -294,7 +295,7 @@ def feed_entry_event_from_payload(
 
 
 def _entry_record(event: FeedEntryEvent) -> dict[str, object]:
-    payload = _dlt_feed_entry_payload(event.entry, event.feed_content_digest)
+    payload = dlt_feed_entry_payload(event.entry, event.feed_content_digest)
     return {
         "event_id": event.event_id,
         "event_type": "feed_entry",
@@ -302,12 +303,3 @@ def _entry_record(event: FeedEntryEvent) -> dict[str, object]:
         "payload_json": json.dumps(payload, ensure_ascii=False, sort_keys=True),
         "observed_at": event.observed_at,
     }
-
-
-def _dlt_feed_entry_payload(
-    entry: FeedEntry,
-    feed_content_digest: Sha256,
-) -> dict[str, object]:
-    payload = entry.model_dump(mode="json")
-    payload["feed_content_digest"] = feed_content_digest
-    return payload

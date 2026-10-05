@@ -22,6 +22,7 @@ from romanian_news.feeds.models import (
     FeedRegistry,
     FeedValidator,
     feed_schedule_slot,
+    legacy_feed_entry_event_id,
     registry_version_id,
 )
 from romanian_news.feeds.registry import feed_registry
@@ -111,6 +112,7 @@ def test_changed_feed_writes_one_snapshot_event_without_duplicating_entry_bytes(
     feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
     registry = FeedRegistry(feeds=(feed,), version_id=registry_version_id((feed,)))
     content = b"<rss>exact raw bytes</rss>"
+    content_digest = hashlib.sha256(content).hexdigest()
     observed_at = datetime.fromisoformat("2026-09-01T12:00:00+03:00")
     entry = FeedEntry(
         feed_id=feed.id,
@@ -131,7 +133,7 @@ def test_changed_feed_writes_one_snapshot_event_without_duplicating_entry_bytes(
         http_status=200,
         latency_ms=1,
         content=content,
-        content_digest=hashlib.sha256(content).hexdigest(),
+        content_digest=content_digest,
         entries=(entry,),
         rejected_entries=0,
         validator=FeedValidator(),
@@ -170,7 +172,20 @@ def test_changed_feed_writes_one_snapshot_event_without_duplicating_entry_bytes(
     snapshot_payload = json.loads(snapshot_rows[0]["payload_json"])
     assert base64.b64decode(snapshot_payload["content_base64"]) == content
     assert snapshot_payload["content_digest"] == capture.content_digest
-    assert "content_base64" not in json.loads(entry_rows[0]["payload_json"])
+    assert entry_rows[0]["event_id"] == (
+        "964a91211074abc43dbea34c1b82c4e6a74faae00709494a93d596060cd20310"
+    )
+    assert legacy_feed_entry_event_id(entry, content_digest) == (
+        "a94398d980cab575c8594b834fa32a682590721ac7e5553b0c5fb4dd2d139871"
+    )
+    assert entry_rows[0]["payload_json"] == (
+        '{"author": null, "feed_content": "entry text", '
+        '"feed_content_digest": "9ec012bfe08d3e555816cb781e77d7a6732ad5e61dcac90765ad9d0a447d7571", '
+        '"feed_id": "hotnews", "published_at": "2026-09-01T12:00:00+03:00", '
+        '"source_id": "source-1", "source_updated_at": null, '
+        '"summary": "Rezumat", "title": "Titlu", '
+        '"url": "https://hotnews.ro/source-1"}'
+    )
 
 
 def test_fetch_feed_records_digest_and_stores_conditional_get_validators(monkeypatch) -> None:
