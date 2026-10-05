@@ -240,18 +240,21 @@ def feed_entry_event(
 
 
 def feed_entry_version_id(entry: FeedEntry) -> Sha256:
-    return _feed_entry_payload_id(entry.model_dump(mode="json"))
+    return sha256(canonical_json(entry.model_dump(mode="json")))
+
+
+def dlt_feed_entry_payload(
+    entry: FeedEntry,
+    feed_content_digest: Sha256,
+) -> dict[str, object]:
+    payload = entry.model_dump(mode="json")
+    payload["feed_content_digest"] = feed_content_digest
+    return payload
 
 
 def legacy_feed_entry_event_id(entry: FeedEntry, feed_content_digest: Sha256) -> Sha256:
     """Compute the identity stored by the original dlt feed-entry schema."""
-    payload = entry.model_dump(mode="json")
-    payload["feed_content_digest"] = feed_content_digest
-    return _feed_entry_payload_id(payload)
-
-
-def _feed_entry_payload_id(payload: dict[str, object]) -> Sha256:
-    return sha256(canonical_json(payload))
+    return sha256(canonical_json(dlt_feed_entry_payload(entry, feed_content_digest)))
 
 
 def registry_version_id(feeds: tuple[FeedSpec, ...]) -> Sha256:
