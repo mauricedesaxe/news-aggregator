@@ -10,7 +10,6 @@ from romanian_news.analysis.embeddings import (
     embed_article,
     embedding_request_id,
     read_pending_embedding_references,
-    read_pending_embeddings,
 )
 from romanian_news.analysis.relevance import ArticleAnalysisInput
 from romanian_news.analysis.relevance_v3 import production_relevance_v3_request_id
@@ -38,7 +37,7 @@ def test_embedding_request_identity_stays_stable() -> None:
     assert request_id == "9fe0b09cbba8639856757e04ecc3788e193aabc80e43f06d5969f91304caf8f7"
 
 
-def test_pending_embeddings_skip_archived_relevance_before_parsing(monkeypatch) -> None:
+def test_pending_embedding_references_skip_archived_relevance(monkeypatch) -> None:
     row = {
         "relevance_artifact_id": "news:relevance:archived-policy",
         "relevance_version_id": "c" * 64,
@@ -51,12 +50,8 @@ def test_pending_embeddings_skip_archived_relevance_before_parsing(monkeypatch) 
         "bucharest_day": "2026-09-05",
     }
     monkeypatch.setattr("romanian_news.catalog.analysis_inputs.catalog_query", lambda *_: [row])
-    monkeypatch.setattr(
-        "romanian_news.analysis.embeddings.read_verified_r2_object",
-        lambda *_: (_ for _ in ()).throw(AssertionError("archived payload was parsed")),
-    )
 
-    assert read_pending_embeddings() == ()
+    assert read_pending_embedding_references() == ()
 
 
 def test_pending_embeddings_select_production_v3_relevance(monkeypatch) -> None:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 from romanian_news import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, NewsModel, Sha256
@@ -40,40 +39,6 @@ class EmbeddingOutput(NewsModel):
     vector: tuple[float, ...]
     call: ModelCall
     content: bytes
-
-
-def read_pending_embeddings(
-    limit: int | None = None,
-    through_day: date | None = None,
-    *,
-    day: date | None = None,
-) -> tuple[EmbeddingInput, ...]:
-    """Read accepted relevance outputs that lack this embedding configuration."""
-    pending = read_pending_embedding_references(through_day, day=day)
-    if limit is not None:
-        pending = pending[:limit]
-    if not pending:
-        return ()
-    with ThreadPoolExecutor(max_workers=min(16, len(pending))) as executor:
-        contents = tuple(
-            executor.map(
-                lambda value: read_verified_r2_object(
-                    value.article.reference.r2_key,
-                    value.article.reference.content_digest,
-                ),
-                pending,
-            )
-        )
-    return tuple(
-        EmbeddingInput(
-            article=ArticleAnalysisInput(
-                reference=value.article.reference,
-                article=ExtractedArticle.model_validate_json(content, strict=True),
-            ),
-            relevance=value.relevance,
-        )
-        for value, content in zip(pending, contents, strict=True)
-    )
 
 
 def read_pending_embedding_references(

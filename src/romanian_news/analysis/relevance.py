@@ -4,7 +4,6 @@ import re
 import time
 import unicodedata
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Annotated, Literal
 
@@ -168,43 +167,6 @@ class RelevanceOutput(NewsModel):
     @property
     def accepted(self) -> bool:
         return relevance_is_accepted(self.decision, self.policy)
-
-
-def read_pending_relevance(
-    limit: int | None = None,
-    through_day: date | None = None,
-    *,
-    day: date | None = None,
-    request_id_for_article: Callable[[ArtifactReference], Sha256] | None = None,
-) -> tuple[ArticleAnalysisInput, ...]:
-    """Read current article versions that lack this relevance configuration."""
-    pending = read_pending_relevance_references(
-        through_day,
-        day=day,
-        request_id_for_article=request_id_for_article,
-    )
-    if limit is not None:
-        pending = pending[:limit]
-    references = tuple(value.reference for value in pending)
-    if not references:
-        return ()
-    with ThreadPoolExecutor(max_workers=min(16, len(references))) as executor:
-        contents = tuple(
-            executor.map(
-                lambda reference: read_verified_r2_object(
-                    reference.r2_key,
-                    reference.content_digest,
-                ),
-                references,
-            )
-        )
-    return tuple(
-        ArticleAnalysisInput(
-            reference=reference,
-            article=ExtractedArticle.model_validate_json(content, strict=True),
-        )
-        for reference, content in zip(references, contents, strict=True)
-    )
 
 
 def read_pending_relevance_references(
