@@ -1,7 +1,6 @@
 """OpenTelemetry setup and pure-ASGI HTTP request tracing."""
 
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from opentelemetry import propagate, trace
@@ -17,7 +16,6 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from romanian_news.config import BETTERSTACK_INGESTING_HOST, BETTERSTACK_SOURCE_TOKEN
 
 SERVICE = "romanian-news-pipeline"
-SERVER_SERVICE = "romanian-news-reader"
 TRACER = trace.get_tracer(SERVICE)
 DEFAULT_EXCLUDED_PATHS = frozenset({"/health", "/healthz", "/livez", "/readyz"})
 _telemetry_configured = False
@@ -95,29 +93,6 @@ def configure_telemetry(service_name: str = SERVICE) -> None:
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
     _telemetry_configured = True
-
-
-@contextmanager
-def span(name: str, **attributes: str | int | float | bool) -> Iterator[Span]:
-    """Create a trace span with scalar attributes safe to export."""
-    with TRACER.start_as_current_span(name) as current:
-        current.set_attributes(attributes)
-        try:
-            yield current
-        except Exception as error:
-            current.record_exception(error)
-            current.set_status(Status(StatusCode.ERROR, str(error)))
-            raise
-
-
-def event(name: str, **attributes: str | int | float | bool) -> None:
-    """Attach a structured event to the active pipeline span."""
-    trace.get_current_span().add_event(name, attributes)
-
-
-def fail(current: Span, description: str) -> None:
-    """Mark an expected terminal failure on a span that does not raise."""
-    current.set_status(Status(StatusCode.ERROR, description))
 
 
 def _set_request_attributes(current: Span, scope: Scope, method: str) -> None:

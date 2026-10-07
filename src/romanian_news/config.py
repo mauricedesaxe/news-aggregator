@@ -9,6 +9,10 @@ from psycopg.conninfo import make_conninfo
 load_dotenv()
 
 
+def _parse_optional_bool(value: str | None) -> bool:
+    return value is not None and value.strip().lower() in {"1", "true", "yes"}
+
+
 def _parse_postgres_dsn(value: str | None) -> str | None:
     if value is None or not value.strip():
         return None
@@ -36,9 +40,9 @@ BETTERSTACK_VIDEO_INCIDENT_WEBHOOK_URL: str | None = os.getenv(
 OPENROUTER_API_KEY: str | None = os.getenv("OPENROUTER_API_KEY")
 ARCHIVE_DAY_SPEND_LIMIT_USD = Decimal(os.getenv("ARCHIVE_DAY_SPEND_LIMIT_USD", "10"))
 TYPESAFE_API_KEY: str | None = os.getenv("TYPESAFE_API_KEY")
-NEWS_JEV_RELEVANCE_SHADOW_ENABLED: bool = os.getenv(
-    "NEWS_JEV_RELEVANCE_SHADOW_ENABLED", ""
-).strip().lower() in ("1", "true", "yes")
+NEWS_JEV_RELEVANCE_SHADOW_ENABLED: bool = _parse_optional_bool(
+    os.getenv("NEWS_JEV_RELEVANCE_SHADOW_ENABLED")
+)
 GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
 FAL_KEY: str | None = os.getenv("FAL_KEY") or os.getenv("FAL_AI_API_KEY")
 NEWS_H3_REFERENCE_PACK_ID: str | None = os.getenv("NEWS_H3_REFERENCE_PACK_ID")
@@ -67,9 +71,5 @@ SESSION_SECRET: str | None = os.getenv("SESSION_SECRET")
 # which derives from the spoofable X-Forwarded-Proto behind the proxy. Set
 # COOKIE_SECURE=true in the Railway dashboard; leave unset locally so the
 # cookie still works over plain http in development.
-COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
-TRUST_PROXY_HEADERS: bool = os.getenv("TRUST_PROXY_HEADERS", "").strip().lower() in (
-    "1",
-    "true",
-    "yes",
-)
+COOKIE_SECURE: bool = _parse_optional_bool(os.getenv("COOKIE_SECURE"))
+TRUST_PROXY_HEADERS: bool = _parse_optional_bool(os.getenv("TRUST_PROXY_HEADERS"))
