@@ -312,25 +312,6 @@ def sentiment_request_id(group: NewsGroup) -> Sha256:
     )
 
 
-def validate_sentiment_evidence(
-    sentiment: GroupSentiment,
-    value: GroupAnalysisInput,
-) -> None:
-    articles = {reference.version_id: article for reference, article in value.articles}
-    if len(sentiment.articles) != len(articles) or {
-        item.article_version_id for item in sentiment.articles
-    } != set(articles):
-        raise ValueError("Group sentiment must include every exact article input once")
-    for item in sentiment.articles:
-        article = articles[item.article_version_id]
-        evidence = _normalize_quote(item.evidence_quote)
-        if not evidence or evidence not in _normalize_quote(f"{article.title}\n{article.body}"):
-            raise ValueError(
-                f"Article sentiment evidence is not present in {item.article_version_id}: "
-                f"{item.evidence_quote}"
-            )
-
-
 def _normalize_quote(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold().translate(_ROMANIAN_COMMA_VARIANTS)
     return " ".join(re.findall(r"\w+", normalized))
