@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import time
 from collections.abc import Mapping, Sequence
@@ -23,6 +22,8 @@ from romanian_news.analysis.jev_relevance import (
     JevNoulResponse,
 )
 from romanian_news.config import TYPESAFE_API_KEY
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 
 MODEL = "jev-1.13.0"
 PROTOCOL_CASE_CHARACTERS = {
@@ -255,14 +256,6 @@ def _safe_response_body(response: requests.Response) -> object:
         return cast(object, response.json())
     except requests.exceptions.JSONDecodeError:
         return response.text[:2000]
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def _mapping(value: object, label: str) -> Mapping[str, object]:
