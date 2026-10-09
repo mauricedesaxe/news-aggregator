@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 from collections import defaultdict
@@ -12,6 +11,7 @@ from typing import TypedDict, cast
 
 from romanian_news.binary_benchmark import BinaryBenchmarkEvaluationResult
 from romanian_news.derived_binary_benchmark import load_v11_derived_binary_workload
+from romanian_news.identity import sha256 as _sha256
 
 JEV_TARGET_ID = "typesafe-jev"
 UTILIZATION_THRESHOLDS = (50, 75, 90, 100)
@@ -238,10 +238,6 @@ def write_reports(report: dict[str, object], output_json: Path, output_markdown:
         )
     )
     output_markdown.write_text("\n".join(lines))
-
-
-def _sha256(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

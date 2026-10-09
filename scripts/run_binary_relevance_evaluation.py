@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -48,6 +46,8 @@ from romanian_news.evaluation import (
     NewsEvaluationPin,
     RelevanceEvaluationSpec,
 )
+from romanian_news.identity import canonical_json as _canonical_json
+from romanian_news.identity import sha256 as _sha256
 
 TARGETS = REGISTERED_BINARY_TARGETS
 ExecutionItem = BinaryExecutionItem
@@ -379,14 +379,6 @@ def _positive_int(value: str) -> int:
     if parsed <= 0:
         raise argparse.ArgumentTypeError("value must be greater than zero")
     return parsed
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-
-
-def _sha256(content: bytes) -> Sha256:
-    return hashlib.sha256(content).hexdigest()
 
 
 if __name__ == "__main__":
