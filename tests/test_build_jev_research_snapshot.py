@@ -2,23 +2,19 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 import re
-import sys
 from pathlib import Path
+from typing import Any, cast
+
+from scripts import build_jev_research_snapshot as builder
 
 ROOT = Path(__file__).parents[1]
 SCRIPT_PATH = ROOT / "scripts/build_jev_research_snapshot.py"
-SPEC = importlib.util.spec_from_file_location("build_jev_research_snapshot", SCRIPT_PATH)
-assert SPEC is not None and SPEC.loader is not None
-builder = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = builder
-SPEC.loader.exec_module(builder)
 
 
 def test_snapshot_preserves_cross_product_gate_decisions() -> None:
-    snapshot = builder.build_snapshot()
+    snapshot = cast(dict[str, Any], builder.build_snapshot())
     products = {item["product"]: item for item in snapshot["product_relevance"]}
     news_jev = next(
         item for item in products["news"]["targets"] if item["target_id"] == "typesafe-jev"
@@ -33,7 +29,7 @@ def test_snapshot_preserves_cross_product_gate_decisions() -> None:
 
 
 def test_snapshot_preserves_aspect_context_and_sentiment_limits() -> None:
-    snapshot = builder.build_snapshot()
+    snapshot = cast(dict[str, Any], builder.build_snapshot())
     aspects = {item["concern"]: item for item in snapshot["news_aspects"]}
     roles = {item["role"]: item for item in snapshot["context_policy"]["roles"]}
 
@@ -60,7 +56,7 @@ def test_snapshot_output_equals_the_registered_artifact() -> None:
 
 
 def test_snapshot_preserves_source_provenance() -> None:
-    sources = builder.build_snapshot()["sources"]
+    sources = cast(dict[str, Any], builder.build_snapshot())["sources"]
     paths = [item["path"] for item in sources]
 
     assert len(paths) == len(set(paths))
@@ -72,7 +68,7 @@ def test_snapshot_preserves_source_provenance() -> None:
 
 
 def test_reports_are_deterministic_and_exclude_sensitive_text(tmp_path: Path) -> None:
-    snapshot = builder.build_snapshot()
+    snapshot = cast(dict[str, Any], builder.build_snapshot())
     json_path = tmp_path / "snapshot.json"
     markdown_path = tmp_path / "snapshot.md"
 

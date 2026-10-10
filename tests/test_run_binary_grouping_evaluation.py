@@ -1,18 +1,10 @@
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
 
 from romanian_news.binary_grouping_evaluation import BinaryGroupingEvaluationResult
 from romanian_news.tests.test_binary_grouping_evaluation import _source
-
-_SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "run_binary_grouping_evaluation.py"
-_SPEC = importlib.util.spec_from_file_location("run_binary_grouping_evaluation", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-runner = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = runner
-_SPEC.loader.exec_module(runner)
+from scripts import run_binary_grouping_evaluation as runner
 
 
 def test_dry_run_writes_complete_strict_grouping_matrix(tmp_path: Path) -> None:

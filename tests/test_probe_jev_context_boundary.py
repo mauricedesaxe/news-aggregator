@@ -1,20 +1,19 @@
 # pyright: reportAny=false
 from __future__ import annotations
 
-import importlib.util
 import json
 from pathlib import Path
+from typing import Any, cast
+
+from scripts import probe_jev_context_boundary as probe
 
 ROOT = Path(__file__).parents[1]
-SCRIPT_PATH = ROOT / "scripts/probe_jev_context_boundary.py"
-SPEC = importlib.util.spec_from_file_location("probe_jev_context_boundary", SCRIPT_PATH)
-assert SPEC is not None and SPEC.loader is not None
-probe = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(probe)
 
 
 def test_registered_states_have_exact_lengths_digests_and_final_markers() -> None:
-    protocols = tuple(probe.build_protocol(version) for version in ("v1", "v2", "v3"))
+    protocols = tuple(
+        cast(dict[str, Any], probe.build_protocol(version)) for version in ("v1", "v2", "v3")
+    )
 
     for protocol in protocols:
         for case in protocol["cases"]:
@@ -25,7 +24,7 @@ def test_registered_states_have_exact_lengths_digests_and_final_markers() -> Non
 
 
 def test_protocol_has_separate_bounded_execution_policy() -> None:
-    protocol = probe.build_protocol()
+    protocol = cast(dict[str, Any], probe.build_protocol())
 
     assert protocol["execution"] == {
         "maximum_provider_requests": 3,
@@ -38,7 +37,7 @@ def test_protocol_has_separate_bounded_execution_policy() -> None:
 
 
 def test_follow_up_protocol_is_bound_to_first_result() -> None:
-    protocol = probe.build_protocol("v2")
+    protocol = cast(dict[str, Any], probe.build_protocol("v2"))
 
     assert [case["state_characters"] for case in protocol["cases"]] == [
         80_000,
@@ -47,7 +46,7 @@ def test_follow_up_protocol_is_bound_to_first_result() -> None:
     ]
     assert protocol["prior_evidence"]["sha256"] == probe.V1_RESULT_SHA256
 
-    final_protocol = probe.build_protocol("v3")
+    final_protocol = cast(dict[str, Any], probe.build_protocol("v3"))
     assert [case["state_characters"] for case in final_protocol["cases"]] == [
         40_000,
         60_000,

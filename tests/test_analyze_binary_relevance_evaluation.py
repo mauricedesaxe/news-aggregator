@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -25,13 +23,7 @@ from romanian_news.binary_relevance_evaluation import (
     BinaryRelevanceTarget,
     binary_relevance_metrics,
 )
-
-_SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "analyze_binary_relevance_evaluation.py"
-_SPEC = importlib.util.spec_from_file_location("analyze_binary_relevance_evaluation", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-analyzer = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = analyzer
-_SPEC.loader.exec_module(analyzer)
+from scripts import analyze_binary_relevance_evaluation as analyzer
 
 
 def test_exact_statistics_match_known_values() -> None:

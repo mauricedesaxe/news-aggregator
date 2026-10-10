@@ -2,23 +2,17 @@
 from __future__ import annotations
 
 import gzip
-import importlib.util
 import json
-import sys
 from pathlib import Path
+from typing import Any, cast
 
 from romanian_news.analysis.groups.models import GroupSummary
+from scripts import inventory_jev_production_context as inventory
 
 ROOT = Path(__file__).parents[1]
-SCRIPT_PATH = ROOT / "scripts/inventory_jev_production_context.py"
-SPEC = importlib.util.spec_from_file_location("inventory_jev_production_context", SCRIPT_PATH)
-assert SPEC is not None and SPEC.loader is not None
-inventory = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = inventory
-SPEC.loader.exec_module(inventory)
 
 
-def _request(day: str, characters: int, suffix: str) -> dict[str, object]:
+def _request(day: str, characters: int, suffix: str) -> inventory.RequestRecord:
     return {
         "concern": "grouping",
         "day": day,
@@ -58,7 +52,7 @@ def test_calibration_uses_maximum_observed_ratio_and_ceil() -> None:
 
 
 def test_aggregation_reports_percentiles_days_and_both_threshold_kinds() -> None:
-    calibration = {
+    calibration: inventory.Calibration = {
         "method": "test",
         "source_request_count": 1,
         "max_observed_input_tokens": 1,
@@ -71,12 +65,15 @@ def test_aggregation_reports_percentiles_days_and_both_threshold_kinds() -> None
         _request("2026-09-02", 100, "3"),
     ]
 
-    result = inventory.summarize_concern(
-        "grouping",
-        requests,
-        calibration,
-        approximate_character_limit=100,
-        token_limit=50,
+    result = cast(
+        dict[str, Any],
+        inventory.summarize_concern(
+            "grouping",
+            requests,
+            calibration,
+            approximate_character_limit=100,
+            token_limit=50,
+        ),
     )
 
     assert result["state_character_statistics"] == {

@@ -1,23 +1,21 @@
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
+from typing import Any, cast
+
+from scripts import analyze_jev_context_headroom as analyzer
 
 ROOT = Path(__file__).parents[1]
-SCRIPT_PATH = ROOT / "scripts/analyze_jev_context_headroom.py"
-SPEC = importlib.util.spec_from_file_location("analyze_jev_context_headroom", SCRIPT_PATH)
-assert SPEC is not None and SPEC.loader is not None
-analyzer = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = analyzer
-SPEC.loader.exec_module(analyzer)
 
 
 def test_analyzer_reports_provider_counted_headroom_for_all_concerns(tmp_path: Path) -> None:
     artifact_directory = ROOT / "artifacts/jev-aspect-v1"
     artifacts = tuple(sorted(artifact_directory.glob("news-*-live-v1.json")))
 
-    report = analyzer.analyze(ROOT / "src/romanian_news/jev_context_limits.json", artifacts)
+    report = cast(
+        dict[str, Any],
+        analyzer.analyze(ROOT / "src/romanian_news/jev_context_limits.json", artifacts),
+    )
     by_concern = {item["concern"]: item for item in report["concerns"]}
 
     assert set(by_concern) == {"grouping", "ranking", "tier", "confidence", "daily_theme"}
