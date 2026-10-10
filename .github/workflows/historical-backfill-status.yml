@@ -8,7 +8,6 @@ permissions:
 
 jobs:
   inspect:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     environment: production
     timeout-minutes: 5
@@ -24,25 +23,8 @@ jobs:
           import urllib.request
           from datetime import datetime, timezone
 
-          query = """
-          query RecentRuns($filter: RunsFilter!) {
-            runsOrError(filter: $filter, limit: 3) {
-              __typename
-              ... on Runs { results { runId status startTime endTime } }
-              ... on PythonError { message }
-            }
-          }
-          """
-          for job in (
-              "retrospective_analysis_pilot",
-              "weekly_status_refresh",
-              "archive_article_capture_batch",
-              "archive_page_backfill_job",
-          ):
-              body = json.dumps({
-                  "query": query,
-                  "variables": {"filter": {"pipelineName": job}},
-              }).encode()
+          def execute(query, variables=None):
+              body = json.dumps({"query": query, "variables": variables or {}}).encode()
               request = urllib.request.Request(
                   os.environ["DAGSTER_CLOUD_GRAPHQL_URL"],
                   data=body,
@@ -54,27 +36,121 @@ jobs:
               with urllib.request.urlopen(request, timeout=30) as response:
                   result = json.load(response)
               if result.get("errors"):
-                  raise RuntimeError(f"Dagster run query failed for {job}: {result['errors']}")
-              runs = result["data"]["runsOrError"]
+                  raise RuntimeError(json.dumps(result["errors"]))
+              return result["data"]
+
+          query = """
+          query RecentRuns($filter: RunsFilter!) {
+            runsOrError(filter: $filter, limit: 100) {
+              __typename
+              ... on Runs {
+                results {
+                  runId jobName status startTime endTime
+                  tags { key value }
+                  assetSelection { path }
+                }
+              }
+              ... on PythonError { message }
+            }
+          }
+          """
+          active = execute(query, {"filter": {
+              "statuses": ["QUEUED", "NOT_STARTED", "STARTING", "STARTED", "CANCELING"]
+          }})["runsOrError"]
+          print("ACTIVE_RUNS", json.dumps(active))
+          for job in ("__ASSET_JOB", "morning_report_check", "historical_daily_recovery_job"):
+              runs = execute(query, {"filter": {"pipelineName": job}})["runsOrError"]
               if runs["__typename"] != "Runs":
                   raise RuntimeError(f"Dagster run query failed for {job}: {runs}")
-              print(f"{job}:")
-              for run in runs["results"]:
-                  started = run["startTime"]
-                  ended = run["endTime"]
-                  start_text = (
-                      datetime.fromtimestamp(started, timezone.utc).isoformat()
-                      if started
-                      else "pending"
-                  )
-                  end_text = (
-                      datetime.fromtimestamp(ended, timezone.utc).isoformat()
-                      if ended
-                      else "pending"
-                  )
-                  duration = round(ended - started, 1) if started and ended else None
-                  print(
-                      f"  {run['runId']} {run['status']} "
-                      f"start={start_text} end={end_text} seconds={duration}"
-                  )
+              print("JOB_RUNS", job, json.dumps(runs["results"]))
+              failures = [run for run in runs["results"] if run["status"] == "FAILURE"][:3]
+              for run in failures:
+                  logs = execute("""
+                  query RunErrors($runId: ID!) {
+                    logsForRun(runId: $runId) {
+                      __typename
+                      ... on EventConnection {
+                        events {
+                          __typename
+                          ... on MessageEvent { message timestamp }
+                          ... on ExecutionStepFailureEvent {
+                            error { message stack causes { message stack } }
+                          }
+                          ... on RunFailureEvent {
+                            error { message stack causes { message stack } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                  """, {"runId": run["runId"]})["logsForRun"]
+                  events = logs.get("events", [])
+                  failure_events = [
+                      event for event in events
+                      if event["__typename"] in {"ExecutionStepFailureEvent", "RunFailureEvent"}
+                  ]
+                  print("RUN_ERRORS", run["runId"], json.dumps(failure_events or events[-8:]))
+
+          sensors = execute("""
+          query SensorState {
+            repositoriesOrError {
+              __typename
+              ... on RepositoryConnection {
+                nodes {
+                  name
+                  location { name }
+                  sensors {
+                    name
+                    sensorState {
+                      status
+                      ticks(limit: 3) {
+                        timestamp status
+                        error { message stack }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          """)
+          print("SENSOR_STATE", json.dumps(sensors))
+
+          fields = execute("{ __type(name: \"RunsFilter\") { inputFields { name } } }")
+          field_names = {field["name"] for field in fields["__type"]["inputFields"]}
+          if not {"createdAfter", "createdBefore"} <= field_names:
+              raise RuntimeError(f"Dagster time filters unavailable: {field_names}")
+          windows = (
+              ("outage_onset", "2026-10-08T21:20:00+00:00", "2026-10-08T22:10:00+00:00"),
+              ("october_10", "2026-10-10T04:00:00+00:00", "2026-10-10T06:00:00+00:00"),
+          )
+          for label, start, end in windows:
+              runs = execute(query, {"filter": {
+                  "pipelineName": "__ASSET_JOB", "statuses": ["FAILURE"],
+                  "createdAfter": datetime.fromisoformat(start).timestamp(),
+                  "createdBefore": datetime.fromisoformat(end).timestamp(),
+              }})["runsOrError"]
+              if runs["__typename"] != "Runs":
+                  raise RuntimeError(f"Dagster window query failed: {runs}")
+              for run in reversed(runs["results"]):
+                  print("WINDOW_RUN", label, json.dumps(run))
+                  logs = execute("""
+                  query FailureCauses($runId: ID!) {
+                    logsForRun(runId: $runId) {
+                      __typename
+                      ... on EventConnection {
+                        events {
+                          __typename
+                          ... on MessageEvent { message timestamp }
+                          ... on ExecutionStepFailureEvent {
+                            stepKey error { message causes { message } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                  """, {"runId": run["runId"]})["logsForRun"]
+                  for event in logs.get("events", []):
+                      if event["__typename"] == "ExecutionStepFailureEvent":
+                          print("WINDOW_FAILURE", label, run["runId"], json.dumps(event))
           PY
