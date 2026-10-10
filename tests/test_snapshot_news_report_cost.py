@@ -1,17 +1,12 @@
 # pyright: reportAny=false
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
+from typing import Any, cast
+
+from scripts import snapshot_news_report_cost as snapshot
 
 ROOT = Path(__file__).parents[1]
-SCRIPT_PATH = ROOT / "scripts/snapshot_news_report_cost.py"
-SPEC = importlib.util.spec_from_file_location("snapshot_news_report_cost", SCRIPT_PATH)
-assert SPEC is not None and SPEC.loader is not None
-snapshot = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = snapshot
-SPEC.loader.exec_module(snapshot)
 
 
 def test_aggregation_separates_attributed_and_unique_cost() -> None:
@@ -26,7 +21,7 @@ def test_aggregation_separates_attributed_and_unique_cost() -> None:
         _row("b" * 64, "e" * 64, "news.summarize_group", "model-a", 80, 20, "0.20"),
     )
 
-    result = snapshot.aggregate(reports, rows)
+    result = cast(dict[str, Any], snapshot.aggregate(reports, rows))
 
     assert [item["cost_usd"] for item in result["reports"]] == [
         "0.110000000",
@@ -53,7 +48,7 @@ def test_aggregation_reports_model_accounting_gaps() -> None:
         },
     )
 
-    result = snapshot.aggregate(reports, rows)
+    result = cast(dict[str, Any], snapshot.aggregate(reports, rows))
 
     assert result["reports"][0]["accounting_gaps"] == [
         {

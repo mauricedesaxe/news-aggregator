@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import importlib.util
-import sys
 from collections import Counter
+from collections.abc import Sequence
 from decimal import Decimal
 from pathlib import Path
 
@@ -20,7 +19,10 @@ from romanian_news.binary_benchmark import (
     BinaryBenchmarkCase,
     BinaryBenchmarkEvaluationResult,
     BinaryEvaluator,
+    BinaryExecutionIdentity,
     BinaryJudgmentCase,
+    BinaryJudgmentResult,
+    BinarySpendLedger,
     BinaryTarget,
     TargetId,
 )
@@ -53,13 +55,7 @@ from romanian_news.tests.test_binary_tier_evaluation import (
 from romanian_news.tests.test_binary_tier_evaluation import (
     _source as tier_source,
 )
-
-_SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "run_derived_binary_benchmark.py"
-_SPEC = importlib.util.spec_from_file_location("run_derived_binary_benchmark", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-runner = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = runner
-_SPEC.loader.exec_module(runner)
+from scripts import run_derived_binary_benchmark as runner
 
 
 def test_dispatch_covers_every_protocol_concern() -> None:
@@ -152,9 +148,14 @@ def test_interruption_resume_reuses_terminal_judgments(
     original_write = runner.write_binary_checkpoint
     checkpoints = 0
 
-    def interrupting_write(*args: object, **kwargs: object) -> None:
+    def interrupting_write(
+        path: Path,
+        identity: BinaryExecutionIdentity,
+        spend: BinarySpendLedger,
+        cases: Sequence[BinaryJudgmentResult],
+    ) -> None:
         nonlocal checkpoints
-        original_write(*args, **kwargs)
+        original_write(path, identity, spend, cases)
         checkpoints += 1
         if checkpoints == 2:
             raise KeyboardInterrupt

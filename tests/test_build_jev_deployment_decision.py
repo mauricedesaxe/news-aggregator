@@ -2,22 +2,18 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
-import sys
 from pathlib import Path
+from typing import Any, cast
+
+from scripts import build_jev_deployment_decision as builder
 
 ROOT = Path(__file__).parents[1]
 SCRIPT_PATH = ROOT / "scripts/build_jev_deployment_decision.py"
-SPEC = importlib.util.spec_from_file_location("build_jev_deployment_decision", SCRIPT_PATH)
-assert SPEC is not None and SPEC.loader is not None
-builder = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = builder
-SPEC.loader.exec_module(builder)
 
 
 def test_relevance_rollout_preserves_issue_9_safety_contract() -> None:
-    decision = builder.build_decision()
+    decision = cast(dict[str, Any], builder.build_decision())
     relevance = next(
         item
         for item in decision["dispositions"]
@@ -39,7 +35,7 @@ def test_decision_output_equals_the_registered_artifact() -> None:
 
 
 def test_decision_is_deterministic_and_contains_no_sensitive_text(tmp_path: Path) -> None:
-    decision = builder.build_decision()
+    decision = cast(dict[str, Any], builder.build_decision())
     json_path = tmp_path / "decision.json"
     markdown_path = tmp_path / "decision.md"
 

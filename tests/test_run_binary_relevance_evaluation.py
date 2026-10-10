@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
-import sys
 from collections import Counter
 from decimal import Decimal
 from pathlib import Path
@@ -16,6 +14,7 @@ from romanian_news.analysis.binary_evaluation import (
     RELEVANCE_BINARY_QUESTION,
     BinaryProbabilityObservation,
 )
+from romanian_news.binary_benchmark import BinaryEvaluator, TargetId
 from romanian_news.binary_relevance_evaluation import (
     OPENROUTER_GEMINI_25_TARGET,
     OPENROUTER_GEMINI_38_TARGET,
@@ -26,13 +25,7 @@ from romanian_news.binary_relevance_evaluation import (
 )
 from romanian_news.tests import evaluation_factories
 from romanian_news.tests.test_binary_relevance_evaluation import _source
-
-_SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "run_binary_relevance_evaluation.py"
-_SPEC = importlib.util.spec_from_file_location("run_binary_relevance_evaluation", _SCRIPT_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-runner = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = runner
-_SPEC.loader.exec_module(runner)
+from scripts import run_binary_relevance_evaluation as runner
 
 
 class _RegisteredHeldOutSource(TypedDict):
@@ -324,8 +317,8 @@ def _install_articles(monkeypatch: pytest.MonkeyPatch, source) -> None:
 def _counting_evaluators(
     calls: Counter[tuple[str, str, str]],
     *,
-    fail_target: str | None = None,
-):
+    fail_target: TargetId | None = None,
+) -> dict[TargetId, BinaryEvaluator]:
     targets = (
         OPENROUTER_GEMINI_25_TARGET,
         OPENROUTER_GEMINI_38_TARGET,
