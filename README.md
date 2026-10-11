@@ -1,5 +1,9 @@
 # Romanian News Aggregator
 
+The Railway news services were retired on 2026-10-11. Production workflows are
+disabled. This repository retains the code for local development and historical reference.
+Restoring hosted services requires a new explicit request from the owner.
+
 A research-driven Romanian news pipeline and reader. The project acquires
 registered feeds and selected YouTube sources, extracts articles, evaluates
 relevance, groups related reporting, and publishes daily and weekly reports.
