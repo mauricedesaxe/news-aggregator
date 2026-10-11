@@ -196,9 +196,6 @@ class SecurityHeadersMiddleware:
 
 
 _HandlerT = TypeVar("_HandlerT", bound=Callable[..., object])
-
-
-_HandlerT = TypeVar("_HandlerT", bound=Callable[..., object])
 _HandlerDecorator = Callable[[_HandlerT], _HandlerT]
 
 
@@ -317,11 +314,11 @@ def _register_base_routes(app: FastHTML, settings: ReaderSettings, domain: Reade
 def _register_daily_routes(app: FastHTML, settings: ReaderSettings, domain: ReaderDomain) -> None:
     @_route(app, "get", "/")
     def home(request: Request) -> tuple[Any, ...] | FtResponse:
-        return _load_home(request, domain, settings.public_media_origin)
+        return _load_current_day(request, domain, settings.public_media_origin)
 
     @_route(app, "get", "/today")
     def today(request: Request) -> tuple[Any, ...] | FtResponse:
-        return _load_today(request, domain, settings.public_media_origin)
+        return _load_current_day(request, domain, settings.public_media_origin)
 
     @_route(app, "get", "/reports")
     def report_archive(request: Request) -> tuple[Any, ...] | FtResponse:
@@ -518,18 +515,6 @@ def _login_client_id(request: Request, trust_proxy_headers: bool) -> str:
             except ValueError:
                 pass
     return request.client.host if request.client else "unknown"
-
-
-def _load_home(
-    request: Request, domain: ReaderDomain, public_media_origin: str | None
-) -> tuple[Any, ...] | FtResponse:
-    return _load_current_day(request, domain, public_media_origin)
-
-
-def _load_today(
-    request: Request, domain: ReaderDomain, public_media_origin: str | None
-) -> tuple[Any, ...] | FtResponse:
-    return _load_current_day(request, domain, public_media_origin)
 
 
 def _load_current_day(

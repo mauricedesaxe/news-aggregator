@@ -1,0 +1,7 @@
+ts	phase	decision	why	evidence	result
+2026-10-11T02:09:36Z	frame	limited the sweep to one independent behavior-preserving change	eighteen existing PRs already own most broad refactor targets	GitHub PRs #181-#216; .beads/interactions.jsonl	candidate search constrained
+2026-10-11T02:09:36Z	intent	kept dormant video, weekly status, Jev shadowing, migrations, and active PR files unchanged	recorded decisions protect these areas from speculative cleanup	GitHub issues #9, #102, #107	constraints applied
+2026-10-11T02:09:36Z	selection	removed the home and today route pass-throughs and one duplicate type declaration	the wrappers forwarded every argument unchanged and had no independent policy	src/romanian_news/reader/app.py; tests/reader/test_app.py	baseline 98 tests passed
+2026-10-11T02:12:35Z	correction	superseded the intent row's incomplete evidence pointer	issue #11 protects migrations and the open PR file list proves production-file independence	GitHub issue #11; GitHub PRs #181-#216	constraints confirmed
+2026-10-11T02:12:35Z	verification	reran the route suite and all local CI gates after the deletion	behavior needed direct post-change proof	tests/reader/test_app.py; .github/workflows/ci.yml	98 focused and 1281 full tests passed, 44 service-gated tests skipped; static, Dagster, and build gates passed
+2026-10-11T02:12:35Z	review	kept the change after independent code and audit review	no implementation defect or production-file conflict was found	git diff; .audit/refactor-sweep-2026-10-11.tsv	code review passed; audit evidence corrected
