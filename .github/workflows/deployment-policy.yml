@@ -1,0 +1,19 @@
+name: Deployment policy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  retired-railway:
+    name: Keep Railway deployment retired
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - run: test ! -e railway.toml && test ! -e railway.json
