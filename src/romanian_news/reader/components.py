@@ -323,14 +323,6 @@ def _verdict_radio(value: str, label: str) -> FT:
     )
 
 
-def _reason_checkbox(value: str, label: str) -> FT:
-    return Label(
-        Input(type="checkbox", name="flag_reasons", value=value),
-        label,
-        cls="reason-option",
-    )
-
-
 def _research_flag_saved_summary(event: NewsFeedbackEvent) -> str | None:
     if event.rating not in ("positive", "negative"):
         return event.note
