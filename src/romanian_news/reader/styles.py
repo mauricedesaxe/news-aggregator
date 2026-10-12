@@ -285,9 +285,8 @@ h3 { font-size: 1.2rem; line-height: 1.25; }
 .verdict-option:hover { background: var(--acid); color: var(--shadow); transform: translate(-2px, -2px); }
 .verdict-option:has(input:checked) { background: var(--ink); box-shadow: 4px 4px 0 var(--acid); color: var(--paper); }
 .verdict-option:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 3px; }
-.verdict-option input, .reason-option input { accent-color: var(--accent); }
+.verdict-option input { accent-color: var(--accent); }
 .verdict-option input:checked { accent-color: var(--acid); }
-.reason-option { align-items: center; display: flex; gap: .5rem; min-height: 44px; padding: .3rem 0; }
 .research-flag textarea { margin: .6rem 0; }
 .rating-actions { display: grid; gap: .65rem; grid-template-columns: repeat(3, 1fr); }
 .rating-actions button, .research-flag button { border: 2px solid var(--ink); cursor: pointer; font-family: var(--font-mono); font-size: .72rem; font-weight: 800; letter-spacing: .04em; min-height: 44px; padding: .65rem 1rem; text-transform: uppercase; }

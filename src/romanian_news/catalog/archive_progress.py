@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from urllib.parse import parse_qs, urlsplit
 
+from romanian_news.archive.campaign import ARCHIVE_OUTLETS
 from romanian_news.catalog_transport import catalog_query
 from romanian_news.daily import bucharest_day_window
 
@@ -46,7 +47,7 @@ def list_archive_day_evidence(start: date, end: date) -> tuple[ArchiveDayEvidenc
             SELECT DISTINCT ON (outlet_id, canonical_url)
                    outlet_id, canonical_url, status, published_at
             FROM news_archive_page_checks
-            WHERE outlet_id IN ('hotnews', 'digi24')
+            WHERE outlet_id = ANY(%s)
             ORDER BY outlet_id, canonical_url, fetched_at DESC, id DESC
         ), evidence AS (
             SELECT (published_at AT TIME ZONE 'Europe/Bucharest')::date AS day,
@@ -59,7 +60,7 @@ def list_archive_day_evidence(start: date, end: date) -> tuple[ArchiveDayEvidenc
             FROM news_archive_article_captures capture
             JOIN news_archive_sitemap_observations observation
               ON observation.id = capture.observation_id
-            WHERE observation.outlet_id IN ('hotnews', 'digi24')
+            WHERE observation.outlet_id = ANY(%s)
               AND capture.published_at >= %s AND capture.published_at < %s
         )
         SELECT day, outlet_id, kind, COUNT(DISTINCT url) AS article_count
@@ -68,7 +69,7 @@ def list_archive_day_evidence(start: date, end: date) -> tuple[ArchiveDayEvidenc
         ORDER BY day
         ) day_evidence
         """,
-        [start_at, end_at, start_at, end_at],
+        [list(ARCHIVE_OUTLETS), start_at, end_at, list(ARCHIVE_OUTLETS), start_at, end_at],
     )
     verified: dict[date, int] = defaultdict(int)
     captured: dict[date, int] = defaultdict(int)
@@ -128,10 +129,10 @@ def list_archive_discovery_months() -> tuple[ArchiveDiscoveryMonth, ...]:
         SELECT DISTINCT ON (outlet_id, sitemap_url)
                outlet_id, sitemap_url, entry_count
         FROM news_archive_sitemap_observations
-        WHERE outlet_id IN ('hotnews', 'digi24')
+        WHERE outlet_id = ANY(%s)
         ORDER BY outlet_id, sitemap_url, fetched_at DESC, id DESC
         """,
-        [],
+        [list(ARCHIVE_OUTLETS)],
     )
     totals: dict[tuple[str, date], list[int]] = defaultdict(lambda: [0, 0])
     for row in rows:
@@ -150,7 +151,7 @@ def list_archive_discovery_months() -> tuple[ArchiveDiscoveryMonth, ...]:
             SELECT DISTINCT ON (check_record.outlet_id, check_record.canonical_url)
                    check_record.observation_id, check_record.status
             FROM news_archive_page_checks check_record
-            WHERE check_record.outlet_id IN ('hotnews', 'digi24')
+            WHERE check_record.outlet_id = ANY(%s)
             ORDER BY check_record.outlet_id, check_record.canonical_url,
                      check_record.fetched_at DESC, check_record.id DESC
         ) latest
@@ -158,7 +159,7 @@ def list_archive_discovery_months() -> tuple[ArchiveDiscoveryMonth, ...]:
           ON observation.id = latest.observation_id
         GROUP BY observation.outlet_id, observation.sitemap_url, latest.status
         """,
-        [],
+        [list(ARCHIVE_OUTLETS)],
     )
     checks: dict[tuple[str, date], dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for row in checked_rows:
@@ -173,9 +174,9 @@ def list_archive_discovery_months() -> tuple[ArchiveDiscoveryMonth, ...]:
         FROM news_archive_article_captures capture
         JOIN news_archive_sitemap_observations observation
           ON observation.id = capture.observation_id
-        WHERE observation.outlet_id IN ('hotnews', 'digi24')
+        WHERE observation.outlet_id = ANY(%s)
         """,
-        [],
+        [list(ARCHIVE_OUTLETS)],
     )
     captured: dict[tuple[str, date], set[str]] = defaultdict(set)
     for row in captured_rows:
