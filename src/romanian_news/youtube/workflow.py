@@ -8,7 +8,6 @@ from romanian_news.analysis.tracing import flush_langfuse_traces
 from romanian_news.catalog.youtube import (
     claim_youtube_video,
     defer_youtube_video,
-    publish_next_approved_candidate,
     publish_youtube_candidate,
     publish_youtube_metadata,
     publish_youtube_poll,
@@ -39,7 +38,6 @@ from romanian_news.youtube.errors import (
 from romanian_news.youtube.models import (
     YOUTUBE_MODEL,
     YouTubePollStatus,
-    YouTubePublicationResult,
     YouTubeSource,
     YouTubeSourceResult,
     YouTubeVideoLease,
@@ -69,12 +67,6 @@ def materialize_youtube_source(
         )
     finally:
         flush_langfuse_traces()
-
-
-def materialize_next_approved_publication(
-    implementation_ref: str,
-) -> YouTubePublicationResult | None:
-    return publish_next_approved_candidate(implementation_ref)
 
 
 def _process_claimed_video(lease: YouTubeVideoLease, implementation_ref: str) -> Sha256:
