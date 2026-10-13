@@ -84,6 +84,7 @@ from romanian_news.catalog.subject_assessments import (
     read_daily_subject_assessment_reference,
 )
 from romanian_news.catalog.themes import publish_daily_themes, read_daily_theme_reference
+from romanian_news.catalog.youtube import publish_next_approved_candidate
 from romanian_news.catalog_transport import catalog_integrity_identity
 from romanian_news.current_report import build_and_publish_current_daily_report
 from romanian_news.daily import (
@@ -125,9 +126,6 @@ from romanian_news.youtube.models import (
     YOUTUBE_SOURCES,
     YouTubePublicationResult,
     YouTubeSourceResult,
-)
-from romanian_news.youtube.workflow import (
-    materialize_next_approved_publication as run_next_youtube_publication,
 )
 from romanian_news.youtube.workflow import (
     materialize_youtube_source as run_youtube_source,
@@ -345,7 +343,7 @@ def materialize_next_youtube_publication(
     implementation_ref: str,
 ) -> YouTubePublicationResult | None:
     ensure_news_catalog_schema()
-    return run_next_youtube_publication(implementation_ref)
+    return publish_next_approved_candidate(implementation_ref)
 
 
 def materialize_relevance(

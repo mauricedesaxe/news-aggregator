@@ -141,7 +141,7 @@ def execute(
     selected_evaluators = dict(
         evaluators
         if evaluators is not None
-        else _build_evaluators(TARGETS, dry_run=arguments.dry_run)
+        else build_binary_evaluators(TARGETS, dry_run=arguments.dry_run)
     )
     accumulated = dict(reusable)
     actual_spend = sum((case.cost_usd for case in reusable.values()), Decimal(0))
@@ -152,7 +152,7 @@ def execute(
 
     def checkpoint(result: BinaryGroupingCaseResult) -> None:
         accumulated[result.request_id] = result
-        _atomic_write(
+        atomic_write(
             arguments.output,
             BinaryGroupingCheckpoint(
                 identity_digest=identity,
@@ -183,15 +183,9 @@ def execute(
         spend=spend,
         dry_run=arguments.dry_run,
     )
-    _atomic_write(arguments.output, result.model_dump_json(indent=2).encode())
+    atomic_write(arguments.output, result.model_dump_json(indent=2).encode())
     _print_summary(result)
     return result
-
-
-def _build_evaluators(
-    targets: tuple[BinaryTarget, ...], *, dry_run: bool
-) -> dict[TargetId, BinaryEvaluator]:
-    return build_binary_evaluators(targets, dry_run=dry_run)
 
 
 def _load_reusable_cases(
@@ -266,10 +260,6 @@ def _identity_digest(
         execution_mode="dry_run" if dry_run else "live",
         execution_ref=execution_ref,
     )
-
-
-def _atomic_write(path: Path, content: bytes) -> None:
-    atomic_write(path, content)
 
 
 def _print_summary(result: BinaryGroupingEvaluationResult) -> None:
