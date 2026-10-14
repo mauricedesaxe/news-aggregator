@@ -1,10 +1,10 @@
 import sqlite3
 from contextlib import closing
-from pathlib import Path
 
 import pytest
 
 from romanian_news.analysis import feedback_sync
+from tests.sqlite_catalog import open_sqlite_catalog, sqlite_catalog_query
 
 MANIFEST_ID = "a" * 64
 REPORT_ID = "b" * 64
@@ -13,7 +13,6 @@ PROSE_OUTPUT_ID = "d" * 64
 ASSIGNMENT_ATTEMPT_ID = "e" * 64
 PROSE_ATTEMPT_ID = "f" * 64
 FEEDBACK_ID = "00000000-0000-4000-8000-000000000001"
-SCHEMA_PATH = Path(__file__).parents[4] / "tests" / "fixtures" / "sqlite_catalog.sql"
 
 
 class FakeLangfuseClient:
@@ -228,9 +227,7 @@ def test_without_api_key_returns_before_catalog_query(monkeypatch) -> None:
 
 
 def _database() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    connection.executescript(SCHEMA_PATH.read_text())
+    connection = open_sqlite_catalog()
     for position, version_id in enumerate(
         (MANIFEST_ID, REPORT_ID, ASSIGNMENT_OUTPUT_ID, PROSE_OUTPUT_ID)
     ):
@@ -276,9 +273,7 @@ def _patch_boundaries(
     monkeypatch.setattr(
         feedback_sync.feedback_catalog,
         "catalog_query",
-        lambda sql, params=None: [
-            dict(row) for row in connection.execute(sql.replace("%s", "?"), params or []).fetchall()
-        ],
+        sqlite_catalog_query(connection),
     )
 
     def batch(statements) -> None:

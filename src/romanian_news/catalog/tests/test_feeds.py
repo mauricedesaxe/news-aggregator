@@ -2,7 +2,6 @@ import hashlib
 import json
 import sqlite3
 from datetime import date, datetime
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -28,6 +27,7 @@ from romanian_news.feeds.models import (
     feed_entry_event,
 )
 from romanian_news.feeds.registry import feed_registry
+from tests.sqlite_catalog import open_sqlite_catalog, sqlite_catalog_query
 
 _CATALOG_DIGEST = "a" * 64
 _CATALOG_REGISTRY = "b" * 64
@@ -130,7 +130,7 @@ def test_feed_entry_reference_ranks_before_the_published_window_filter(
 ) -> None:
     monkeypatch.setattr(
         "romanian_news.catalog.feeds.catalog_query",
-        _sqlite_query(_feed_reference_database()),
+        sqlite_catalog_query(_feed_reference_database()),
     )
 
     references = read_cataloged_feed_entry_references(
@@ -143,10 +143,7 @@ def test_feed_entry_reference_ranks_before_the_published_window_filter(
 
 
 def _feed_reference_database() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    schema = Path(__file__).parents[4] / "tests" / "fixtures" / "sqlite_catalog.sql"
-    connection.executescript(schema.read_text())
+    connection = open_sqlite_catalog()
     connection.execute(
         "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, visibility, current_version_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (
@@ -205,15 +202,6 @@ def _feed_reference_database() -> sqlite3.Connection:
     )
     connection.commit()
     return connection
-
-
-def _sqlite_query(connection: sqlite3.Connection):
-    def query(sql, params=None):
-        return [
-            dict(row) for row in connection.execute(sql.replace("%s", "?"), params or []).fetchall()
-        ]
-
-    return query
 
 
 def test_feed_publication_normalizes_mixed_captures_before_cataloging(monkeypatch) -> None:

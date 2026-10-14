@@ -1,7 +1,6 @@
 import sqlite3
 from contextlib import closing
 from datetime import date
-from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
@@ -30,6 +29,7 @@ from romanian_news.reports import (
     ReportSubjectCitation,
 )
 from romanian_news.storage import ResearchObjectIntegrityError
+from tests.sqlite_catalog import open_sqlite_catalog, sqlite_catalog_query
 
 REPORT_V1 = "a" * 64
 REPORT_V2 = "b" * 64
@@ -365,10 +365,7 @@ def test_feedback_models_reject_invalid_commands() -> None:
 
 
 def _feedback_database() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    schema = Path(__file__).parents[3] / "tests" / "fixtures" / "sqlite_catalog.sql"
-    connection.executescript(schema.read_text())
+    connection = open_sqlite_catalog()
     connection.execute(
         "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, visibility, current_version_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (
@@ -407,16 +404,14 @@ def _feedback_database() -> sqlite3.Connection:
 
 
 def _patch_database(monkeypatch, connection: sqlite3.Connection) -> None:
-    def query(sql, params=None):
-        cursor = connection.execute(sql.replace("%s", "?"), params or [])
-        return [dict(row) for row in cursor.fetchall()]
-
     def batch(statements):
         with connection:
             for sql, params in statements:
                 connection.execute(sql.replace("%s", "?"), params)
 
-    monkeypatch.setattr("romanian_news.catalog.feedback.catalog_query", query)
+    monkeypatch.setattr(
+        "romanian_news.catalog.feedback.catalog_query", sqlite_catalog_query(connection)
+    )
     monkeypatch.setattr("romanian_news.catalog.feedback.catalog_batch", batch)
 
 
