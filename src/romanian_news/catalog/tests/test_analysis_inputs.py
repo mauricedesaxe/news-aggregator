@@ -1,8 +1,8 @@
 import sqlite3
 from datetime import date
-from pathlib import Path
 
 from romanian_news.catalog.analysis_inputs import read_current_article_analysis_references
+from tests.sqlite_catalog import open_sqlite_catalog, sqlite_catalog_query
 
 _DIGEST = "d" * 64
 
@@ -10,7 +10,7 @@ _DIGEST = "d" * 64
 def test_current_article_references_read_recent_report_days_first(monkeypatch) -> None:
     connection = _analysis_inputs_database()
     monkeypatch.setattr(
-        "romanian_news.catalog.analysis_inputs.catalog_query", _sqlite_query(connection)
+        "romanian_news.catalog.analysis_inputs.catalog_query", sqlite_catalog_query(connection)
     )
 
     references = read_current_article_analysis_references()
@@ -28,10 +28,7 @@ def test_current_article_references_read_recent_report_days_first(monkeypatch) -
 
 
 def _analysis_inputs_database() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    schema = Path(__file__).parents[4] / "tests" / "fixtures" / "sqlite_catalog.sql"
-    connection.executescript(schema.read_text())
+    connection = open_sqlite_catalog()
     connection.execute(
         "INSERT INTO artifacts (id, kind, title, authority_class, lifecycle_state, visibility, current_version_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (
@@ -106,12 +103,3 @@ def _analysis_inputs_database() -> sqlite3.Connection:
         )
     connection.commit()
     return connection
-
-
-def _sqlite_query(connection: sqlite3.Connection):
-    def query(sql, params=None):
-        return [
-            dict(row) for row in connection.execute(sql.replace("%s", "?"), params or []).fetchall()
-        ]
-
-    return query

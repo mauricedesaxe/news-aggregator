@@ -1,9 +1,9 @@
 import sqlite3
 from datetime import UTC, datetime
-from pathlib import Path
 
 from romanian_news.analysis.attempts import model_attempt_from_payload, record_model_attempt
 from romanian_news.analysis.tracing import ModelTraceReference
+from tests.sqlite_catalog import open_sqlite_catalog
 
 
 class _Response:
@@ -36,7 +36,7 @@ def test_embedding_attempt_records_null_completion_tokens_as_zero() -> None:
 
 
 def test_attempt_and_trace_link_persist_in_one_catalog_batch(monkeypatch) -> None:
-    connection = _attempts_database()
+    connection = open_sqlite_catalog()
     monkeypatch.setattr(
         "romanian_news.catalog.model_calls.catalog_batch", _sqlite_batch(connection)
     )
@@ -68,14 +68,6 @@ def test_attempt_and_trace_link_persist_in_one_catalog_batch(monkeypatch) -> Non
     assert links[0]["attempt_id"] == attempt.attempt_id
     assert links[0]["trace_id"] == "trace-1"
     assert links[0]["observation_id"] == "observation-1"
-
-
-def _attempts_database() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    schema = Path(__file__).parents[4] / "tests" / "fixtures" / "sqlite_catalog.sql"
-    connection.executescript(schema.read_text())
-    return connection
 
 
 def _sqlite_batch(connection: sqlite3.Connection):

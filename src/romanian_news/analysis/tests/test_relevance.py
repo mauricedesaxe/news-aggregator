@@ -1,7 +1,6 @@
 import json
 import sqlite3
 from datetime import UTC, date, datetime
-from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -23,6 +22,7 @@ from romanian_news.analysis.relevance import (
 from romanian_news.analysis.tracing import ProviderCallResult
 from romanian_news.articles.models import ExtractedArticle
 from romanian_news.artifacts import ArtifactReference
+from tests.sqlite_catalog import open_sqlite_catalog
 
 _A = "a" * 64
 _B = "b" * 64
@@ -81,7 +81,7 @@ def test_relevance_uses_exact_title_after_invalid_correction(monkeypatch) -> Non
             trace=None,
         ),
     )
-    connection = _relevance_database()
+    connection = open_sqlite_catalog()
     monkeypatch.setattr(
         "romanian_news.catalog.model_calls.catalog_batch", _sqlite_batch(connection)
     )
@@ -271,14 +271,6 @@ def test_policy_identity_changes_for_each_behavior_category() -> None:
         assert relevance_request_id(reference, variant) != relevance_request_id(
             reference, RELEVANCE_POLICY_V1
         )
-
-
-def _relevance_database() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    schema = Path(__file__).parents[4] / "tests" / "fixtures" / "sqlite_catalog.sql"
-    connection.executescript(schema.read_text())
-    return connection
 
 
 def _sqlite_batch(connection: sqlite3.Connection):
