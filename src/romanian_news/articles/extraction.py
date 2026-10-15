@@ -100,21 +100,11 @@ def extract_article(
     if len(title) + len(body) < 80:
         raise ValueError(f"Article content is too short: {entry.url}")
     canonical_author = _normalize_text(extracted_author) if extracted_author else None
-    material = _canonical_json(
-        {
-            "body": body,
-            "title": title,
-            "version": "article-material-v1",
-        }
-    )
-    extraction = _canonical_json(
-        {
-            "article_xpath": feed.article_xpath,
-            "body": body,
-            "body_source": body_source,
-            "extractor": "trafilatura-2.2.0",
-            "title": title,
-        }
+    material_digest, extraction_digest = _article_digests(
+        title=title,
+        body=body,
+        body_source=body_source,
+        article_xpath=feed.article_xpath,
     )
     return ExtractedArticle(
         article_id=article_id(feed.outlet_id, canonical_url),
@@ -128,8 +118,8 @@ def extract_article(
             entry.source_updated_at.astimezone(UTC) if entry.source_updated_at is not None else None
         ),
         bucharest_day=entry.published_at.astimezone(BUCHAREST).date(),
-        material_digest=_sha256(material),
-        extraction_digest=_sha256(extraction),
+        material_digest=material_digest,
+        extraction_digest=extraction_digest,
     )
 
 
@@ -156,15 +146,11 @@ def extract_archive_article(
     if len(title) + len(body) < 80:
         raise ValueError(f"Archive article content is too short: {final_url}")
     author = _normalize_text(parsed["author"]) if parsed.get("author") else None
-    material = _canonical_json({"body": body, "title": title, "version": "article-material-v1"})
-    extraction = _canonical_json(
-        {
-            "article_xpath": feed.article_xpath,
-            "body": body,
-            "body_source": body_source,
-            "extractor": "trafilatura-2.2.0",
-            "title": title,
-        }
+    material_digest, extraction_digest = _article_digests(
+        title=title,
+        body=body,
+        body_source=body_source,
+        article_xpath=feed.article_xpath,
     )
     published_at = metadata.published_at.astimezone(UTC)
     return ExtractedArticle(
@@ -177,9 +163,35 @@ def extract_archive_article(
         published_at=published_at,
         source_updated_at=metadata.modified_at.astimezone(UTC) if metadata.modified_at else None,
         bucharest_day=published_at.astimezone(BUCHAREST).date(),
-        material_digest=_sha256(material),
-        extraction_digest=_sha256(extraction),
+        material_digest=material_digest,
+        extraction_digest=extraction_digest,
     )
+
+
+def _article_digests(
+    *,
+    title: str,
+    body: str,
+    body_source: str,
+    article_xpath: str | None,
+) -> tuple[Sha256, Sha256]:
+    material = _canonical_json(
+        {
+            "body": body,
+            "title": title,
+            "version": "article-material-v1",
+        }
+    )
+    extraction = _canonical_json(
+        {
+            "article_xpath": article_xpath,
+            "body": body,
+            "body_source": body_source,
+            "extractor": "trafilatura-2.2.0",
+            "title": title,
+        }
+    )
+    return _sha256(material), _sha256(extraction)
 
 
 def _extract_page(html: bytes, feed: FeedSpec) -> tuple[dict[str, str] | None, str]:

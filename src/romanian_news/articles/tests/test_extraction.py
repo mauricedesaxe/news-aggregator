@@ -11,7 +11,7 @@ from romanian_news.feeds.registry import feed_registry
 _FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def test_material_fingerprint_ignores_metadata_only_changes() -> None:
+def test_article_digest_contract_ignores_metadata_only_changes() -> None:
     feed = next(value for value in feed_registry().feeds if value.id == "hotnews")
     first = extract_article(
         _entry("2026-08-31T09:00:00+00:00"),
@@ -26,6 +26,13 @@ def test_material_fingerprint_ignores_metadata_only_changes() -> None:
 
     assert first.article_id == second.article_id
     assert first.material_digest == second.material_digest
+    assert (
+        first.material_digest == "d5bfdf353ac3ec927391cba4f74994be67104911f7e693f49b738f5d22eba521"
+    )
+    assert (
+        first.extraction_digest
+        == "e667fb731815ad3fb667158c69b0e793c6dcde3b7492c7b68209e198f425edb0"
+    )
     assert first.source_updated_at != second.source_updated_at
 
 
@@ -128,6 +135,14 @@ def test_archive_extraction_uses_full_page_when_selected_fragment_has_no_text() 
 
     assert article.bucharest_day.isoformat() == "2025-09-27"
     assert "Paragraph 11" in article.body
+    assert (
+        article.material_digest
+        == "23271428579cb830eed4bcdbc60cc3fe12ff2c8453c2785c4e37e31a417aec48"
+    )
+    assert (
+        article.extraction_digest
+        == "0d39ac34d032c917571b7c73f183bd502f27ceaa9aab387b92f95ef01e78a592"
+    )
 
 
 def test_archive_extraction_rejects_missing_date_and_short_page() -> None:
