@@ -33,14 +33,14 @@ from romanian_news.video_digest.models import (
     planned_story_id,
     scheduled_slot_id,
 )
+from tests.contracts.video_digest_catalog_fixtures import (
+    record_active_artifact_versions,
+    sha256_id,
+)
 
 RECORDED_AT = datetime.now(UTC)
 MORNING_AT = datetime(2099, 9, 20, 6, tzinfo=UTC)
 MIDDAY_AT = datetime(2099, 9, 20, 9, tzinfo=UTC)
-
-
-def _sha256_id(value: int) -> str:
-    return f"{value:064x}"
 
 
 def _slot(name: SlotName, scheduled_at: datetime) -> ScheduledSlot:
@@ -100,28 +100,6 @@ def _reacquire(
         now=datetime.now(UTC),
         lease_duration=lease_duration,
     )
-
-
-def _record_artifact_versions(
-    connection: psycopg.Connection[Any], start: int, count: int
-) -> tuple[str, ...]:
-    version_ids = tuple(_sha256_id(value) for value in range(start, start + count))
-    for version_id in version_ids:
-        artifact_id = f"artifact-{version_id}"
-        connection.execute(
-            "INSERT INTO artifacts "
-            "(id, kind, title, authority_class, lifecycle_state, visibility, created_at) "
-            "VALUES (%s, 'test', 'Test artifact', 'test', 'active', 'private', "
-            "CURRENT_TIMESTAMP)",
-            (artifact_id,),
-        )
-        connection.execute(
-            "INSERT INTO artifact_versions "
-            "(id, artifact_id, schema_version, content_digest, created_at) "
-            "VALUES (%s, %s, 1, %s, CURRENT_TIMESTAMP)",
-            (version_id, artifact_id, version_id),
-        )
-    return version_ids
 
 
 def _insert_edition(
@@ -258,14 +236,14 @@ def _publish_edition_and_slot(
         publication_verification,
         candidate_validation,
         assembly_manifest,
-    ) = _record_artifact_versions(connection, artifact_start, 13)
+    ) = record_active_artifact_versions(connection, artifact_start, 13)
     identity = _edition(report, policy)
     _insert_edition(connection, identity.edition_id, report, policy)
     video_digest_catalog.schedule_slot(slot, recorded_at=recorded_at)
     lease = _claim_lease(
         slot.slot_id, identity, owner_token="publisher", lease_duration=timedelta(hours=1)
     )
-    subject_id = _sha256_id(artifact_start + 40)
+    subject_id = sha256_id(artifact_start + 40)
     story_id = planned_story_id(identity.edition_id, 0, subject_id)
     _insert_story(connection, story_id, identity.edition_id, 0, subject_id)
     connection.execute(
@@ -301,7 +279,7 @@ def _publish_edition_and_slot(
         "updated_at = CURRENT_TIMESTAMP WHERE edition_id = %s",
         (publication_verification, identity.edition_id),
     )
-    request_id = _sha256_id(artifact_start + 41)
+    request_id = sha256_id(artifact_start + 41)
     _insert_generation_request(connection, request_id, identity.edition_id, request_version)
     connection.execute(
         "UPDATE video_digest_generation_requests SET stage = 'submitted', "
@@ -352,14 +330,14 @@ def _publish_edition_and_slot(
             "WHERE slot_id = %s",
             (stage, slot.slot_id),
         )
-    publication_id = _sha256_id(artifact_start + 42)
+    publication_id = sha256_id(artifact_start + 42)
     connection.execute(
         "INSERT INTO video_digest_publication_intents "
         "(publication_id, edition_id, expected_video_key, video_digest, video_byte_size, "
         "video_media_type, source_video_artifact_version_id, stage, created_at, updated_at) "
         "VALUES (%s, %s, 'video-digest/edition.mp4', %s, 100, 'video/mp4', %s, 'pending', "
         "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-        (publication_id, identity.edition_id, _sha256_id(artifact_start + 43), video),
+        (publication_id, identity.edition_id, sha256_id(artifact_start + 43), video),
     )
     connection.execute(
         "INSERT INTO video_digest_publication_attempts "
@@ -456,7 +434,7 @@ def test_schedule_slot_rejects_a_natural_identity_collision(postgres_news_schema
     assert news_schema.NEWS_POSTGRES_DSN is not None
     slot = _slot(SlotName.MORNING, MORNING_AT)
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        _insert_slot_row(connection, SlotId(_sha256_id(40)), "morning", MORNING_AT)
+        _insert_slot_row(connection, SlotId(sha256_id(40)), "morning", MORNING_AT)
 
     with pytest.raises(VideoDigestCheckpointConflictError, match="unavailable"):
         video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -525,7 +503,7 @@ def test_skip_slot_rejects_a_slot_with_an_active_lease(postgres_news_schema: str
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 45, 2)
+        report, policy = record_active_artifact_versions(connection, 45, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -541,7 +519,7 @@ def test_claim_slot_returns_the_persisted_skip_reason(postgres_news_schema: str)
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 50, 2)
+        report, policy = record_active_artifact_versions(connection, 50, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -558,7 +536,7 @@ def test_claim_slot_reports_a_failed_slot_as_terminal(postgres_news_schema: str)
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy, failure_version = _record_artifact_versions(connection, 55, 3)
+        report, policy, failure_version = record_active_artifact_versions(connection, 55, 3)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -601,7 +579,7 @@ def test_claim_slot_claims_a_scheduled_slot_from_scratch(postgres_news_schema: s
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 100, 2)
+        report, policy = record_active_artifact_versions(connection, 100, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -629,7 +607,7 @@ def test_reacquire_slot_replays_an_unexpired_same_owner_lease(
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 150, 2)
+        report, policy = record_active_artifact_versions(connection, 150, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -648,7 +626,7 @@ def test_reacquire_slot_is_busy_while_another_owner_holds_the_lease(
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 200, 2)
+        report, policy = record_active_artifact_versions(connection, 200, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -668,9 +646,9 @@ def test_claim_slot_rejects_a_claim_for_another_edition_while_the_lease_is_activ
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 250, 2)
+        report, policy = record_active_artifact_versions(connection, 250, 2)
     identity = _edition(report, policy)
-    other = _edition(_sha256_id(260), _sha256_id(261))
+    other = _edition(sha256_id(260), sha256_id(261))
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
     _claim_lease(slot.slot_id, identity, owner_token="owner-a")
@@ -685,7 +663,7 @@ def test_claim_slot_skips_with_active_edition_while_another_slot_runs_it(
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 300, 2)
+        report, policy = record_active_artifact_versions(connection, 300, 2)
     identity = _edition(report, policy)
     first = _slot(SlotName.MORNING, MORNING_AT)
     second = _slot(SlotName.MIDDAY, MIDDAY_AT)
@@ -749,7 +727,9 @@ def test_claim_slot_rejects_a_conflicting_stored_edition_identity(
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy, stored_report, stored_policy = _record_artifact_versions(connection, 400, 4)
+        report, policy, stored_report, stored_policy = record_active_artifact_versions(
+            connection, 400, 4
+        )
     identity = _edition(report, policy)
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
         _insert_edition(connection, identity.edition_id, stored_report, stored_policy)
@@ -766,7 +746,7 @@ def test_reacquire_slot_recovers_same_owner_expired_lease(
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 450, 2)
+        report, policy = record_active_artifact_versions(connection, 450, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -786,7 +766,7 @@ def test_reacquire_slot_recovers_an_expired_lease_with_an_incremented_fence(
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 500, 2)
+        report, policy = record_active_artifact_versions(connection, 500, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -814,18 +794,18 @@ def test_claim_slot_reports_a_missing_slot_as_unavailable(postgres_news_schema: 
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 550, 2)
+        report, policy = record_active_artifact_versions(connection, 550, 2)
     identity = _edition(report, policy)
 
     with pytest.raises(VideoDigestCheckpointConflictError, match="unavailable"):
-        _claim(SlotId(_sha256_id(1)), identity, owner_token="worker-1")
+        _claim(SlotId(sha256_id(1)), identity, owner_token="worker-1")
 
 
 def test_renew_slot_extends_an_exact_unexpired_fence(postgres_news_schema: str) -> None:
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 600, 2)
+        report, policy = record_active_artifact_versions(connection, 600, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -852,7 +832,7 @@ def test_renew_slot_rejects_a_stale_fence(postgres_news_schema: str) -> None:
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 650, 2)
+        report, policy = record_active_artifact_versions(connection, 650, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -869,7 +849,7 @@ def test_renew_slot_rejects_an_expired_fence(postgres_news_schema: str) -> None:
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 700, 2)
+        report, policy = record_active_artifact_versions(connection, 700, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
@@ -889,7 +869,7 @@ def test_claim_slot_maps_a_unique_violation_to_a_checkpoint_conflict(
     ensure_news_catalog_schema()
     assert news_schema.NEWS_POSTGRES_DSN is not None
     with psycopg.connect(news_schema.NEWS_POSTGRES_DSN, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, 750, 2)
+        report, policy = record_active_artifact_versions(connection, 750, 2)
     identity = _edition(report, policy)
     slot = _slot(SlotName.MORNING, MORNING_AT)
     video_digest_catalog.schedule_slot(slot, recorded_at=RECORDED_AT)
