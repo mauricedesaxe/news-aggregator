@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Literal, LiteralString
+from typing import Literal, LiteralString
 
 import psycopg
 import pytest
@@ -53,6 +53,10 @@ from romanian_news.video_digest.models import (
     publication_id,
     scheduled_slot_id,
 )
+from tests.contracts.video_digest_catalog_fixtures import (
+    record_active_artifact_versions,
+    sha256_id,
+)
 from tests.contracts.video_digest_planning_fixtures import accepted_planning_files
 
 PUBLIC_MEDIA_BASE_URL = "https://media.example.com"
@@ -84,31 +88,6 @@ class PublicationRun:
     publication_failure_file: ArtifactFile
     slot_failure_file: ArtifactFile
     attempt_index: int = 0
-
-
-def _sha256_id(value: int) -> str:
-    return f"{value:064x}"
-
-
-def _record_artifact_versions(
-    connection: psycopg.Connection[Any], start: int, count: int
-) -> tuple[str, ...]:
-    version_ids = tuple(_sha256_id(value) for value in range(start, start + count))
-    for version_id in version_ids:
-        artifact_id = f"artifact-{version_id}"
-        connection.execute(
-            "INSERT INTO artifacts "
-            "(id, kind, title, authority_class, lifecycle_state, visibility, created_at) "
-            "VALUES (%s, 'test', 'Test artifact', 'test', 'active', 'private', CURRENT_TIMESTAMP)",
-            (artifact_id,),
-        )
-        connection.execute(
-            "INSERT INTO artifact_versions "
-            "(id, artifact_id, schema_version, content_digest, created_at) "
-            "VALUES (%s, %s, 1, %s, CURRENT_TIMESTAMP)",
-            (version_id, artifact_id, version_id),
-        )
-    return version_ids
 
 
 def _fetch_row(
@@ -258,7 +237,7 @@ def _walk_publication_pipeline(
     recorded_at = datetime.now(UTC)
     when = scheduled_at if scheduled_at is not None else datetime(2099, 9, 20, 6, tzinfo=UTC)
     with psycopg.connect(dsn, autocommit=True) as connection:
-        report, policy = _record_artifact_versions(connection, seed, 2)
+        report, policy = record_active_artifact_versions(connection, seed, 2)
     identity = EditionIdentity(
         edition_id=edition_id(report, policy),
         daily_report_version_id=report,
@@ -285,7 +264,7 @@ def _walk_publication_pipeline(
         identity,
         tuple(
             (
-                _sha256_id(seed * 1000 + position),
+                sha256_id(seed * 1000 + position),
                 f"Story {seed}.{position}",
                 15_000,
             )
@@ -643,7 +622,7 @@ def test_publication_intent_rejects_a_source_video_from_another_edition_output(
     dsn = news_schema.NEWS_POSTGRES_DSN
     assert dsn is not None
     with psycopg.connect(dsn, autocommit=True) as connection:
-        foreign_version = _record_artifact_versions(connection, 930, 1)[0]
+        foreign_version = record_active_artifact_versions(connection, 930, 1)[0]
     wrong_source = _publication_intent(
         run.identity,
         run.assembled_file,
@@ -1182,7 +1161,7 @@ def test_read_published_edition_returns_none_for_unpublished_editions(
     )
     assert (
         video_digest_catalog.read_published_edition(
-            EditionId(_sha256_id(1901)), public_media_base_url=PUBLIC_MEDIA_BASE_URL
+            EditionId(sha256_id(1901)), public_media_base_url=PUBLIC_MEDIA_BASE_URL
         )
         is None
     )
@@ -1260,7 +1239,7 @@ def test_published_reads_reject_non_origin_media_base_urls(
 
     with pytest.raises(ValueError, match="HTTPS origin"):
         video_digest_catalog.read_published_edition(
-            EditionId(_sha256_id(1)), public_media_base_url=base_url
+            EditionId(sha256_id(1)), public_media_base_url=base_url
         )
     with pytest.raises(ValueError, match="HTTPS origin"):
         video_digest_catalog.list_published_editions(
