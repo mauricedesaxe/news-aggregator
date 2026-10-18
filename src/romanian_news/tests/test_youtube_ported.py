@@ -24,7 +24,11 @@ from romanian_news.youtube.discovery import (
     fetch_video_metadata,
     parse_youtube_feed,
 )
-from romanian_news.youtube.errors import YouTubeInfrastructureError, YouTubeProviderPayloadError
+from romanian_news.youtube.errors import (
+    YouTubeConfigurationError,
+    YouTubeInfrastructureError,
+    YouTubeProviderPayloadError,
+)
 from romanian_news.youtube.models import (
     YOUTUBE_MODEL,
     YOUTUBE_SOURCES,
@@ -111,6 +115,7 @@ def test_feed_failure_does_not_put_api_key_in_request_url(monkeypatch) -> None:
     with pytest.raises(YouTubeInfrastructureError) as captured:
         acquire_youtube_poll(RECORDER_SOURCE, PUBLISHED_AT)
 
+    assert str(captured.value) == "YouTube feed request failed"
     assert captured.value.__cause__ is not None
     assert api_key not in str(captured.value.__cause__)
 
@@ -157,6 +162,7 @@ def test_fetch_video_metadata_parses_production_shaped_json_bytes(monkeypatch) -
     assert metadata.duration_seconds == 754
     assert metadata.published_at == PUBLISHED_AT
     assert metadata.provider_response["kind"] == "youtube#videoListResponse"
+    assert "etag" not in metadata.provider_response
     assert metadata.raw_provider_response == content
     assert requests == [
         (
@@ -168,6 +174,45 @@ def test_fetch_video_metadata_parses_production_shaped_json_bytes(monkeypatch) -
             },
         )
     ]
+
+
+def test_youtube_requests_share_configuration_and_failure_policy(monkeypatch) -> None:
+    monkeypatch.setattr(discovery_module, "YOUTUBE_API_KEY", "")
+    monkeypatch.setattr(
+        discovery_module.requests,
+        "get",
+        lambda *_args, **_kwargs: pytest.fail("request should not run without an API key"),
+    )
+
+    with pytest.raises(ValueError, match="poll time must include a timezone"):
+        acquire_youtube_poll(RECORDER_SOURCE, PUBLISHED_AT.replace(tzinfo=None))
+
+    for request in (
+        lambda: acquire_youtube_poll(RECORDER_SOURCE, PUBLISHED_AT),
+        lambda: fetch_video_metadata(RECORDER_SOURCE, VIDEO_ID, "b" * 64),
+    ):
+        with pytest.raises(YouTubeConfigurationError, match="YOUTUBE_API_KEY is required"):
+            request()
+
+    monkeypatch.setattr(discovery_module, "YOUTUBE_API_KEY", "test")
+
+    def offline(*_args, **_kwargs):
+        raise discovery_module.requests.ConnectionError("offline")
+
+    monkeypatch.setattr(discovery_module.requests, "get", offline)
+
+    for request, message in (
+        (
+            lambda: acquire_youtube_poll(RECORDER_SOURCE, PUBLISHED_AT),
+            "YouTube feed request failed",
+        ),
+        (
+            lambda: fetch_video_metadata(RECORDER_SOURCE, VIDEO_ID, "b" * 64),
+            "YouTube metadata request failed",
+        ),
+    ):
+        with pytest.raises(YouTubeInfrastructureError, match=message):
+            request()
 
 
 def test_recorder_models_reject_naive_publication_times() -> None:
