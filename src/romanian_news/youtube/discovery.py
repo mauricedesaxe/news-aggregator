@@ -30,56 +30,51 @@ _YOUTUBE_VIDEOS_API = "https://www.googleapis.com/youtube/v3/videos"
 _YOUTUBE_PLAYLIST_ITEMS_API = "https://www.googleapis.com/youtube/v3/playlistItems"
 
 
-class _YouTubeContentDetails(NewsModel):
+class _YouTubeProviderModel(NewsModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
+
+class _YouTubeContentDetails(_YouTubeProviderModel):
     duration: str
 
 
-class _YouTubeSnippet(NewsModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+class _YouTubeSnippet(_YouTubeProviderModel):
     title: str
     publishedAt: datetime
     channelId: str
 
 
-class _YouTubeVideo(NewsModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+class _YouTubeVideo(_YouTubeProviderModel):
     id: str
     contentDetails: _YouTubeContentDetails
     snippet: _YouTubeSnippet
 
 
-class _YouTubeResponse(NewsModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+class _YouTubeResponse(_YouTubeProviderModel):
     kind: Literal["youtube#videoListResponse"]
     items: tuple[_YouTubeVideo, ...]
 
 
-class _YouTubePlaylistResource(NewsModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+class _YouTubePlaylistResource(_YouTubeProviderModel):
     videoId: str
 
 
-class _YouTubePlaylistSnippet(NewsModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+class _YouTubePlaylistSnippet(_YouTubeProviderModel):
     channelId: str
     title: str
     resourceId: _YouTubePlaylistResource
 
 
-class _YouTubePlaylistContent(NewsModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+class _YouTubePlaylistContent(_YouTubeProviderModel):
     videoPublishedAt: datetime
 
 
-class _YouTubePlaylistItem(NewsModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+class _YouTubePlaylistItem(_YouTubeProviderModel):
     snippet: _YouTubePlaylistSnippet
     contentDetails: _YouTubePlaylistContent
 
 
-class _YouTubePlaylistResponse(NewsModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+class _YouTubePlaylistResponse(_YouTubeProviderModel):
     kind: Literal["youtube#playlistItemListResponse"]
     items: tuple[_YouTubePlaylistItem, ...]
 
@@ -130,47 +125,32 @@ def decide_youtube_poll(
 def acquire_youtube_poll(source: YouTubeSource, scheduled_at: datetime) -> YouTubePollCapture:
     if scheduled_at.tzinfo is None:
         raise ValueError("YouTube poll time must include a timezone")
-    if not YOUTUBE_API_KEY:
-        raise YouTubeConfigurationError("YOUTUBE_API_KEY is required")
-    try:
-        response = requests.get(
-            _YOUTUBE_PLAYLIST_ITEMS_API,
-            headers={"X-Goog-Api-Key": YOUTUBE_API_KEY},
-            params={
-                "part": "snippet,contentDetails",
-                "playlistId": source.uploads_playlist_id,
-                "maxResults": 50,
-            },
-            timeout=30,
-        )
-        response.raise_for_status()
-    except requests.RequestException as error:
-        raise YouTubeInfrastructureError("YouTube feed request failed") from error
+    content = _request_youtube(
+        _YOUTUBE_PLAYLIST_ITEMS_API,
+        {
+            "part": "snippet,contentDetails",
+            "playlistId": source.uploads_playlist_id,
+            "maxResults": 50,
+        },
+        failure_message="YouTube feed request failed",
+    )
     return YouTubePollCapture(
         source=source,
         scheduled_at=scheduled_at,
         observed_at=datetime.now(UTC),
-        content=response.content,
-        feed=parse_youtube_feed(source, response.content),
+        content=content,
+        feed=parse_youtube_feed(source, content),
     )
 
 
 def fetch_video_metadata(
     source: YouTubeSource, video_id: VideoId, feed_snapshot_version_id: Sha256
 ) -> YouTubeVideoMetadata:
-    if not YOUTUBE_API_KEY:
-        raise YouTubeConfigurationError("YOUTUBE_API_KEY is required")
-    try:
-        response = requests.get(
-            _YOUTUBE_VIDEOS_API,
-            headers={"X-Goog-Api-Key": YOUTUBE_API_KEY},
-            params={"part": "snippet,contentDetails", "id": video_id},
-            timeout=30,
-        )
-        response.raise_for_status()
-    except requests.RequestException as error:
-        raise YouTubeInfrastructureError("YouTube metadata request failed") from error
-    raw_content = response.content
+    raw_content = _request_youtube(
+        _YOUTUBE_VIDEOS_API,
+        {"part": "snippet,contentDetails", "id": video_id},
+        failure_message="YouTube metadata request failed",
+    )
     try:
         payload = _YouTubeResponse.model_validate_json(raw_content, strict=True)
     except (ValidationError, ValueError) as error:
@@ -192,6 +172,27 @@ def fetch_video_metadata(
         provider_response=payload.model_dump(mode="json"),
         raw_provider_response=raw_content,
     )
+
+
+def _request_youtube(
+    endpoint: str,
+    params: dict[str, str | int],
+    *,
+    failure_message: str,
+) -> bytes:
+    if not YOUTUBE_API_KEY:
+        raise YouTubeConfigurationError("YOUTUBE_API_KEY is required")
+    try:
+        response = requests.get(
+            endpoint,
+            headers={"X-Goog-Api-Key": YOUTUBE_API_KEY},
+            params=params,
+            timeout=30,
+        )
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise YouTubeInfrastructureError(failure_message) from error
+    return response.content
 
 
 def _parse_iso_duration(value: str) -> int:
